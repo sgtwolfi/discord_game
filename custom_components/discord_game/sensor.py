@@ -560,6 +560,39 @@ async def async_setup_entry(
                     DiscordAsyncMemberState(hass, bot, user.name, user.global_name, user.id, entities_disabled_default)
                 watchers[str(user.id)] = watcher
 
+    @bot.event
+    async def on_message(message):
+        """Forward incoming direct messages from configured members to Home Assistant."""
+        if message.author.bot or message.guild is not None:
+            return
+
+        sender_id = str(message.author.id)
+        if sender_id not in watchers:
+            return
+
+        content = (message.content or "").strip()
+        if not content:
+            return
+
+        sender_name = (
+            getattr(message.author, "global_name", None)
+            or getattr(message.author, "display_name", None)
+            or message.author.name
+        )
+
+        hass.bus.async_fire(
+            "discord_game_message_received",
+            {
+                "sender": sender_name,
+                "sender_id": sender_id,
+                "message": content,
+                "timestamp": message.created_at.isoformat(),
+                "message_id": str(message.id),
+                "channel_id": str(message.channel.id),
+            },
+        )
+        _LOGGER.debug("Forwarded Discord DM from %s (%s) to Home Assistant", sender_name, sender_id)
+
     channels = {}
     for channel in config.get(CONF_CHANNELS):
         if re.match(r"^\d{,20}", str(channel)):  # Up to 20 digits because 2^64 (snowflake-length) is 20 digits long
