@@ -245,7 +245,7 @@ def test_action_result_snapshot_keeps_success_and_failure_targets():
 
 
 
-def test_sensor_attributes_expose_paused_state_and_active_request():
+def test_admin_diagnostics_expose_paused_state_and_active_request():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.enabled = True
     assistant.paused = True
@@ -262,7 +262,7 @@ def test_sensor_attributes_expose_paused_state_and_active_request():
     assistant.context_notes = {}
     assistant.friends = {}
 
-    attributes = assistant.attributes()
+    attributes = assistant.diagnostics()
 
     assert attributes["paused"] is True
     assert attributes["active_request"] == {"conversation": "dm:123"}
@@ -768,3 +768,22 @@ def test_prompt_budget_includes_injected_context_and_durable_memory():
     assert "Private memory for this approved DM contact" in prompt
     assert "Administrator-provided context" in prompt
     assert "Please carry out this task" in prompt
+
+
+
+def test_public_sensor_attributes_do_not_expose_private_memory_or_transcript():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.enabled = True
+    assistant.paused = False
+    assistant.queue = [{"content": "private incoming message"}]
+    assistant.active = False
+    assistant.last_activity = None
+    assistant.error = None
+    assistant.agents = {"conversation_agent": "conversation.local"}
+
+    attributes = assistant.public_attributes()
+
+    assert attributes["queue_length"] == 1
+    assert "friend_memory" not in attributes
+    assert "transcript" not in attributes
+    assert "pending_messages" not in attributes
