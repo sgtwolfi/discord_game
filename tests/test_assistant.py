@@ -349,3 +349,19 @@ def test_transcript_replay_requeues_original_dm_messages():
     assert assistant.queue[0]["channel"] is channel
     assert assistant.wake.is_set()
     assert events[0][0][0] == "discord_game_assistant_replayed"
+
+
+
+def test_prompt_changes_instructions_for_operations_and_advanced_roles():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.limit = 10
+    assistant.budget = 2000
+    batch = [{"sender_name": "Max", "content": "Turn on the bedroom light", "is_dm": True}]
+
+    operations = assistant._prompt(batch, [], "", "operations")
+    advanced = assistant._prompt(batch, [], "", "advanced")
+    conversation = assistant._prompt(batch, [], "", "conversation")
+
+    assert "operations agent" in operations
+    assert "advanced reasoning agent" in advanced
+    assert "ordinary conversation" in conversation
