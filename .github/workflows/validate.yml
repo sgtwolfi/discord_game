@@ -15,7 +15,12 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile Python files
-        run: python -m compileall -q custom_components/discord_game
+        run: python -m compileall -q custom_components/discord_game tests
+      - name: Install integration test dependencies
+        run: |
+          pip install homeassistant nextcord==3.1.1 addict aiohttp validators pytest
+      - name: Run assistant unit tests
+        run: pytest -q tests
       - name: Lint new assistant runtime
         run: |
           pip install ruff
