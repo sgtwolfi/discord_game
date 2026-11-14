@@ -496,7 +496,10 @@ class DiscordAssistant:
         prompt = ""
         request_text = " ".join(x["content"] for x in batch)
         is_operation = bool(self.agents["operations_agent"] and ACTION.search(request_text))
-        is_complex = bool(self.agents["fallback_agent"] and COMPLEX_REQUEST.search(request_text))
+        is_complex = bool(
+            self.agents["fallback_agent"]
+            and (COMPLEX_REQUEST.search(request_text) or len(request_text) > 1200)
+        )
         if is_operation:
             role = "operations"
             agent = self.agents["operations_agent"]
