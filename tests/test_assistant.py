@@ -53,6 +53,7 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
     }]
     prompt = assistant._prompt(batch, [], "private contact summary")
     assert "PLEASE KEEP THIS END" in prompt
+    assert len(prompt) <= assistant.budget
     assert "private contact summary" in prompt
     assert "You are GHOST" in prompt
 
