@@ -28,7 +28,7 @@ Use IDs such as `conversation.my_ollama_agent`. This integration does not store 
 
 New entity: `sensor.discord_game_assistant`. Attributes include queue state, model agent IDs, recent transcript, context snapshots, estimated token counts, errors and friend-memory counts.
 
-A GHOST entry is added to the Home Assistant sidebar. The admin panel shows the active request and prompt snapshot, pending messages, recent transcript, structured action results, estimated model usage and approved-contact memory. It provides pause/resume, queue editing/cancellation, transcript replay, clear-queue, manual send, temporary context injection and per-contact memory correction/clearing controls. Private diagnostics are delivered through an administrator-only WebSocket command; ordinary sensor attributes contain status only, not message contents, transcripts or contact memory.
+A GHOST entry is added to the Home Assistant sidebar. The admin panel shows the active request and prompt snapshot, pending messages, recent transcript, structured action results, estimated model usage and approved-contact memory. It provides pause/resume, queue editing/cancellation, transcript replay, clear-queue, manual send, temporary context injection and per-contact memory correction/clearing controls. Private diagnostics are delivered through an administrator-only WebSocket command; ordinary sensor attributes contain non-private status/model metadata only, not message contents, transcripts, prompt snapshots or contact memory.
 
 Services:
 - `discord_game.send_message`: manually send as the bot; supply `message` and either `user_id` or `channel_id`.
