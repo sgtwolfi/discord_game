@@ -1694,7 +1694,16 @@ class DiscordAssistant:
             self._refresh_sensor()
 
     async def _should_respond_to_group(self, batch, history, context_note=""):
-        """Use the primary model, then fallback, for safe group relevance decisions."""
+        """Use a safe relevance gate before GHOST joins a group conversation."""
+        if getattr(self, "mode", "local") == "api":
+            # API Mode's single native agent may have live Home Assistant tools.
+            # Never pass untrusted group text to that tool-enabled agent just to
+            # decide whether to reply. Require an explicit mention/reply instead.
+            addressed = any(entry.get("directly_addressed") for entry in batch)
+            if addressed:
+                return True, "GHOST was directly addressed; API Mode skipped the tool-enabled relevance call."
+            return False, "API Mode requires direct addressing in group chats to avoid tool calls during relevance checks."
+
         agent = self.agents.get("conversation_agent")
         if not agent:
             return False, "No conversation agent is configured for relevance checks."
