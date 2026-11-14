@@ -84,7 +84,7 @@ def action_result_snapshot(data):
 
 class AssistantSensor(SensorEntity):
     _attr_has_entity_name=True
-    _attr_name="Assistant"
+    _attr_name="Discord Game Assistant"
     _attr_icon="mdi:robot"
     _attr_should_poll=False
     def __init__(self,owner):
