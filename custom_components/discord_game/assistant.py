@@ -1374,7 +1374,7 @@ class DiscordAssistant:
         return value[:1000] if value.lower() not in {"", "unknown", "unavailable", "none"} else None
 
     def _ghost_status_context(self):
-        """Read the configured GHOST status helper directly, without Assist exposure."""
+        """Read the configured owner's status helper directly, without Assist exposure."""
         entity_id = getattr(self, "status_entity", "input_text.ghost_status")
         value = self._ghost_status_value()
         if value is None:
