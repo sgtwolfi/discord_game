@@ -42,8 +42,10 @@ package = types.ModuleType("custom_components.discord_game")
 package.__path__ = [str(repo_root / "custom_components" / "discord_game")]
 sys.modules["custom_components.discord_game"] = package
 assistant_module = importlib.import_module("custom_components.discord_game.assistant")
-from custom_components.discord_game.local_status import answer_local_status
-from custom_components.discord_game.local_tasks import parse_local_reminder
+local_status_module = importlib.import_module("custom_components.discord_game.local_status")
+local_tasks_module = importlib.import_module("custom_components.discord_game.local_tasks")
+answer_local_status = local_status_module.answer_local_status
+parse_local_reminder = local_tasks_module.parse_local_reminder
 
 DiscordAssistant = assistant_module.DiscordAssistant
 speech = assistant_module.speech
