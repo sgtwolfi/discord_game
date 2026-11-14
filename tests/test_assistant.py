@@ -249,6 +249,8 @@ def test_sensor_attributes_expose_paused_state_and_active_request():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.enabled = True
     assistant.paused = True
+    assistant.approved_users = {"123"}
+    assistant.group_channels = {"789"}
     assistant.queue = []
     assistant.active = False
     assistant.agents = {"conversation_agent": "conversation.local"}
