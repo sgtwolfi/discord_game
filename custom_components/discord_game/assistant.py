@@ -819,6 +819,8 @@ class DiscordAssistant:
                 "conversation": key,
             })
         return {"enabled":self.enabled,"mode":getattr(self, "mode", "local"),"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
+          "ghost_status_entity": getattr(self, "status_entity", "input_text.ghost_status"),
+          "ghost_status_value": self._ghost_status_value(),
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
           "pending_messages":[
@@ -1356,14 +1358,23 @@ class DiscordAssistant:
             rec=self.friends.setdefault(item["sender_id"],{"messages":[],"summary":""})
             return rec.setdefault("messages",[]),rec.get("summary","")
         return self.groups[item["key"]],""
-    def _ghost_status_context(self):
-        """Read the configured GHOST status helper directly, without Assist exposure."""
+    def _ghost_status_value(self):
+        """Return the configured helper's current state, or None when unavailable."""
         entity_id = getattr(self, "status_entity", "input_text.ghost_status")
         states = getattr(getattr(self, "hass", None), "states", None)
         state = states.get(entity_id) if states is not None and hasattr(states, "get") else None
-        if state is None or str(state.state).strip().lower() in {"", "unknown", "unavailable", "none"}:
+        if state is None:
+            return None
+        value = str(state.state).strip()
+        return value[:1000] if value.lower() not in {"", "unknown", "unavailable", "none"} else None
+
+    def _ghost_status_context(self):
+        """Read the configured GHOST status helper directly, without Assist exposure."""
+        entity_id = getattr(self, "status_entity", "input_text.ghost_status")
+        value = self._ghost_status_value()
+        if value is None:
             return f"Live GHOST status from {entity_id}: unavailable. Do not guess it."
-        return f"Live GHOST status from {entity_id} (trusted current Home Assistant state): {str(state.state).strip()[:1000]}"
+        return f"Live GHOST status from {entity_id} (trusted current Home Assistant state): {value}"
 
     def _prompt(self, batch, history, summary, role="conversation", context_note=""):
         """Build a bounded prompt while preserving the live request and core rules."""
