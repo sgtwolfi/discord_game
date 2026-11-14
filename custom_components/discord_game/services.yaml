@@ -29,3 +29,24 @@ resume:
 clear_queue:
   name: Clear pending messages
   description: Discard queued messages without interrupting the active reply.
+edit_queued_message:
+  name: Edit pending message
+  description: Change a message before GHOST processes it.
+  fields:
+    message_id:
+      required: true
+      selector:
+        text:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+cancel_queued_message:
+  name: Cancel pending message
+  description: Remove one message from the pending queue.
+  fields:
+    message_id:
+      required: true
+      selector:
+        text:
