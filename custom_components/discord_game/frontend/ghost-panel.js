@@ -545,6 +545,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     number("max_context_messages", "Active conversation context messages", settings.max_context_messages ?? 12, 4, 80, 1, "Recent messages from this conversation supplied to the response model.");
     number("memory_idle_seconds", "Idle time before memory consolidation (seconds)", settings.memory_idle_seconds ?? 300, 30, 3600, 30, "GHOST waits this long after the last incoming message and an empty queue before consolidating memories.");
     number("memory_batch_messages", "Messages per person to consolidate", settings.memory_batch_messages ?? 20, 1, 100, 1, "For each approved person who spoke during the active period, use their most recent N messages.");
+    number("group_continuity_seconds", "Group conversation follow-up window (seconds)", settings.group_continuity_seconds ?? 300, 0, 1800, 30, "Keeps clear follow-ups connected to GHOST's recent reply. Set to 0 to disable this shortcut; HA actions and live-state queries still require a direct mention or reply.");
     number("history_limit", "Raw messages retained after consolidation", settings.history_limit ?? 8, 1, 200, 1, "Keeps this many recent raw messages available alongside the durable summary.");
     number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to friend DMs and server-group transcripts in the panel.");
     number("context_budget_chars", "Maximum prompt size (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500, "Hard limit for the complete prompt sent to an agent.");
@@ -734,6 +735,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       data.history_limit = Number(settings.history_limit ?? 8);
       data.memory_idle_seconds = Number(settings.memory_idle_seconds ?? 300);
       data.memory_batch_messages = Number(settings.memory_batch_messages ?? 20);
+      data.group_continuity_seconds = Number(settings.group_continuity_seconds ?? 300);
       data.conversation_history_limit = Number(settings.conversation_history_limit ?? 500);
       data.context_budget_chars = Number(settings.context_budget_chars ?? 10000);
       data.typing_enabled = settings.typing_enabled !== false;
@@ -753,6 +755,8 @@ class DiscordGameGhostPanel extends HTMLElement {
     const contacts = d.contacts || [];
     const pendingTotal = Object.values(d.friend_memory || {}).reduce((total, item) => total + (item.pending_messages || 0), 0);
     panel.append(this._el("p", "Pending messages awaiting consolidation: " + pendingTotal + (d.last_memory_consolidation ? " · Last consolidation: " + new Date(d.last_memory_consolidation).toLocaleString() : " · No consolidation has completed yet."), "help"));
+    panel.append(this._el("p", "Memory maintenance is deterministic: consolidation extracts supported facts and removes duplicates. It does not invent summaries. Review or edit facts below to remove information that is no longer current.", "muted"));
+    panel.append(this._button("Consolidate and deduplicate all contacts now", () => this._service("consolidate_friend_memory", {}), true));
     if (!contacts.length) panel.append(this._el("p", "No approved friends yet. Add people in Configuration.", "muted"));
     for (const contact of contacts) {
       const mem = (d.friend_memory || {})[contact.user_id] || {};
@@ -775,8 +779,17 @@ class DiscordGameGhostPanel extends HTMLElement {
         details.append(this._el("div", (msg.sender || msg.role || "Message") + ": " + (msg.content || ""), "memoryline"));
       }
       box.append(details);
-      box.append(this._button("Clear this friend's memory", () => {
-        if (confirm("Clear the stored conversation memory for " + (contact.name || contact.user_id) + "?")) this._service("clear_friend_memory", { user_id: contact.user_id });
+      box.append(this._button("Remove saved facts", () => {
+        if (confirm("Remove all durable facts for " + (contact.name || contact.user_id) + "? Recent chat and pending evidence will remain.")) this._service("purge_friend_memory", { user_id: contact.user_id, scope: "facts" });
+      }, true));
+      box.append(this._button("Clear pending memory evidence", () => {
+        if (confirm("Discard unprocessed memory evidence for " + (contact.name || contact.user_id) + "? Saved facts and chat history will remain.")) this._service("purge_friend_memory", { user_id: contact.user_id, scope: "pending" });
+      }, true));
+      box.append(this._button("Clear stored chat history", () => {
+        if (confirm("Delete stored raw chat history for " + (contact.name || contact.user_id) + "? Durable facts will remain.")) this._service("purge_friend_memory", { user_id: contact.user_id, scope: "history" });
+      }, true));
+      box.append(this._button("Purge everything for this friend", () => {
+        if (confirm("Permanently delete saved facts, pending evidence, raw chat history and retained activity for " + (contact.name || contact.user_id) + "? This cannot be undone.")) this._service("purge_friend_memory", { user_id: contact.user_id, scope: "all" });
       }, true));
       panel.append(box);
     }
@@ -797,7 +810,7 @@ class DiscordGameGhostPanel extends HTMLElement {
 
     const relevance = this._el("section", null, "panel");
     relevance.append(this._el("h2", "Group-chat relevance filter"));
-    relevance.append(this._el("p", "Every monitored group message batch is checked by the conversation AI before GHOST is allowed to generate a reply. If the decision is invalid or the model is unavailable, GHOST stays quiet.", "muted"));
+    relevance.append(this._el("p", "GHOST uses recent channel history when deciding whether to join in. Clear follow-ups to its own recent replies are treated as part of the same conversation for the configured continuity window. Home Assistant actions and live-state queries still require an explicit mention or reply.", "muted"));
     relevance.append(this._el("p", "Messages deliberately ignored: " + (d.suppressed_group_messages || 0), "help"));
     if (d.last_group_decision) {
       relevance.append(this._el("p", "Last decision: " + d.last_group_decision.decision + " · " + (d.last_group_decision.reason || "") + " · " + (d.last_group_decision.timestamp || ""), "muted"));

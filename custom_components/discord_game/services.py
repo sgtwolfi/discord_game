@@ -17,6 +17,10 @@ SET_MEMORY = vol.Schema({
     vol.Required("user_id"): cv.string,
     vol.Required("summary"): cv.string,
 })
+PURGE_MEMORY = vol.Schema({
+    vol.Required("user_id"): cv.string,
+    vol.Required("scope"): vol.In({"facts", "pending", "history", "all"}),
+})
 SET_CONTEXT = vol.Schema({
     vol.Required("conversation"): cv.string,
     vol.Required("context"): cv.string,
@@ -42,6 +46,7 @@ SETTINGS = vol.Schema({
     vol.Required("assistant_mode", default="local"): vol.In({"api", "local"}),
     vol.Required("group_relevance_agent", default=""): cv.string,
     vol.Required("group_require_mention", default=False): cv.boolean,
+    vol.Required("group_continuity_seconds", default=300): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
     vol.Required("local_reminder_script", default="script.set_timer_alarm_or_reminder"): vol.All(
         cv.string, vol.Match(r"^script[.][a-z0-9_]+$")
     ),
@@ -101,6 +106,23 @@ async def async_setup_services(hass: HomeAssistant):
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_history(call.data["user_id"])
+
+    async def purge_memory(call: ServiceCall):
+        await ensure_admin(call)
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].purge_friend_memory(call.data["user_id"], call.data["scope"])
+
+    async def consolidate_memory(call: ServiceCall):
+        await ensure_admin(call)
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        user_id = call.data.get("user_id")
+        if user_id and str(user_id) not in items[0].approved_users:
+            raise HomeAssistantError("Memory can only be consolidated for approved GHOST contacts")
+        await items[0].consolidate_friend_memory(user_id)
 
     async def set_context(call: ServiceCall):
         await ensure_admin(call)
@@ -201,6 +223,8 @@ async def async_setup_services(hass: HomeAssistant):
     hass.services.async_register(DOMAIN, "send_message", send, schema=SEND)
     hass.services.async_register(DOMAIN, "clear_friend_memory", clear, schema=CLEAR)
     hass.services.async_register(DOMAIN, "set_friend_memory", set_memory, schema=SET_MEMORY)
+    hass.services.async_register(DOMAIN, "purge_friend_memory", purge_memory, schema=PURGE_MEMORY)
+    hass.services.async_register(DOMAIN, "consolidate_friend_memory", consolidate_memory, schema=vol.Schema({vol.Optional("user_id"): cv.string}))
     hass.services.async_register(DOMAIN, "set_context_note", set_context, schema=SET_CONTEXT)
     hass.services.async_register(DOMAIN, "pause", pause)
     hass.services.async_register(DOMAIN, "resume", resume)
@@ -218,7 +242,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings", "reset_prompt", "update_contacts"):
+    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "purge_friend_memory", "consolidate_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings", "reset_prompt", "update_contacts"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)

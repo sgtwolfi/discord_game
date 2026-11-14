@@ -1,4 +1,4 @@
-# Discord Game + GHOST Assistant (v8.2.0)
+# Discord Game + GHOST Assistant (v8.2.2)
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
@@ -25,7 +25,8 @@ Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → As
 - Configure its provider, API credentials, model, system prompt and available tools/functions in that agent's own Home Assistant integration settings.
 - GHOST does not overwrite that agent's system prompt or tool configuration. It sends bounded conversation context and the approved contact's private saved facts with each request.
 - GHOST still owns Discord queueing, contact isolation, memory extraction/consolidation, audit history and action-result verification. Switching models or changing the agent does not disable or erase memory.
-- For safety, API Mode only responds to group messages that directly mention or reply to GHOST, or explicitly address the standalone name “ghost” (for example, “my bad ghost”). It does not send unaddressed group text to the tool-enabled agent for a relevance decision.
+- Group relevance can be inferred by a separately selected local, tool-free conversation agent; untrusted group text is never sent to the tool-enabled API agent just to decide whether GHOST should speak. The optional mention-only setting bypasses inference and requires an explicit mention or reply.
+- A bounded continuity window recognises clear same-speaker follow-ups to GHOST's recent group reply. Group history is restored from persisted conversation logs after Home Assistant restarts. Continuity only applies to ordinary chat; group Home Assistant actions and live-state queries still require a direct mention or reply.
 - Select **API fallback agent** separately from the primary Conversation Agent in Discord Game → Configure. It is used for recoverable primary-model failures on conversation and read-only work. Side-effecting actions are never replayed through fallback after an ambiguous result.
 - The Local Operations and Local Fallback selectors are not used by API Mode. The selected API Conversation Agent handles ordinary chat, live-state queries and actions; the API fallback is a separate recovery model.
 
@@ -48,7 +49,7 @@ The default threshold is 8 messages in 30 seconds. The default policy is local d
 
 ## Memory ownership and cleanup
 
-Memory is owned by GHOST in both modes, not by the selected model. GHOST adds only the current approved DM contact's saved facts to that contact's request context. Durable memory is extracted deterministically from explicit remember statements, clear first-person preferences/favourites/work facts and structured action outcomes. Assistant replies, jokes, guessed activity and unverified device claims are not memory evidence.
+Memory is owned by GHOST in both modes, not by the selected model. The Memory panel can run deterministic consolidation/deduplication immediately and independently purge durable facts, unprocessed evidence, raw contact chat history, or all retained data for a contact. Consolidation removes exact duplicates (case/punctuation insensitive) and replaces older work/favourite facts when a newer explicit fact for the same field is recorded. It does not invent facts or decide that arbitrary personal details are stale; review and edit the summary or purge the relevant layer when information should no longer be retained. Full contact purge also removes matching retained DM activity records, queued messages and temporary context, and refuses to race an active private response. Other contacts and group records remain isolated. GHOST adds only the current approved DM contact's saved facts to that contact's request context. Durable memory is extracted deterministically from explicit remember statements, clear first-person preferences/favourites/work facts and structured action outcomes. Assistant replies, jokes, guessed activity and unverified device claims are not memory evidence.
 
 On startup, legacy non-administrator summaries are now allow-listed to evidence-labelled facts only. Old conversational filler and unlabelled generated claims are discarded. Administrator-authored memory corrections are preserved. Recent chat and the bounded audit transcript remain available separately for conversation continuity and administrator diagnostics; they are not promoted to durable facts.
 
