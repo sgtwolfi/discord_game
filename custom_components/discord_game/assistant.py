@@ -512,7 +512,7 @@ class DiscordAssistant:
                     await self.wake.wait()
                 else:
                     await asyncio.wait_for(self.wake.wait(), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
         await self._save()
     def _append_conversation_message(self, key, message):
@@ -1095,7 +1095,7 @@ class DiscordAssistant:
             if isinstance(value, str):
                 value = value.strip().lower() in {"true", "yes", "1"}
             if not isinstance(value, bool):
-                raise ValueError("The model returned no boolean response decision")
+                raise TypeError("The model returned no boolean response decision")
             reason = str(decision.get("reason") or ("Relevant to the conversation" if value else "Not relevant enough to interrupt"))[:300]
             return value, reason
         except Exception as err:  # noqa: BLE001 - safe default is silence
