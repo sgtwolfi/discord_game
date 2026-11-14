@@ -17,6 +17,10 @@ SET_MEMORY = vol.Schema({
     vol.Required("user_id"): cv.string,
     vol.Required("summary"): cv.string,
 })
+SET_CONTEXT = vol.Schema({
+    vol.Required("conversation"): cv.string,
+    vol.Required("context"): cv.string,
+})
 EDIT_QUEUE = vol.Schema({
     vol.Required("message_id"): cv.string,
     vol.Required("message"): cv.string,
@@ -57,6 +61,14 @@ async def async_setup_services(hass: HomeAssistant):
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_history(call.data["user_id"])
+
+    async def set_context(call: ServiceCall):
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].set_context_note(
+            call.data["conversation"], call.data["context"]
+        )
 
     async def set_memory(call: ServiceCall):
         items = assistants(hass)
@@ -109,6 +121,7 @@ async def async_setup_services(hass: HomeAssistant):
     hass.services.async_register(DOMAIN, "send_message", send, schema=SEND)
     hass.services.async_register(DOMAIN, "clear_friend_memory", clear, schema=CLEAR)
     hass.services.async_register(DOMAIN, "set_friend_memory", set_memory, schema=SET_MEMORY)
+    hass.services.async_register(DOMAIN, "set_context_note", set_context, schema=SET_CONTEXT)
     hass.services.async_register(DOMAIN, "pause", pause)
     hass.services.async_register(DOMAIN, "resume", resume)
     hass.services.async_register(DOMAIN, "clear_queue", clear_queue)
@@ -122,7 +135,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript"):
+    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)
