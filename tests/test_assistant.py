@@ -530,7 +530,8 @@ def test_memory_consolidation_uses_latest_configured_messages_and_revises_summar
     assert result == 1
     assert "Max: 3" in prompts[0] and "Max: 4" in prompts[0]
     assert "Max: 0" not in prompts[0]
-    assert "remove facts that are clearly outdated" in prompts[0]
+    assert "Do not turn one event into a lasting preference" in prompts[0]
+    assert "VERIFIED SYSTEM EVENT" in prompts[0] or "CONTACT MESSAGE" in prompts[0]
     assert assistant.friends["123"]["summary"] == "Updated durable memory"
     assert assistant.friends["123"]["pending_messages"] == []
     assert len(assistant.friends["123"]["messages"]) == 1
@@ -1015,3 +1016,55 @@ def test_newly_approved_friend_can_open_an_empty_conversation():
 
     result = assistant.conversation_messages("dm:123")
     assert result["messages"] == []
+
+
+
+def test_memory_default_is_neutral_and_forbids_storytelling():
+    prompt = assistant_module.DEFAULT_AGENT_PROMPTS["memory"].lower()
+    assert "plain-text facts only" in prompt
+    assert "no ghost personality" in prompt
+    assert "never turn a guess" in prompt
+
+
+def test_action_outcome_memory_records_unconfirmed_not_success():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    item = {"is_dm": True, "sender_id": "123"}
+    assistant._capture_action_outcome_for_memory(
+        item,
+        "Set the room lights to maximum brightness",
+        {"response_type": "action_done", "success": [], "failed": []},
+        "No successful targets were reported",
+    )
+    event = assistant.friends["123"]["pending_messages"][0]
+    assert event["role"] == "system_event"
+    assert '"status":"NOT CONFIRMED:' in event["content"]
+    assert '"success":[]' in event["content"]
+    assert "Set the room lights to maximum brightness" in event["content"]
+
+
+def test_action_outcome_memory_records_confirmed_success_only_from_target_list():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant._capture_action_outcome_for_memory(
+        {"is_dm": True, "sender_id": "123"},
+        "Turn on the bedroom light",
+        {"response_type": "action_done", "success": [{"id": "light.bedroom"}], "failed": []},
+    )
+    event = assistant.friends["123"]["pending_messages"][0]
+    assert '"status":"CONFIRMED:' in event["content"]
+
+
+def test_action_outcome_memory_ignores_unapproved_and_group_messages():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant._capture_action_outcome_for_memory(
+        {"is_dm": True, "sender_id": "456"}, "action", None
+    )
+    assistant._capture_action_outcome_for_memory(
+        {"is_dm": False, "sender_id": "123"}, "action", None
+    )
+    assert assistant.friends == {}
