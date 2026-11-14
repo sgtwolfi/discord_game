@@ -4,6 +4,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._notice = "";
     this._busy = false;
+    this._activeTab = "overview";
   }
 
   set hass(hass) {
@@ -125,7 +126,13 @@ class DiscordGameGhostPanel extends HTMLElement {
     const style = this._node("style");
     style.textContent = `
       :host { display:block; color:var(--primary-text-color); }
-      .page { box-sizing:border-box; max-width:1400px; margin:0 auto; padding:24px; }
+      .page { box-sizing:border-box; max-width:1500px; margin:0 auto; padding:24px; }
+      .tabs { display:flex; gap:7px; flex-wrap:wrap; margin:18px 0 16px; padding:7px; border:1px solid var(--divider-color); border-radius:14px; background:var(--card-background-color); }
+      .tabs button { background:transparent; color:var(--secondary-text-color); border:1px solid transparent; padding:9px 13px; }
+      .tabs button.active { background:var(--primary-color); color:var(--text-primary-color); }
+      [data-tab-panel][hidden] { display:none !important; }
+      .setting-help { font-size:12px; color:var(--secondary-text-color); margin-top:3px; }
+      .setting-field { min-width:0; }
       header { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
       h1 { font-size:28px; margin:0; } h2 { font-size:18px; margin:0 0 8px; }
       p { margin:6px 0; line-height:1.45; }
@@ -190,6 +197,18 @@ class DiscordGameGhostPanel extends HTMLElement {
     }
     page.append(tiles);
 
+    const tabs = this._node("nav", undefined, "tabs");
+    const tabItems = [
+      ["overview", "Overview"], ["config", "Configuration"], ["queue", "Queue"],
+      ["history", "History"], ["memory", "Memory"], ["manual", "Manual send"],
+    ];
+    for (const [key, label] of tabItems) {
+      const tab = this._button(label, () => { this._activeTab = key; this._render(); }, key !== this._activeTab);
+      if (key === this._activeTab) tab.classList.add("active");
+      tabs.append(tab);
+    }
+    page.append(tabs);
+
     if (!state) {
       const missing = this._section("Assistant sensor not found", "The integration may still be starting, or the entity may have been renamed. Expected entity: sensor.discord_game_assistant.");
       page.append(missing);
@@ -198,7 +217,62 @@ class DiscordGameGhostPanel extends HTMLElement {
       return;
     }
 
+    const settings = a.settings || {};
+    const configSection = this._section("Assistant configuration", "Fine-tune behaviour without changing the model assignments in Discord Game integration settings.");
+    configSection.dataset.tabPanel = "config";
+    const configForm = this._node("form");
+    const configGrid = this._node("div", undefined, "formgrid");
+    const addNumber = (key, label, value, min, max, step = 1, help = "") => {
+      const wrap = this._node("div", undefined, "setting-field");
+      wrap.append(this._node("label", label));
+      const field = this._node("input"); field.type = "number"; field.min = min; field.max = max; field.step = step;
+      field.value = value ?? ""; field.dataset.preserve = "setting-" + key; field.name = key;
+      wrap.append(field);
+      if (help) wrap.append(this._node("p", help, "setting-help"));
+      configGrid.append(wrap);
+    };
+    addNumber("fallback_after_failures", "Local attempts before API fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "How many failed local attempts are allowed before the fallback model is tried.");
+    addNumber("queue_debounce_seconds", "Message grouping delay (seconds)", settings.queue_debounce_seconds ?? 2.5, 0.5, 15, 0.5, "Wait briefly to combine consecutive messages from the same conversation.");
+    addNumber("max_context_messages", "Recent context messages", settings.max_context_messages ?? 20, 4, 80);
+    addNumber("context_budget_chars", "Prompt budget (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500);
+    addNumber("history_limit", "Messages retained before compression", settings.history_limit ?? 60, 10, 200);
+    configForm.append(configGrid);
+    const typingWrap = this._node("label", "Show Discord typing indicator");
+    const typing = this._node("input"); typing.type = "checkbox"; typing.checked = settings.typing_enabled !== false;
+    typing.dataset.preserve = "setting-typing_enabled"; typing.name = "typing_enabled";
+    typingWrap.prepend(typing); configForm.append(typingWrap);
+    const channelsLabel = this._node("label", "Server channels enabled for GHOST (comma-separated channel IDs)");
+    const channelsField = this._node("input"); channelsField.value = settings.assistant_group_channels || "";
+    channelsField.dataset.preserve = "setting-assistant_group_channels"; channelsField.name = "assistant_group_channels";
+    configForm.append(channelsLabel, channelsField);
+    const promptFields = [
+      ["conversation_system_prompt", "Conversation agent — extra system instructions", 5, 6000],
+      ["operations_system_prompt", "Operations agent — extra system instructions", 6, 6000],
+      ["advanced_system_prompt", "Advanced fallback — extra system instructions", 6, 6000],
+      ["memory_system_prompt", "Memory manager — extra system instructions", 5, 4000],
+    ];
+    for (const [key, label, rows] of promptFields) {
+      configForm.append(this._node("label", label));
+      const field = this._node("textarea"); field.rows = rows; field.maxLength = key === "memory_system_prompt" ? 4000 : 6000;
+      field.value = settings[key] || ""; field.dataset.preserve = "setting-" + key; field.name = key;
+      configForm.append(field);
+    }
+    configForm.append(this._button("Save assistant configuration", async () => {
+      const data = {};
+      for (const field of configForm.querySelectorAll("[name]")) {
+        data[field.name] = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
+      }
+      if (!data.assistant_group_channels.trim().split(",").every((id) => !id.trim() || /^\\d+$/.test(id.trim()))) {
+        this._notice = "Server channel IDs must be numeric and separated by commas.";
+        this._render(); return;
+      }
+      await this._service("update_settings", data);
+    }));
+    configSection.append(configForm);
+    page.append(configSection);
+
     const active = this._section("Active request", "The current prompt snapshot is shown here for debugging.");
+    active.dataset.tabPanel = "overview";
     if (a.active_request) {
       const current = this._node("div", undefined, "item");
       current.append(this._node("p", a.active_request.sender || a.active_request.conversation));
@@ -210,6 +284,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(active);
 
     const contextSection = this._section("Inject temporary conversation context", "This note is held in memory only and is cleared when Home Assistant restarts. Use dm:USER_ID or guild:GUILD_ID:CHANNEL_ID.");
+    contextSection.dataset.tabPanel = "overview";
     const contextCard = this._node("div", undefined, "item");
     contextCard.append(this._node("label", "Conversation key"));
     const contextKey = this._node("input");
@@ -238,6 +313,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(contextSection);
 
     const queue = this._section("Pending messages", "Messages are processed in chronological order. Clearing the queue does not interrupt an active response.");
+    queue.dataset.tabPanel = "queue";
     const queueList = this._node("div", undefined, "list");
     for (const item of a.pending_messages || []) {
       const card = this._node("article", undefined, "item");
@@ -265,6 +341,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(queue);
 
     const transcript = this._section("Recent transcript", "Includes model selection, context snapshots, failures and structured action outcomes.");
+    transcript.dataset.tabPanel = "history";
     const transcriptList = this._node("div", undefined, "list");
     for (const item of [...(a.transcript || [])].reverse()) {
       const card = this._node("article", undefined, "item");
@@ -294,6 +371,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(transcript);
 
     const usage = this._section("Estimated model usage", "Calculated from the retained transcript; these are estimates, not provider billing figures.");
+    usage.dataset.tabPanel = "overview";
     const usageList = this._node("div", undefined, "list");
     for (const [model, counts] of Object.entries(a.model_usage || {})) {
       const card = this._node("article", undefined, "item");
@@ -306,6 +384,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(usage);
 
     const memories = this._section("Approved-contact memory", "Persistent memory is isolated by approved Discord user ID. Group-channel context is temporary.");
+    memories.dataset.tabPanel = "memory";
     const memoryList = this._node("div", undefined, "list");
     for (const [userId, memory] of Object.entries(a.friend_memory || {})) {
       const card = this._node("article", undefined, "item");
@@ -353,6 +432,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     const approvedIds = (a.approved_users || []).join(", ") || "No approved contacts configured";
     const selectedChannels = (a.group_channels || []).join(", ") || "No GHOST server channels selected";
     const manual = this._section("Send a manual Discord message", "Approved DM IDs: " + approvedIds + ". Enabled server channel IDs: " + selectedChannels + ". Fill in one destination ID.");
+    manual.dataset.tabPanel = "manual";
     const form = this._node("form");
     const fields = this._node("div", undefined, "formgrid");
     const userWrap = this._node("div");
@@ -388,10 +468,14 @@ class DiscordGameGhostPanel extends HTMLElement {
 
     if (a.last_error) {
       const error = this._section("Latest error");
+      error.dataset.tabPanel = "overview";
       error.append(this._node("p", a.last_error, "error"));
       page.append(error);
     }
 
+    for (const panel of page.querySelectorAll("[data-tab-panel]")) {
+      panel.hidden = panel.dataset.tabPanel !== this._activeTab;
+    }
     root.append(page);
     restoreFormState();
   }
