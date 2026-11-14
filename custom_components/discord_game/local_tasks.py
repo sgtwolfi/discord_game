@@ -16,7 +16,7 @@ _NUMBER_WORDS = {
 }
 _DURATION = re.compile(
     r"\bin\s+(?P<amount>\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
-    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|a|an)"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|a|an|half)"
     r"\s*(?:an?\s+)?(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|m|h|d)\b",
     re.IGNORECASE,
 )
