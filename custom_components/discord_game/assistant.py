@@ -70,7 +70,7 @@ ACTION_REQUEST = re.compile(
     r"^\s*(?:please\s+)?(?:turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
     r"activate|deactivate|lock|unlock|open|close|play|pause|stop|start|run|enable|disable|"
     r"cancel|delete|add|remove|schedule|remind|notify|send)\b|"
-    r"\b(?:also|and then|then)\s+(?:please\s+)?(?:turn|switch|set|change|adjust|dim|brighten|"
+    r"\b(?:also|and then|then),?\s+(?:please\s+)?(?:turn|switch|set|change|adjust|dim|brighten|"
     r"increase|decrease|toggle|activate|deactivate|lock|unlock|open|close|play|pause|stop|start|"
     r"run|enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\b|"
     r"\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:turn|switch|set|change|adjust|dim|"
