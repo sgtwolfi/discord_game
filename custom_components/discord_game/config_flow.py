@@ -185,6 +185,8 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "operations_system_prompt": "",
                 "advanced_system_prompt": "",
                 "memory_system_prompt": "",
+                "assistant_approved_users": self._get_current("assistant_approved_users", self._get_current(CONF_MEMBERS, [])),
+                "assistant_contact_names": self._get_current("assistant_contact_names", {}),
             }
             for key, default in advanced_defaults.items():
                 self.options_data.setdefault(key, self._get_current(key, default))
