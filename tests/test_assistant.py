@@ -775,6 +775,7 @@ def test_public_sensor_attributes_do_not_expose_private_memory_or_transcript():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.enabled = True
     assistant.paused = False
+    assistant.diagnostics_revision = 1
     assistant.queue = [{"content": "private incoming message"}]
     assistant.active = False
     assistant.last_activity = None
