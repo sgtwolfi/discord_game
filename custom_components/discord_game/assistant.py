@@ -9,8 +9,10 @@ from datetime import UTC, datetime
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .const import CONF_MEMBERS, DOMAIN
+from .local_tasks import parse_local_reminder
 
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
@@ -394,6 +396,9 @@ class DiscordAssistant:
         self.mode = str(config.get("assistant_mode", "local")).strip().lower()
         if self.mode not in {"api", "local"}:
             self.mode = "local"
+        self.local_reminder_script = str(
+            config.get("local_reminder_script", "script.set_timer_alarm_or_reminder")
+        ).strip()
         self.agents={k:str(config.get(k,"")).strip() for k in ("conversation_agent","operations_agent","fallback_agent")}
         # API Mode delegates model-facing work to one HA conversation agent.
         # GHOST continues to own memory, queueing, privacy and verification.
@@ -990,6 +995,58 @@ class DiscordAssistant:
         retry_answer = await self._call(agent, retry_prompt)
         retry_result = getattr(self, "_last_call_result", None)
         return retry_answer, merge_action_retry_results(first_result, retry_result)
+
+    async def _execute_local_reminder(self, fields):
+        """Invoke the one administrator-configured reminder script and verify its response."""
+        entity_id = self.local_reminder_script
+        if not entity_id.startswith("script.") or entity_id.count(".") != 1:
+            raise RuntimeError("The configured Local Mode reminder target must be a script entity ID.")
+        service = entity_id.split(".", 1)[1]
+        if not self.hass.services.has_service("script", service):
+            return {
+                "response": {
+                    "response_type": "action_done",
+                    "data": {
+                        "success": [],
+                        "failed": [{"id": entity_id, "error": "The configured reminder script service is unavailable."}],
+                    },
+                }
+            }
+        result = await self.hass.services.async_call(
+            "script",
+            service,
+            dict(fields),
+            blocking=True,
+            return_response=True,
+        )
+        payload = result.get("response", result) if isinstance(result, dict) else {}
+        if not isinstance(payload, dict):
+            payload = {}
+        if payload.get("success") is True:
+            target = {
+                "id": entity_id,
+                "name": str(payload.get("name") or fields.get("name") or "Reminder"),
+            }
+            return {
+                "response": {
+                    "response_type": "action_done",
+                    "data": {"success": [target], "failed": []},
+                }
+            }
+        reason = str(
+            payload.get("error")
+            or payload.get("message")
+            or "The reminder script did not return success=true."
+        )[:500]
+        return {
+            "response": {
+                "response_type": "action_done",
+                "data": {
+                    "success": [],
+                    "failed": [{"id": entity_id, "error": reason}],
+                },
+            }
+        }
 
     async def _call(self,agent,prompt):
         if not agent:raise RuntimeError("No conversation agent configured")
