@@ -549,3 +549,15 @@ def test_model_call_counts_provider_errors():
         asyncio.run(assistant._call("conversation.local", "hello"))
 
     assert assistant.model_usage_data["conversation.local"]["errors"] == 1
+
+
+
+def test_manual_send_rejects_two_destinations():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    with pytest.raises(ValueError, match="not both"):
+        asyncio.run(assistant.send_manual(
+            message="Hello", user_id="123", channel_id="789"
+        ))
