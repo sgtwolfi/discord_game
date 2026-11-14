@@ -519,6 +519,7 @@ class DiscordAssistant:
     async def _compress(self,user_id):
         record=self.friends[user_id];messages=record.get("messages",[])
         if len(messages)<=self.history_limit:return
+        compressed = False
         if self.agents["memory_agent"]:
             old=messages[:-self.limit]
             text="\n".join(f'{x.get("role")}: {x.get("content")}' for x in old)
@@ -530,9 +531,14 @@ class DiscordAssistant:
                 "Return a concise summary.\n\n"
                 f"Existing summary:\n{prior_summary}\n\nNew older conversation:\n{text[:self.budget]}"
             )
-            try:record["summary"]=(await self._call(self.agents["memory_agent"],memory_prompt))[:4000]
-            except Exception:_LOGGER.warning("Memory compression failed",exc_info=True)
-        record["messages"]=messages[-self.limit:]
+            try:
+                record["summary"] = (await self._call(self.agents["memory_agent"], memory_prompt))[:4000]
+                compressed = True
+            except Exception:
+                _LOGGER.warning("Memory compression failed; retaining a longer raw history", exc_info=True)
+        # Never throw away history when the memory model is absent or fails.
+        keep = self.limit if compressed else self.history_limit
+        record["messages"] = messages[-keep:]
     async def _send(self,channel,content):
         content=str(content).strip()
         if not content:raise RuntimeError("Refusing to send empty message")
