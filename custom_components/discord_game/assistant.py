@@ -433,7 +433,11 @@ class DiscordAssistant:
                     failures.append(str(err));_LOGGER.warning("Local assistant attempt %s failed: %s",attempt+1,err)
                     await asyncio.sleep(min(attempt+1,4))
             if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
-                model=self.agents["fallback_agent"];answer=await self._call(model,prompt)
+                model=self.agents["fallback_agent"]
+                if self.active_request:
+                    self.active_request["model"] = model
+                    self._refresh_sensor()
+                answer=await self._call(model,prompt)
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
             if role == "operations":
                 verification_error = action_result_error(getattr(self, "_last_call_result", None))
@@ -445,6 +449,9 @@ class DiscordAssistant:
                 if verification_error and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
                     _LOGGER.warning("Operations agent returned an unconfirmed action; retrying with fallback: %s", verification_error)
                     model = self.agents["fallback_agent"]
+                    if self.active_request:
+                        self.active_request["model"] = model
+                        self._refresh_sensor()
                     answer = await self._call(model, prompt)
                     verification_error = action_result_error(getattr(self, "_last_call_result", None))
                     action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
