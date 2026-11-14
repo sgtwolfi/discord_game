@@ -766,7 +766,7 @@ class DiscordAssistant:
                             until=datetime.now(UTC) + timedelta(minutes=self.spam_timeout_minutes),
                             reason="GHOST anti-spam protection",
                         )
-                    except Exception:  # noqa: BLE001 - missing permissions must not break GHOST
+                    except Exception:
                         _LOGGER.warning("GHOST could not apply Discord spam timeout to %s", sender_id, exc_info=True)
                 self.hass.async_create_task(apply_timeout())
             return "drop"
