@@ -523,6 +523,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     capHead.append(capTitle, this._button("Refresh", () => { this._capabilities = null; this._loadCapabilities(); }, true));
     capabilitiesPanel.append(capHead);
     capabilitiesPanel.append(this._el("p", "This controls Home Assistant's Assist exposure list. It does not grant access to arbitrary services. Scripts are the easiest way to give GHOST a named, reusable function such as setting a reminder.", "help"));
+    capabilitiesPanel.append(this._el("p", "One more required step for Ollama: open Settings → Devices & services → Ollama → Configure and enable the Device control AI tool. This exposure list controls which entities that tool can access. The selected model must support tool calling; very small models can struggle even when everything is configured correctly.", "help"));
     if (this._capabilitiesLoading) {
       capabilitiesPanel.append(this._el("p", "Loading your Home Assistant entities…", "muted"));
     } else if (!this._capabilities || !this._capabilities.available) {
