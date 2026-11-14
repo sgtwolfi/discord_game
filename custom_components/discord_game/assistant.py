@@ -24,7 +24,7 @@ DEFAULT_AGENT_PROMPTS = {
     "operations": (
         "JOB: Handle Home Assistant device actions AND live state questions. Use only tools actually provided. "
         "For a status question, query the relevant exposed entities and report their returned current states. "
-        "For a device request, identify the exact exposed target, use the requested property such as brightness or colour, "
+        "For a device request, identify the exact exposed target and use only its available fields, including the requested property such as brightness or colour, "
         "call the tool, then inspect its result. For maximum brightness use 100 percent; for a requested colour use that colour. "
         "Use an exposed script for a named function. Never invent entities, states, services, fields or results. "
         "Report action success only when Home Assistant confirms it. Do not retry an action that may have partly worked. "
