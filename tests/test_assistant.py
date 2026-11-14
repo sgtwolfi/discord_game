@@ -1871,7 +1871,10 @@ def test_group_continuity_does_not_cross_speakers_or_expire():
         return '{"respond": false, "reason": "unrelated"}'
 
     assistant._call = reject
-    history = [{"role": "assistant", "sender": "GHOST", "content": "What do you need help with?", "timestamp": "2026-11-14T11:45:00+00:00"}]
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "so what?", "timestamp": "2026-11-14T11:44:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "What do you need help with?", "timestamp": "2026-11-14T11:45:00+00:00"},
+    ]
     other = asyncio.run(assistant._should_respond_to_group(
         [{"sender_name": "Max", "sender_id": "456", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:45:10+00:00"}], history))
     expired = asyncio.run(assistant._should_respond_to_group(
