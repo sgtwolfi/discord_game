@@ -1952,6 +1952,15 @@ def test_group_history_is_restored_from_persisted_conversation_logs(monkeypatch)
     assert assistant.groups["guild:1:2"][-1]["content"] == "What do you need help with?"
 
 
+def test_memory_purge_refuses_to_race_an_active_private_conversation():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {"123": {"summary": "Preference: likes tea", "pending_messages": [], "messages": []}}
+    assistant.active_request = {"conversation": "dm:123"}
+    with pytest.raises(RuntimeError, match="being processed"):
+        asyncio.run(assistant.purge_friend_memory("123", "all"))
+
+
 def test_memory_purge_scopes_preserve_unselected_data():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.approved_users = {"123"}
