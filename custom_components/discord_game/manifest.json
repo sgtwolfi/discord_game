@@ -1,12 +1,22 @@
 {
   "domain": "discord_game",
   "name": "Discord Game",
-  "codeowners": ["@lordboos"],
-  "version": "6.2.4",
+  "codeowners": [
+    "@lordboos"
+  ],
+  "version": "7.0.0",
   "documentation": "https://github.com/LordBoos/discord_game",
   "config_flow": true,
   "iot_class": "cloud_push",
   "integration_type": "service",
-  "loggers": ["discord_game"],
-  "requirements": ["nextcord==3.1.1", "addict", "aiohttp", "validators"]
+  "loggers": [
+    "discord_game"
+  ],
+  "requirements": [
+    "nextcord==3.1.1",
+    "addict",
+    "aiohttp",
+    "validators"
+  ],
+  "homeassistant": "2024.8.0"
 }
