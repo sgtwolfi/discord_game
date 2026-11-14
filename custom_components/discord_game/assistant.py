@@ -136,6 +136,7 @@ class DiscordAssistant:
         self.store=Store(hass,1,f"{DOMAIN}_{entry_id}_assistant")
         self.friends={}
         self.groups=defaultdict(list)
+        self.context_notes = {}
         self.queue=[]
         self.max_queue = MAX_PENDING_MESSAGES
         self.wake=asyncio.Event()
@@ -201,6 +202,7 @@ class DiscordAssistant:
           ],
           "transcript":self.transcript[-20:],
           "active_request": self.active_request,
+          "context_notes": dict(self.context_notes),
           "model_usage": self.model_usage(),
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
     def model_usage(self):
@@ -421,7 +423,7 @@ class DiscordAssistant:
             rec=self.friends.setdefault(item["sender_id"],{"messages":[],"summary":""})
             return rec.setdefault("messages",[]),rec.get("summary","")
         return self.groups[item["key"]],""
-    def _prompt(self, batch, history, summary, role="conversation"):
+    def _prompt(self, batch, history, summary, role="conversation", context_note=""):
         lines = [
             "You are GHOST: Generative Home Optimisation & Synchronisation Technology, the owner's assistant.",
             "You are not the owner and must never impersonate them or write as though you are them.",
@@ -449,6 +451,12 @@ class DiscordAssistant:
             lines.append(
                 "You are handling ordinary conversation. If a request requires a Home Assistant action, "
                 "do not pretend to have performed it; explain that it needs the operations tools."
+            )
+
+        if context_note:
+            lines.append(
+                "Administrator-provided context for this conversation:\\n"
+                + str(context_note)[:4000]
             )
 
         summary_limit = min(2500, max(0, self.budget // 8))
@@ -516,7 +524,7 @@ class DiscordAssistant:
         failures=[]
         try:
             history,summary=self._history(item)
-            prompt=self._prompt(batch,history,summary,role)
+            prompt=self._prompt(batch,history,summary,role,self.context_notes.get(item["key"], ""))
             self.active_request = {
                 "conversation": item["key"],
                 "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
@@ -670,6 +678,27 @@ class DiscordAssistant:
         self.transcript=self.transcript[-100:];await self._save()
         self.hass.bus.async_fire("discord_game_assistant_manual_message",{"conversation":key,"message":message})
         self._refresh_sensor()
+    async def set_context_note(self, conversation, context):
+        """Set volatile administrator context for one approved DM or selected server channel."""
+        conversation = str(conversation).strip()
+        context = str(context).strip()
+        if len(context) > 4000:
+            raise ValueError("Conversation context must be 4000 characters or fewer")
+        if conversation.startswith("dm:"):
+            if conversation[3:] not in self.approved_users:
+                raise ValueError("Context can only be injected into approved GHOST DMs")
+        elif conversation.startswith("guild:"):
+            channel_id = conversation.rsplit(":", 1)[-1]
+            if channel_id not in self.group_channels:
+                raise ValueError("Context can only be injected into selected GHOST channels")
+        else:
+            raise ValueError("Use a dm:user_id or guild:guild_id:channel_id conversation key")
+        if context:
+            self.context_notes[conversation] = context
+        else:
+            self.context_notes.pop(conversation, None)
+        self._refresh_sensor()
+
     async def set_friend_memory(self, user_id, summary):
         """Replace one approved contact's durable memory with an admin correction."""
         if str(user_id) not in self.approved_users:
