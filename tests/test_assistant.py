@@ -169,12 +169,16 @@ def test_enqueue_rejects_empty_discord_messages():
     assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.stopped = False
+    assistant.approved_users = {"456"}
+    assistant.group_channels = set()
+    assistant.transcript = []
     assistant.queue = []
     assistant.max_queue = 10
     assistant.wake = asyncio.Event()
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
     assistant.sensor = SimpleNamespace(hass=None)
     message = SimpleNamespace(
+        id=987,
         content="   ",
         guild=None,
         channel=SimpleNamespace(id=123),
@@ -193,6 +197,9 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.stopped = False
+    assistant.approved_users = {"456"}
+    assistant.group_channels = set()
+    assistant.transcript = []
     assistant.queue = [{"content": "earlier message"}]
     assistant.max_queue = 1
     assistant.wake = asyncio.Event()
@@ -202,6 +209,7 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     ))
     assistant.sensor = SimpleNamespace(hass=None)
     message = SimpleNamespace(
+        id=988,
         content="new message",
         guild=None,
         channel=SimpleNamespace(id=123),
@@ -214,6 +222,67 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     assert "queue is full" in assistant.error
     assert fired and fired[0][0][0] == "discord_game_assistant_error"
 
+
+
+
+def test_enqueue_deduplicates_message_ids_already_queued_or_processed():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.enabled = True
+    assistant.stopped = False
+    assistant.approved_users = {"456"}
+    assistant.group_channels = set()
+    assistant.transcript = []
+    assistant.queue = []
+    assistant.max_queue = 10
+    assistant.wake = asyncio.Event()
+    assistant.contact_names = {}
+    assistant.conversation_meta = {}
+    assistant.conversation_logs = {"dm:456": []}
+    assistant.conversation_history_limit = 100
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+    assistant.sensor = SimpleNamespace(hass=None)
+    message = SimpleNamespace(
+        id=989,
+        content="Hello GHOST",
+        guild=None,
+        channel=SimpleNamespace(id=123, name="Direct message"),
+        created_at=datetime.now(UTC),
+        mentions=[],
+        reference=None,
+    )
+
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+
+    assert len(assistant.queue) == 1
+    assert len(assistant.conversation_logs["dm:456"]) == 1
+
+    assistant.queue.clear()
+    assistant.transcript.append({
+        "messages": [{"message_id": "989"}],
+    })
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+    assert assistant.queue == []
+
+
+def test_enqueue_rejects_unapproved_direct_messages():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.enabled = True
+    assistant.stopped = False
+    assistant.approved_users = {"123"}
+    assistant.group_channels = set()
+    assistant.queue = []
+    assistant.transcript = []
+    message = SimpleNamespace(
+        id=990,
+        content="Do something",
+        channel=SimpleNamespace(id=123),
+    )
+
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Unknown"))
+
+    assert assistant.queue == []
 
 
 def test_action_classifier_routes_home_assistant_operations():
@@ -353,6 +422,10 @@ def test_queued_message_can_be_edited_and_cancelled_individually():
         "key": "dm:456",
         "content": "keep this",
     }]
+    assistant.conversation_logs = {
+        "dm:123": [{"message_id": "111", "content": "original"}],
+        "dm:456": [{"message_id": "222", "content": "keep this"}],
+    }
     assistant.sensor = SimpleNamespace(hass=None)
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(
         async_fire=lambda *args, **kwargs: events.append((args, kwargs))
@@ -361,11 +434,13 @@ def test_queued_message_can_be_edited_and_cancelled_individually():
     edited = asyncio.run(assistant.edit_queued_message("111", "corrected"))
     assert edited is True
     assert assistant.queue[0]["content"] == "corrected"
+    assert assistant.conversation_logs["dm:123"][0]["content"] == "corrected"
 
     cancelled = asyncio.run(assistant.cancel_queued_message("111"))
     assert cancelled is True
     assert len(assistant.queue) == 1
     assert assistant.queue[0]["message_id"] == "222"
+    assert assistant.conversation_logs["dm:123"] == []
     assert events[0][0][0] == "discord_game_assistant_queue_edited"
     assert events[1][0][0] == "discord_game_assistant_queue_message_cancelled"
 
@@ -479,92 +554,122 @@ def test_admin_memory_correction_has_a_size_limit():
 
 
 
-def test_memory_without_agent_retains_pending_messages():
-    assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.friends = {"123": {
-        "summary": "",
-        "messages": [{"role": "user", "content": "hello"}],
-        "pending_messages": [{"role": "user", "content": "hello"}],
-    }}
-    assistant.agents = {"memory_agent": ""}
-
-    result = asyncio.run(assistant._compress("123"))
-
-    assert result is False
-    assert len(assistant.friends["123"]["pending_messages"]) == 1
-
-
-def test_memory_consolidation_uses_latest_configured_messages_and_revises_summary():
-    prompts = []
+def test_memory_consolidates_without_a_configured_memory_model():
     saved = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
-    assistant.friends = {"123": {
-        "summary": "Old summary",
-        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
-        "pending_messages": [{"role": "user", "sender": "Max", "content": str(i)} for i in range(5)],
-    }}
-    assistant.agents = {"memory_agent": "conversation.memory"}
-    assistant.memory_batch_messages = 2
-    assistant.limit = 3
-    assistant.history_limit = 1
-    assistant.budget = 1000
-    assistant.config = {}
+    assistant.friends = {
+        "123": {
+            "summary": "",
+            "messages": [{"role": "user", "content": "hello"}],
+            "pending_messages": [{"role": "user", "content": "hello"}],
+        },
+        "456": {
+            "summary": "Preference: likes tea",
+            "messages": [],
+            "pending_messages": [{"role": "user", "content": "I love tea"}],
+        },
+    }
+    assistant.agents = {"memory_agent": ""}
+    assistant.memory_batch_messages = 5
+    assistant.history_limit = 2
     assistant.contact_names = {"123": "Max"}
     assistant.last_memory_consolidation = None
     assistant.sensor = SimpleNamespace(hass=None)
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
 
-    async def successful_call(agent, prompt):
-        prompts.append(prompt)
-        return "Updated durable memory"
+    async def save():
+        saved.append(True)
+
+    assistant._save = save
+    result = asyncio.run(assistant._compress("123"))
+
+    assert result is True
+    assert assistant.friends["123"]["pending_messages"] == []
+    assert assistant.friends["123"]["summary"] == ""
+    assert assistant.friends["456"]["pending_messages"][0]["content"] == "I love tea"
+    assert saved
+
+
+def test_memory_consolidation_uses_only_explicit_facts_and_keeps_unprocessed_evidence():
+    saved = []
+    events = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.friends = {"123": {
+        "summary": "Right, mate, what's on your mind? The lights are definitely red-ing this morning, proper shockin', innit?",
+        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+        "pending_messages": [
+            {"role": "user", "sender": "Max", "content": "hello"},
+            {"role": "user", "sender": "Max", "content": "I prefer comedy films"},
+            {"role": "user", "sender": "Max", "content": "Remember that I use Home Assistant"},
+        ],
+    }}
+    assistant.memory_batch_messages = 2
+    assistant.history_limit = 1
+    assistant.contact_names = {"123": "Max"}
+    assistant.last_memory_consolidation = None
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(
+        async_fire=lambda *args, **kwargs: events.append((args, kwargs))
+    ))
 
     async def save():
         saved.append(True)
 
-    assistant._call = successful_call
     assistant._save = save
-
     result = asyncio.run(assistant._consolidate_pending_memories())
 
     assert result == 1
-    assert "Max: 3" in prompts[0] and "Max: 4" in prompts[0]
-    assert "Max: 0" not in prompts[0]
-    assert "Do not turn one event into a lasting preference" in prompts[0]
-    assert "VERIFIED SYSTEM EVENT" in prompts[0] or "CONTACT MESSAGE" in prompts[0]
-    assert assistant.friends["123"]["summary"] == "Updated durable memory"
-    assert assistant.friends["123"]["pending_messages"] == []
-    assert len(assistant.friends["123"]["messages"]) == 1
-    assert saved
-
-
-def test_failed_memory_consolidation_retains_pending_evidence():
-    assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.friends = {"123": {
-        "summary": "existing",
-        "messages": [],
-        "pending_messages": [{"role": "user", "content": "new evidence"}],
-    }}
-    assistant.agents = {"memory_agent": "conversation.memory"}
-    assistant.memory_batch_messages = 5
-    assistant.limit = 3
-    assistant.history_limit = 1
-    assistant.budget = 1000
-    assistant.config = {}
-    assistant.contact_names = {"123": "Max"}
-    assistant._last_message_monotonic = 1
-
-    async def failed_call(agent, prompt):
-        raise RuntimeError("model unavailable")
-
-    assistant._call = failed_call
-
-    result = asyncio.run(assistant._consolidate_pending_memories())
-
-    assert result == 0
-    assert assistant.friends["123"]["summary"] == "existing"
+    summary = assistant.friends["123"]["summary"]
+    assert "Right, mate" not in summary
+    assert "red-ing" not in summary
+    assert "Preference: prefer comedy films" in summary
+    assert "Explicitly remembered: I use Home Assistant" in summary
     assert len(assistant.friends["123"]["pending_messages"]) == 1
-    assert assistant._last_message_monotonic > 1
+    assert assistant.friends["123"]["pending_messages"][0]["content"] == "hello"
+    assert len(assistant.friends["123"]["messages"]) == 1
+    assert saved and events
+
+
+def test_memory_extractor_ignores_assistant_text_and_unverified_claims():
+    facts = assistant_module.extract_durable_memory_facts([
+        {"role": "assistant", "content": "The lights are definitely red this morning, mate."},
+        {"role": "user", "content": "The lights are red."},
+        {"role": "user", "content": "I love science fiction films."},
+        {"role": "user", "content": "Remember that my server is called GHOST."},
+    ])
+
+    assert facts == [
+        "Preference: love science fiction films",
+        "Explicitly remembered: my server is called GHOST",
+    ]
+
+
+def test_memory_consolidation_does_not_need_a_memory_model():
+    saved = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.friends = {"123": {
+        "summary": "Preference: likes tea",
+        "messages": [],
+        "pending_messages": [{"role": "user", "content": "hello"}],
+    }}
+    assistant.memory_batch_messages = 5
+    assistant.history_limit = 0
+    assistant.contact_names = {"123": "Max"}
+    assistant.last_memory_consolidation = None
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+
+    async def save():
+        saved.append(True)
+
+    assistant._save = save
+    assert asyncio.run(assistant._consolidate_pending_memories()) == 1
+    assert assistant.friends["123"]["summary"] == "Preference: likes tea"
+    assert assistant.friends["123"]["pending_messages"] == []
+    assert saved
 
 
 def test_group_relevance_gate_uses_ai_decision_before_reply():
@@ -587,6 +692,52 @@ def test_group_relevance_gate_uses_ai_decision_before_reply():
 
     assert should_respond is False
     assert reason == "This is banter between friends"
+
+
+
+def test_group_relevance_gate_uses_fallback_after_malformed_primary_output():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.agents = {
+        "conversation_agent": "conversation.local",
+        "fallback_agent": "conversation.backup",
+    }
+    assistant.limit = 8
+    calls = []
+
+    async def call(agent, prompt):
+        calls.append(agent)
+        if agent == "conversation.local":
+            return "That is not JSON"
+        return '{"respond": true, "reason": "Direct question"}'
+
+    assistant._call = call
+    batch = [{
+        "sender_name": "Max",
+        "content": "Can you help?",
+        "directly_addressed": True,
+    }]
+
+    result = asyncio.run(assistant._should_respond_to_group(batch, []))
+
+    assert result == (True, "Direct question")
+    assert calls == ["conversation.local", "conversation.backup"]
+
+
+def test_partial_action_error_names_successful_and_failed_targets():
+    error = assistant_module.action_result_error({
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"name": "Bedroom", "id": "light.bedroom"}],
+                "failed": [{"name": "Hall", "id": "light.hall"}],
+            },
+        },
+    })
+
+    assert "partially completed" in error
+    assert "Bedroom" in error
+    assert "Hall" in error
+
 
 
 def test_group_relevance_gate_allows_a_relevant_direct_question():
@@ -737,29 +888,250 @@ def test_manual_send_rejects_two_destinations():
 
 
 
-def test_fallback_retry_is_allowed_for_missing_action_result():
-    assert assistant_module.action_result_retryable({
+def test_action_retry_requires_explicit_structured_failed_entity():
+    result = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{
+                    "entity_id": "light.hall",
+                    "error": "Service rejected the target",
+                }],
+            },
+        },
+    }
+
+    assert assistant_module.action_result_retryable(result)
+    assert assistant_module.action_retry_targets(result) == ["light.hall"]
+
+
+def test_action_retry_scopes_partial_failure_to_failed_targets_only():
+    result = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.bedroom"}],
+                "failed": [{
+                    "entity_id": "light.hall",
+                    "error": "Target rejected",
+                }],
+            },
+        },
+    }
+
+    assert assistant_module.action_result_retryable(result)
+    assert assistant_module.action_retry_targets(result) == ["light.hall"]
+    assert "light.bedroom" not in assistant_module.action_retry_targets(result)
+
+
+def test_action_retry_is_blocked_for_ambiguous_or_unscoped_failures():
+    assert not assistant_module.action_result_retryable(RuntimeError("timeout"))
+    assert not assistant_module.action_result_retryable({
         "response": {"response_type": "success", "speech": {"plain": {"speech": "Done"}}}
     })
-
-
-def test_fallback_retry_is_blocked_for_partial_action_failure():
+    assert not assistant_module.action_result_retryable({
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": []},
+        },
+    })
     assert not assistant_module.action_result_retryable({
         "response": {
             "response_type": "action_done",
             "data": {
-                "success": [{"id": "light.bedroom"}],
-                "failed": [{"id": "light.hall"}],
+                "success": [],
+                "failed": [{"name": "Hall", "error": "Target rejected"}],
+            },
+        },
+    })
+    assert not assistant_module.action_result_retryable({
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall"}],
             },
         },
     })
 
 
-def test_fallback_retry_is_allowed_when_action_has_no_reported_targets():
-    assert assistant_module.action_result_retryable({
-        "response": {"response_type": "action_done", "data": {"success": [], "failed": []}}
-    })
+def test_action_retry_merge_preserves_first_success_and_uses_retry_outcome():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.bedroom"}],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+    retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.hall"}],
+                "failed": [],
+            },
+        },
+    }
 
+    merged = assistant_module.merge_action_retry_results(first, retry)
+
+    assert merged["response"]["data"]["success"] == [
+        {"entity_id": "light.bedroom"},
+        {"entity_id": "light.hall"},
+    ]
+    assert merged["response"]["data"]["failed"] == []
+    assert assistant_module.action_result_error(merged) is None
+
+
+def test_action_retry_merge_rejects_empty_or_incomplete_retry_results():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [
+                    {"entity_id": "light.hall", "error": "Rejected"},
+                    {"entity_id": "light.kitchen", "error": "Rejected"},
+                ],
+            },
+        },
+    }
+    empty_retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": []},
+        },
+    }
+    incomplete_retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.hall"}],
+                "failed": [],
+            },
+        },
+    }
+
+    assert assistant_module.merge_action_retry_results(first, empty_retry) is None
+    assert assistant_module.merge_action_retry_results(first, incomplete_retry) is None
+
+
+def test_action_retry_merge_rejects_targets_outside_failed_set():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+    retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.hall"}, {"entity_id": "light.bedroom"}],
+                "failed": [],
+            },
+        },
+    }
+
+    assert assistant_module.merge_action_retry_results(first, retry) is None
+
+
+def test_controlled_action_retry_calls_once_and_only_targets_failed_entities():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.active_request = None
+    assistant._last_call_result = None
+    calls = []
+
+    async def call(agent, prompt):
+        calls.append((agent, prompt))
+        assistant._last_call_result = {
+            "response": {
+                "response_type": "action_done",
+                "data": {
+                    "success": [{"entity_id": "light.hall"}],
+                    "failed": [],
+                },
+            },
+        }
+        return "The failed target is now on."
+
+    assistant._call = call
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.bedroom"}],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+    attempted = []
+
+    answer, merged = asyncio.run(assistant._retry_failed_action(
+        "conversation.operations", "Original request: turn on both lights", first, attempted
+    ))
+
+    assert answer == "The failed target is now on."
+    assert len(calls) == 1
+    assert attempted == ["conversation.operations"]
+    retry_instructions = calls[0][1].split("CONTROLLED ACTION RETRY", 1)[1]
+    assert "light.hall" in retry_instructions
+    assert "light.bedroom" not in retry_instructions
+    assert merged["response"]["data"]["success"] == [
+        {"entity_id": "light.bedroom"},
+        {"entity_id": "light.hall"},
+    ]
+
+
+def test_controlled_action_retry_does_not_retry_again_after_retry_exception():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.active_request = None
+    calls = []
+
+    async def call(agent, prompt):
+        calls.append(agent)
+        raise RuntimeError("retry timed out")
+
+    assistant._call = call
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="retry timed out"):
+        asyncio.run(assistant._retry_failed_action(
+            "conversation.operations", "Original request", first, []
+        ))
+
+    assert calls == ["conversation.operations"]
+
+
+def test_action_retry_merge_rejects_unstructured_retry_response():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+
+    assert assistant_module.merge_action_retry_results(first, {"response": {
+        "response_type": "success",
+        "speech": {"plain": {"speech": "Done"}},
+    }}) is None
 
 
 def test_model_call_does_not_retry_completed_action_without_speech():
@@ -1019,11 +1391,12 @@ def test_newly_approved_friend_can_open_an_empty_conversation():
 
 
 
-def test_memory_default_is_neutral_and_forbids_storytelling():
-    prompt = assistant_module.DEFAULT_AGENT_PROMPTS["memory"].lower()
-    assert "plain-text facts only" in prompt
-    assert "no ghost personality" in prompt
-    assert "never turn a guess" in prompt
+def test_memory_pipeline_uses_deterministic_evidence_instead_of_a_model_prompt():
+    assert "memory" not in assistant_module.DEFAULT_AGENT_PROMPTS
+    assert assistant_module.extract_durable_memory_facts([
+        {"role": "assistant", "content": "The lights are red, mate."},
+        {"role": "user", "content": "The lights are red."},
+    ]) == []
 
 
 def test_action_outcome_memory_records_unconfirmed_not_success():
@@ -1104,6 +1477,32 @@ def test_action_classifier_routes_colour_changes_to_operations():
     assert action.search("could you change the lights?")
     assert action.search("i want them red")
     assert action.search("set the rooms brightness to 50%")
+
+
+def test_request_kind_separates_actions_queries_and_conversation():
+    assert assistant_module.request_kind("Set the room brightness to 50%") == "action"
+    assert assistant_module.request_kind("I want the lights red") == "action"
+    assert assistant_module.request_kind("What's Harvey doing right now?") == "query"
+    assert assistant_module.request_kind("What's the current state of the room lights?") == "query"
+    assert assistant_module.request_kind("What are the lights set to?") == "query"
+    assert assistant_module.request_kind("Could you set the lights to red?") == "action"
+    assert assistant_module.request_kind("What's Harvey doing? Also, change the lights to red.") == "action"
+    assert assistant_module.request_kind("What do you think of this film?") == "conversation"
+
+
+def test_conversation_batch_coalesces_interleaved_messages_without_crossing_users():
+    queue = [
+        {"key": "dm:1", "sort": 1, "content": "first"},
+        {"key": "dm:2", "sort": 2, "content": "other person"},
+        {"key": "dm:1", "sort": 3, "content": "second"},
+        {"key": "guild:3:4", "sort": 4, "content": "group"},
+    ]
+
+    batch = assistant_module.take_conversation_batch(queue)
+
+    assert [item["content"] for item in batch] == ["first", "second"]
+    assert [item["content"] for item in queue] == ["other person", "group"]
+
 
 
 def test_live_state_classifier_routes_presence_questions_to_operations():

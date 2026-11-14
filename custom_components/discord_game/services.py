@@ -35,7 +35,6 @@ RESET_PROMPT = vol.Schema({
         "conversation_system_prompt",
         "operations_system_prompt",
         "advanced_system_prompt",
-        "memory_system_prompt",
     }),
 })
 
@@ -53,7 +52,6 @@ SETTINGS = vol.Schema({
     vol.Required("conversation_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
     vol.Required("operations_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
     vol.Required("advanced_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
-    vol.Required("memory_system_prompt"): vol.All(cv.string, vol.Length(max=4000)),
 })
 
 

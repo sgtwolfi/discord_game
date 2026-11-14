@@ -190,7 +190,6 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "conversation_system_prompt": "",
                 "operations_system_prompt": "",
                 "advanced_system_prompt": "",
-                "memory_system_prompt": "",
                 "assistant_approved_users": self._get_current("assistant_approved_users", self._get_current(CONF_MEMBERS, [])),
                 "assistant_contact_names": self._get_current("assistant_contact_names", {}),
             }
@@ -242,7 +241,6 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Required("assistant_enabled", default=self._get_current("assistant_enabled", False)): selector.BooleanSelector(),
                 vol.Optional("conversation_agent", default=self._get_current("conversation_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("operations_agent", default=self._get_current("operations_agent", "")): selector.ConversationAgentSelector(),
-                vol.Optional("memory_agent", default=self._get_current("memory_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
             }
         )

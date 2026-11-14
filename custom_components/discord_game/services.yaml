@@ -159,11 +159,6 @@ update_settings:
       selector:
         text:
           multiline: true
-    memory_system_prompt:
-      required: true
-      selector:
-        text:
-          multiline: true
 
 update_contacts:
   name: Update GHOST friend list
