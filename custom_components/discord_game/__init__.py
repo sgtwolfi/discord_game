@@ -3,9 +3,9 @@ from homeassistant import config_entries, core
 from homeassistant.const import Platform
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN, DATA_HASS_CONFIG
-from .services import async_setup_services, async_unload_services
+from .const import DATA_HASS_CONFIG, DOMAIN
 from .panel import async_register_panel, async_unregister_panel
+from .services import async_setup_services, async_unload_services
 from .websocket import async_register_websocket
 
 PLATFORMS = [Platform.SENSOR]
