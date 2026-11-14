@@ -2251,6 +2251,9 @@ class DiscordAssistant:
             raise ValueError("Memory can only be purged for approved GHOST contacts")
         if scope not in {"facts", "pending", "history", "all"}:
             raise ValueError("Purge scope must be facts, pending, history or all")
+        active = getattr(self, "active_request", None) or {}
+        if scope in {"history", "all"} and active.get("conversation") == f"dm:{user_id}":
+            raise RuntimeError("This contact is being processed. Pause GHOST, wait for the active reply to finish, then purge again.")
         record = self.friends.setdefault(user_id, {"messages": [], "summary": "", "pending_messages": []})
         if scope in {"facts", "all"}:
             record["summary"] = ""
@@ -2259,7 +2262,10 @@ class DiscordAssistant:
             record["pending_messages"] = []
         if scope in {"history", "all"}:
             record["messages"] = []
-            self.conversation_logs.pop(f"dm:{user_id}", None)
+            key = f"dm:{user_id}"
+            self.queue = [entry for entry in self.queue if entry.get("key") != key]
+            self.conversation_logs.pop(key, None)
+            self.context_notes.pop(key, None)
             self.transcript = [
                 entry for entry in self.transcript
                 if not (entry.get("is_dm") and user_id in {str(value) for value in entry.get("sender_ids", [])})
