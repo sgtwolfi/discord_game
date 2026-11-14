@@ -45,8 +45,29 @@ async def async_setup_services(hass: HomeAssistant):
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_history(call.data["user_id"])
 
+    async def pause(call: ServiceCall):
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].pause()
+
+    async def resume(call: ServiceCall):
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].resume()
+
+    async def clear_queue(call: ServiceCall):
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].clear_queue()
+
     hass.services.async_register(DOMAIN, "send_message", send, schema=SEND)
     hass.services.async_register(DOMAIN, "clear_friend_memory", clear, schema=CLEAR)
+    hass.services.async_register(DOMAIN, "pause", pause)
+    hass.services.async_register(DOMAIN, "resume", resume)
+    hass.services.async_register(DOMAIN, "clear_queue", clear_queue)
     hass.data[DOMAIN]["_assistant_services"] = True
 
 
@@ -54,7 +75,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory"):
+    for name in ("send_message", "clear_friend_memory", "pause", "resume", "clear_queue"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)
