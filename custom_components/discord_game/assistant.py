@@ -199,7 +199,7 @@ class DiscordAssistant:
             _LOGGER.exception("Discord assistant failed")
             try:await self._send(item["channel"],"I couldn't process that properly. I've logged the failure rather than pretending it worked.")
             except Exception:_LOGGER.exception("Could not send failure notice")
-            self.transcript.append({"timestamp":datetime.now(timezone.utc).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
+            self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
               "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt[:4000]})
             self.transcript=self.transcript[-100:];await self._save()
@@ -239,7 +239,7 @@ class DiscordAssistant:
             channel=self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id));key=f"channel:{channel_id}"
         else:raise ValueError("Provide user_id or channel_id")
         await self._send(channel,message)
-        now=datetime.now(timezone.utc).isoformat()
+        now=datetime.now(UTC).isoformat()
         self.transcript.append({"timestamp":now,"conversation":key,"sender":"Harvey (manual, as GHOST)","sender_ids":[],
           "channel_id":str(channel.id),"is_dm":bool(user_id),"user_messages":[],"assistant":message,"model":"manual",
           "role":"manual_override","estimated_input_tokens":0,"estimated_output_tokens":len(message)//4,"context_snapshot":""})
