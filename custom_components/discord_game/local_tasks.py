@@ -5,26 +5,26 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-_TRIGGER = re.compile(r"\\b(?:remind me|set (?:a )?reminder)\\b", re.IGNORECASE)
+_TRIGGER = re.compile(r"\b(?:remind me|set (?:a )?reminder)\b", re.IGNORECASE)
 _NUMBER_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
     "eleven": 11, "twelve": 12,
 }
 _DURATION = re.compile(
-    r"\\bin\\s+(?P<amount>\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
-    r"\\s*(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\\b",
+    r"\bin\s+(?P<amount>\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    r"\s*(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\b",
     re.IGNORECASE,
 )
 _CLOCK = re.compile(
-    r"\\bat\\s+(?P<hour>\\d{1,2})(?::(?P<minute>\\d{2}))?\\s*(?P<ampm>am|pm)?\\b",
+    r"\bat\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?\b",
     re.IGNORECASE,
 )
 _DATE = re.compile(
-    r"\\b(?P<day>today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\\b",
+    r"\b(?P<day>today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b",
     re.IGNORECASE,
 )
-_ISO_DATE = re.compile(r"\\b(?P<date>20\\d{2}-\\d{2}-\\d{2})\\b")
+_ISO_DATE = re.compile(r"\b(?P<date>20\d{2}-\d{2}-\d{2})\b")
 _WEEKDAYS = {
     "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
     "friday": 4, "saturday": 5, "sunday": 6,
@@ -45,7 +45,7 @@ def parse_local_reminder(text: str, now: datetime) -> dict | None:
         return None
 
     body = value[trigger.end():].strip()
-    body = re.sub(r"^(?:to|that)\\s+", "", body, flags=re.IGNORECASE)
+    body = re.sub(r"^(?:to|that)\s+", "", body, flags=re.IGNORECASE)
     duration = _DURATION.search(body)
     clock = _CLOCK.search(body)
     day_match = _DATE.search(body)
@@ -58,9 +58,9 @@ def parse_local_reminder(text: str, now: datetime) -> dict | None:
     task = body
     for match in sorted(timing_parts, key=lambda item: item.start(), reverse=True):
         task = task[:match.start()] + " " + task[match.end():]
-    task = re.sub(r"\\b(?:on|at|to)\\s*$", "", task, flags=re.IGNORECASE)
-    task = re.sub(r"^\\s*(?:to|that)\\s+", "", task, flags=re.IGNORECASE)
-    task = re.sub(r"\\s+", " ", task).strip(" ,.!?;:")
+    task = re.sub(r"\b(?:on|at|to)\s*$", "", task, flags=re.IGNORECASE)
+    task = re.sub(r"^\s*(?:to|that)\s+", "", task, flags=re.IGNORECASE)
+    task = re.sub(r"\s+", " ", task).strip(" ,.!?;:")
     if not task:
         return {"needs_clarification": True, "clarification": "What should I remind you about?"}
 
@@ -107,7 +107,7 @@ def parse_local_reminder(text: str, now: datetime) -> dict | None:
             target_date = now.date() + timedelta(days=1)
         else:
             days_ahead = (_WEEKDAYS[day] - now.weekday()) % 7
-            if days_ahead == 0 or re.search(r"\\bnext\\s+$", body[:day_match.start()], re.IGNORECASE):
+            if days_ahead == 0 or re.search(r"\bnext\s+$", body[:day_match.start()], re.IGNORECASE):
                 days_ahead += 7
             target_date = now.date() + timedelta(days=days_ahead)
         reminder_date = target_date.isoformat()
