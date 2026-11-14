@@ -284,7 +284,8 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(memories);
 
     const approvedIds = (a.approved_users || []).join(", ") || "No approved contacts configured";
-    const manual = this._section("Send a manual Discord message", "Approved DM IDs: " + approvedIds + ". Fill in one destination: Discord user ID for a DM, or selected channel ID for a server channel.");
+    const selectedChannels = (a.group_channels || []).join(", ") || "No GHOST server channels selected";
+    const manual = this._section("Send a manual Discord message", "Approved DM IDs: " + approvedIds + ". Enabled server channel IDs: " + selectedChannels + ". Fill in one destination ID.");
     const form = this._node("form");
     const fields = this._node("div", undefined, "formgrid");
     const userWrap = this._node("div");
