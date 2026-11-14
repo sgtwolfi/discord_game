@@ -39,6 +39,7 @@ RESET_PROMPT = vol.Schema({
 })
 
 SETTINGS = vol.Schema({
+    vol.Required("assistant_mode"): vol.In({"api", "local"}),
     vol.Required("fallback_after_failures"): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
     vol.Required("queue_debounce_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
     vol.Required("max_context_messages"): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
