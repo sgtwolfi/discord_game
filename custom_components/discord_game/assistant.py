@@ -67,11 +67,40 @@ COMPLEX_REQUEST = re.compile(
     re.IGNORECASE,
 )
 
+ACTION_REQUEST = re.compile(
+    r"\\b(turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
+    r"activate|deactivate|lock|unlock|open|close|play|pause|stop|start|run|"
+    r"enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\\b|"
+    r"\\b(?:i want|make|put|set them|have them)\\b.{0,80}\\b"
+    r"(?:red|blue|green|white|warm|cool|colour|color|brightness|brighter|dimmer|"
+    r"on|off|volume|temperature)\\b",
+    re.IGNORECASE,
+)
+
 def speech(data):
-    response=data.get("response",data) if isinstance(data,dict) else {}
-    sp=response.get("speech",{}) if isinstance(response,dict) else {}
-    plain=sp.get("plain",{}) if isinstance(sp,dict) else {}
-    return str(plain.get("speech","") or response.get("text","")).strip() if isinstance(response,dict) else ""
+    """Extract user-facing speech from a Home Assistant conversation result."""
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict):
+        return ""
+    speech_data = response.get("speech") or {}
+    plain = speech_data.get("plain") or {} if isinstance(speech_data, dict) else {}
+    value = plain.get("speech") if isinstance(plain, dict) else None
+    if not value:
+        value = response.get("text")
+    return str(value or "").strip()
+
+
+def request_kind(text):
+    """Classify requests without treating a colour/state noun as an action by itself."""
+    value = str(text or "").strip()
+    if not value:
+        return "conversation"
+    if LIVE_STATE_QUERY.search(value) and not ACTION_REQUEST.search(value):
+        return "query"
+    if ACTION_REQUEST.search(value):
+        return "action"
+    return "conversation"
+
 
 def action_result_error(data):
     """Return why a requested HA action is not positively confirmed.
@@ -512,14 +541,15 @@ class DiscordAssistant:
                 await asyncio.sleep(self.delay)
                 if self.paused or not self.queue:
                     continue
-                first = self.queue.pop(0)
-                batch = [first]
-                while (
-                    self.queue
-                    and self.queue[0]["key"] == first["key"]
-                    and self.queue[0]["sort"] - batch[-1]["sort"] <= self.delay
-                ):
-                    batch.append(self.queue.pop(0))
+                first = self.queue[0]
+                # Coalesce all currently pending messages for this conversation,
+                # even when another conversation's messages are interleaved.
+                # Different conversations remain separate and preserve their order.
+                batch = [entry for entry in self.queue if entry["key"] == first["key"]]
+                selected_ids = {id(entry) for entry in batch}
+                self.queue = [entry for entry in self.queue if id(entry) not in selected_ids]
+                batch.sort(key=lambda entry: entry["sort"])
+                self._refresh_sensor()
                 try:
                     await self._process(batch)
                 except asyncio.CancelledError:
@@ -531,7 +561,7 @@ class DiscordAssistant:
                     self._refresh_sensor()
                 continue
 
-            pending = not self.queue and self._has_pending_memories() and bool(self.agents.get("memory_agent"))
+            pending = not self.queue and self._has_pending_memories()
             timeout = None
             if pending:
                 if self._last_message_monotonic is None:
@@ -940,21 +970,24 @@ class DiscordAssistant:
             group_action_is_addressed = item["is_dm"] or any(
                 entry.get("directly_addressed") for entry in batch
             )
+            kind = request_kind(request_text)
             is_operation = bool(
                 self.agents["operations_agent"]
-                and (ACTION.search(request_text) or LIVE_STATE_QUERY.search(request_text))
+                and kind in {"action", "query"}
                 and group_action_is_addressed
             )
+            is_action = is_operation and kind == "action"
             is_complex = bool(
-                self.agents["fallback_agent"]
-                and (COMPLEX_REQUEST.search(request_text) or len(request_text) > 1200)
+                COMPLEX_REQUEST.search(request_text) or len(request_text) > 1200
             )
             if is_operation:
                 role = "operations"
                 agent = self.agents["operations_agent"]
             elif is_complex:
+                # Advanced is a reasoning mode, not a second model selector.
+                # Keep the primary model here; fallback remains a recovery model.
                 role = "advanced"
-                agent = self.agents["fallback_agent"]
+                agent = self.agents["conversation_agent"]
             else:
                 role = "conversation"
                 agent = self.agents["conversation_agent"]
@@ -971,7 +1004,9 @@ class DiscordAssistant:
                 "context_snapshot": prompt,
             }
             self._refresh_sensor()
-            attempts = 1 if role == "advanced" else self.retries
+            # Never replay a side-effecting request automatically: even a timeout
+            # can occur after Home Assistant has executed the action.
+            attempts = 1 if is_action else self.retries
             for attempt in range(attempts):
                 try:
                     models_attempted.append(agent)
@@ -983,10 +1018,10 @@ class DiscordAssistant:
                         "Local assistant attempt %s failed: %s", attempt + 1, err
                     )
                     await asyncio.sleep(min(attempt + 1, 4))
-            if not answer and role == "operations" and getattr(self, "_last_call_result", None) is None:
+            if not answer and is_action:
                 raise RuntimeError(
-                    "The operations agent failed before returning a result. I have not retried automatically "
-                    "because the requested action may have partially executed."
+                    "Home Assistant did not return a usable result. The action was not retried because "
+                    "it may have partially executed."
                 )
             if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
                 model = self.agents["fallback_agent"]
@@ -998,31 +1033,20 @@ class DiscordAssistant:
             if not answer:
                 raise RuntimeError("; ".join(failures) or "All models failed")
             if role == "operations":
-                verification_error = action_result_error(getattr(self, "_last_call_result", None))
-                action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
-                if (
-                    verification_error
-                    and action_result_retryable(getattr(self, "_last_call_result", None))
-                    and self.agents["fallback_agent"]
-                    and model != self.agents["fallback_agent"]
-                ):
-                    _LOGGER.warning(
-                        "Operations agent returned an unconfirmed action; retrying with fallback: %s",
-                        verification_error,
+                operation_result = getattr(self, "_last_call_result", None)
+                action_result = action_result_snapshot(operation_result) if is_action else None
+                if is_action:
+                    verification_error = action_result_error(operation_result)
+                    if verification_error:
+                        raise RuntimeError("Action not confirmed: " + verification_error)
+                    event_key = "|".join((
+                        str(item["key"]),
+                        ",".join(str(entry.get("message_id", "")) for entry in batch),
+                        request_text[:300],
+                    ))
+                    self._capture_action_outcome_for_memory(
+                        item, request_text, action_result, None, event_key
                     )
-                    model = self.agents["fallback_agent"]
-                    if self.active_request:
-                        self.active_request["model"] = model
-                        self._refresh_sensor()
-                    models_attempted.append(model)
-                    answer = await self._call(model, prompt)
-                    verification_error = action_result_error(getattr(self, "_last_call_result", None))
-                    action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
-                if verification_error:
-                    raise RuntimeError("Action not confirmed: " + verification_error)
-                self._capture_action_outcome_for_memory(
-                    item, request_text, action_result, None
-                )
 
             await self._send(item["channel"], answer)
             now = datetime.now(UTC).isoformat()
@@ -1069,11 +1093,16 @@ class DiscordAssistant:
                 {"conversation": item["key"], "model": model, "message": answer},
             )
         except Exception as err:
-            if role == "operations":
+            if is_action:
                 if action_result is None:
                     action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
+                event_key = "|".join((
+                    str(item["key"]),
+                    ",".join(str(entry.get("message_id", "")) for entry in batch),
+                    request_text[:300],
+                ))
                 self._capture_action_outcome_for_memory(
-                    item, request_text, action_result, str(err)
+                    item, request_text, action_result, str(err), event_key
                 )
             self.error = (str(err).strip() or err.__class__.__name__)[:500]
             self._state = "error"
