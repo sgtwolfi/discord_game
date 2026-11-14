@@ -1,59 +1,44 @@
-# Discord user game status Custom Component (for Home Assistant)
+# Discord Game + GHOST Assistant (v7 development)
 
-This component pulls information about user's status, and the game they're currently playing from the Discord.
-It creates a sensor for every configured user with online status and game played status. Discord avatar is used as entity_picture.
+This branch adds an optional token-conscious assistant runtime while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
-You can use this component in combination with native Home Assistant Discord notify integration. It works well together, and you can use the 
-same token for both components, and the bot will combine both functions. So 1 Discord bot to rule both.
+## Setup
 
-## Configuration:
+The assistant is disabled by default to prevent duplicate replies from existing automations. Open Settings → Devices & services → Discord Game → Configure.
 
-First you have to create a Discord bot user and get it's token to be able to use this component.
+Select Home Assistant conversation agent entity IDs:
+- Conversation agent: local Ollama agent for ordinary chat.
+- Operations agent: local agent configured with only the Home Assistant tools/scripts it is allowed to use.
+- Memory agent: optional local agent for periodic private-memory compression.
+- Fallback agent: optional API-backed conversation agent used after repeated local service failures.
 
-To create a bot user and get a token:
-1. Go to https://discordapp.com/developers/applications/
-2. Create New Application
-3. Put in a Name of your liking and click create
-4. In the Installation tab, change install link to None
-5. Click on Bot in the left panel and then Add Bot and Yes, do it!
-6. A green message "A wild bot has appeared!" should appear on the page
-7. Uncheck PUBLIC BOT
-8. Enable every Intent in the Privileged Gateway Intents section
-9. Click Save changes on the bottom of the page
-10. Under Token, click on Copy, this is your token, that you need to later paste into home assistant configuration flow, keep in mind that the bot first has to be invited to some server
+Use IDs such as `conversation.my_ollama_agent`. This integration does not store API keys.
 
-You also need your own discord server (or some server where you have "manage server" permission), and you need to invite the bot to that server.
-To invite your bot to your server, use following steps:
-1. Go to General information tab on your Discord bot developer page
-2. Under Client ID, click Copy
-3. Go to following URL (replace [CLIENT_ID] with id from previous step) https://discordapp.com/api/oauth2/authorize?client_id=[CLIENT_ID]&scope=bot&permissions=0
-4. Select server to which you want to invite the bot and press Authorize
+## Behaviour and privacy
 
-If this doesn't work for you, you can try to use this guide to invite your bot (select no permissions): https://discordpy.readthedocs.io/en/stable/discord.html#inviting-your-bot
+- DMs are only processed for users already selected in the existing Discord Game user configuration.
+- Server AI is separately opt-in by comma-separated channel IDs.
+- Approved DM history is persisted per user. Server context is isolated by channel and held in RAM only; strangers are not given persistent memories.
+- Messages are processed in arrival order. Adjacent messages from the same conversation are grouped during the configurable debounce period.
+- Discord typing indicators are enabled by default.
+- Context is bounded by a configurable character budget. Token figures are approximate (about four characters per token), not exact provider usage.
+- The API fallback is used after local conversation-service failures, not merely because a response seems poor.
 
-Now just go to Home Assistant integrations/devices dashboard and add Discord Game integration:
-1. Paste your token
-2. Select image format (only works for user avatars)
-3. Optionally enter your Steam API key (see below)
-4. On the next step select users that you want to track
-5. If you want to use channel tracking which tracks which user last added a reaction, you can select channels, but this is optional and can be left blank.
-6. Now continue and device for each user will be created with all the tracked sensors
+## Home Assistant
 
-## Steam API Key (optional)
+New entity: `sensor.discord_game_assistant`. Attributes include queue state, model agent IDs, recent transcript, context snapshots, estimated token counts, errors and friend-memory counts.
 
-A Steam API key is needed to load Steam game images (capsules, headers, logos, etc.) for the games your users are playing. Without it, only Discord-provided game images will be available.
+Services:
+- `discord_game.send_message`: manually send as the bot; supply `message` and either `user_id` or `channel_id`.
+- `discord_game.clear_friend_memory`: clear one friend's persistent DM memory using their Discord user ID.
 
-To get a Steam API key:
-1. Go to https://steamcommunity.com/dev/apikey
-2. Log in with your Steam account
-3. Enter a domain name (can be anything, e.g. `homeassistant.local`)
-4. Accept the Steam Web API Terms of Use
-5. Copy the key that is displayed
+Events:
+- Existing `discord_game_message_received` remains unchanged.
+- `discord_game_server_message_received` is emitted for configured server channels.
+- `discord_game_assistant_queued`, `discord_game_assistant_response_sent`, `discord_game_assistant_error`, `discord_game_assistant_updated` and `discord_game_assistant_manual_message` expose assistant activity.
 
-You can enter the key during initial setup, or add/change it later by going to the integration's page in Home Assistant and clicking **Configure**.
+## Important limitations
 
+Home Assistant conversation agents own their internal tool execution. The integration routes action-like requests to the operations agent and waits for the conversation service call to finish, but returned speech is not independent proof that a physical action occurred. Restrict the operations agent to approved HA tools and instruct it to report tool failures honestly.
 
-If you are using Safari or the iOS Home Assistant app, please set the `image_format` to `png`, because Safari doesn't support the `webp` image format.
-
-Thanks to @descention https://github.com/descention for an original component idea and component itself which I've rewritten for current Discord
- API and Home Assistant and integrated it with HACS.
+This first implementation provides a transcript sensor and manual-send service, not a dedicated interactive frontend panel. Token counts are estimates. Test with your existing DM reply automations disabled before enabling this assistant, otherwise both systems may respond.
