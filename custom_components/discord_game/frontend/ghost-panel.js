@@ -546,7 +546,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       form.append(this._el("h3", "System prompts and functions"));
       form.append(this._el("p", "API Mode deliberately does not override your Home Assistant agent's system prompt or function/tool configuration. Edit those in the selected conversation agent's settings. The saved GHOST prompt overrides below are retained but inactive until you switch back to Local Mode.", "help"));
       for (const key of ["conversation_system_prompt", "operations_system_prompt", "advanced_system_prompt"]) {
-        const hidden = this._el("input"); hidden.type = "hidden"; hidden.name = key; hidden.value = settings[key] || ""; form.append(hidden);
+        const hidden = this._el("input"); hidden.type = "hidden"; hidden.name = key; hidden.value = settings[key] || ""; hidden.dataset.keep = "cfg-" + key; form.append(hidden);
       }
     } else {
     form.append(this._el("h3", "System prompts"));
