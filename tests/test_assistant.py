@@ -45,7 +45,7 @@ def test_speech_accepts_text_response():
 def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 4
-    assistant.budget = 1000
+    assistant.budget = 1500
     batch = [{
         "sender_name": "Max",
         "content": "PLEASE DO THIS FIRST: " + "x" * 2000 + "PLEASE KEEP THIS END",
