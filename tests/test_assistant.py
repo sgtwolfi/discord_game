@@ -2244,3 +2244,41 @@ def test_ghost_status_is_injected_into_api_and_local_model_context():
 def test_ghost_status_question_is_classified_as_live_query():
     assert assistant_module.request_kind("What's your status?") == "query"
     assert assistant_module.request_kind("What are you doing?") == "query"
+
+
+def test_local_reminder_parser_handles_half_hour_and_compact_units():
+    now = datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
+    assert parse_local_reminder("Remind me to call Max in half an hour", now) == {
+        "name": "call Max", "duration_seconds": 1800
+    }
+    assert parse_local_reminder("Remind me to call Max in 2h", now) == {
+        "name": "call Max", "duration_seconds": 7200
+    }
+
+
+def test_reminder_confirmation_recovers_absolute_clock_time():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yes"}],
+        [{
+            "role": "assistant",
+            "content": "Would you like me to set a reminder tomorrow at 7pm to text Ryan?",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result == {
+        "name": "text Ryan", "alarm_time": "19:00", "date": "2026-11-15"
+    }
+
+
+def test_reminder_confirmation_recovers_for_clock_time_wording():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yep"}],
+        [{
+            "role": "assistant",
+            "content": "You want a reminder for 7pm tomorrow to text Ryan, right? Confirm if you'd like me to set it.",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result == {
+        "name": "text Ryan", "alarm_time": "19:00", "date": "2026-11-15"
+    }
