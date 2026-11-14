@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_MEMBERS
 
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
@@ -107,6 +107,7 @@ class DiscordAssistant:
         self.history_limit=max(self.limit,min(200,int(config.get("history_limit",60))))
         self.typing=bool(config.get("typing_enabled",True))
         self.group_channels={x.strip() for x in str(config.get("assistant_group_channels","")).split(",") if x.strip().isdigit()}
+        self.approved_users = {str(user_id) for user_id in config.get(CONF_MEMBERS, [])}
         self.store=Store(hass,1,f"{DOMAIN}_{entry_id}_assistant")
         self.friends={}
         self.groups=defaultdict(list)
@@ -281,9 +282,13 @@ class DiscordAssistant:
         if is_dm:
             if not sender_ids:
                 raise ValueError("Transcript does not contain the Discord user ID")
+            if str(sender_ids[0]) not in self.approved_users:
+                raise ValueError("This Discord user is no longer approved for GHOST DMs")
             user = await self.bot.fetch_user(int(sender_ids[0]))
             channel = await user.create_dm()
         else:
+            if str(entry["channel_id"]) not in self.group_channels:
+                raise ValueError("This server channel is not enabled for GHOST")
             channel = self.bot.get_channel(int(entry["channel_id"])) or await self.bot.fetch_channel(int(entry["channel_id"]))
         now = datetime.now(UTC)
         sender_name = entry.get("sender") or "Replay"
@@ -546,8 +551,12 @@ class DiscordAssistant:
     async def send_manual(self,*,message,user_id=None,channel_id=None):
         if not message.strip():raise ValueError("Message cannot be empty")
         if user_id:
+            if str(user_id) not in self.approved_users:
+                raise ValueError("This Discord user is not on the approved GHOST contact list")
             channel=await (await self.bot.fetch_user(int(user_id))).create_dm();key=f"dm:{user_id}"
         elif channel_id:
+            if str(channel_id) not in self.group_channels:
+                raise ValueError("This Discord channel is not enabled for GHOST")
             channel=self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id));key=f"channel:{channel_id}"
         else:raise ValueError("Provide user_id or channel_id")
         await self._send(channel,message)
