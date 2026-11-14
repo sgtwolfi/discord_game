@@ -38,7 +38,6 @@
           "assistant_enabled": "Enable Discord AI assistant",
           "conversation_agent": "Conversation model agent ID",
           "operations_agent": "Operations model agent ID",
-          "memory_agent": "Memory manager agent ID (optional)",
           "fallback_agent": "Paid API fallback agent ID (optional)"
         }
       },
