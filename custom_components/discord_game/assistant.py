@@ -234,8 +234,8 @@ class DiscordAssistant:
             "friends": self.friends,
             "transcript": self.transcript[-100:],
             "model_usage": self.model_usage_data,
-            "conversation_logs": {key: value[-self.conversation_history_limit:] for key, value in self.conversation_logs.items()},
-            "conversation_meta": self.conversation_meta,
+            "conversation_logs": {key: value[-getattr(self, "conversation_history_limit", 500):] for key, value in getattr(self, "conversation_logs", {}).items()},
+            "conversation_meta": getattr(self, "conversation_meta", {}),
         })
     def _display_name(self, user_id):
         return getattr(self, "contact_names", {}).get(str(user_id), str(user_id))
