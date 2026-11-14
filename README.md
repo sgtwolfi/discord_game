@@ -39,6 +39,6 @@ Events:
 
 ## Important limitations
 
-Home Assistant conversation agents own their internal tool execution. The integration routes action-like requests to the operations agent and waits for the conversation service call to finish, but returned speech is not independent proof that a physical action occurred. Restrict the operations agent to approved HA tools and instruct it to report tool failures honestly.
+Home Assistant conversation agents own their internal tool execution. For requests routed to the operations agent, the integration now requires a structured `action_done` response with at least one successful target and no failed targets before it sends the agent's success message. Plain speech such as “Done” is not accepted as proof. This verifies the result reported by Home Assistant's conversation service; it is not a separate physical-state check. Restrict the operations agent to approved HA tools and instruct it to report tool failures honestly.
 
 This first implementation provides a transcript sensor and manual-send service, not a dedicated interactive frontend panel. Token counts are estimates. Test with your existing DM reply automations disabled before enabling this assistant, otherwise both systems may respond.
