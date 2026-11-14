@@ -107,6 +107,14 @@ update_settings:
       selector:
         entity:
           domain: script
+    group_relevance_agent:
+      required: true
+      selector:
+        text:
+    group_require_mention:
+      required: true
+      selector:
+        boolean:
     fallback_after_failures:
       required: true
       selector:

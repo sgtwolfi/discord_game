@@ -179,6 +179,8 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             advanced_defaults = {
                 "assistant_mode": self._get_current("assistant_mode", "local"),
                 "api_fallback_agent": self._get_current("api_fallback_agent", ""),
+                "group_relevance_agent": self._get_current("group_relevance_agent", ""),
+                "group_require_mention": self._get_current("group_require_mention", False),
                 "spam_local_agent": self._get_current("spam_local_agent", ""),
                 "spam_policy": self._get_current("spam_policy", "defer_local"),
                 "spam_message_limit": self._get_current("spam_message_limit", 8),
@@ -255,6 +257,8 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional("operations_agent", default=self._get_current("operations_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("api_fallback_agent", default=self._get_current("api_fallback_agent", "")): selector.ConversationAgentSelector(),
+                vol.Optional("group_relevance_agent", default=self._get_current("group_relevance_agent", "")): selector.ConversationAgentSelector(),
+                vol.Required("group_require_mention", default=self._get_current("group_require_mention", False)): selector.BooleanSelector(),
                 vol.Optional("spam_local_agent", default=self._get_current("spam_local_agent", "")): selector.ConversationAgentSelector(),
                 vol.Required("spam_policy", default=self._get_current("spam_policy", "defer_local")): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=[{"label": "Defer to local model", "value": "defer_local"}, {"label": "Discord timeout", "value": "timeout"}, {"label": "Ignore during cooldown", "value": "ignore"}], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
