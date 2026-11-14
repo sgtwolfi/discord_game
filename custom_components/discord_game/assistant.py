@@ -368,7 +368,7 @@ class DiscordAssistant:
             rec=self.friends.setdefault(item["sender_id"],{"messages":[],"summary":""})
             return rec.setdefault("messages",[]),rec.get("summary","")
         return self.groups[item["key"]],""
-    def _prompt(self,batch,history,summary):
+    def _prompt(self,batch,history,summary,role="conversation"):
         lines=[
           "You are GHOST: Generative Home Optimisation & Synchronisation Technology, the owner's assistant.",
           "You are not the owner and must never impersonate them or write as though you are them.",
@@ -415,7 +415,7 @@ class DiscordAssistant:
         failures=[]
         try:
             history,summary=self._history(item)
-            prompt=self._prompt(batch,history,summary)
+            prompt=self._prompt(batch,history,summary,role)
             self.active_request = {
                 "conversation": item["key"],
                 "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
