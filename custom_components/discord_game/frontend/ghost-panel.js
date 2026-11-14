@@ -126,6 +126,21 @@ class DiscordGameGhostPanel extends HTMLElement {
     return item.label || (item.kind === "friend" ? "Discord friend" : "Server group");
   }
 
+  _avatar(label, url, className) {
+    const fallback = String(label || "?").trim().slice(0, 1).toUpperCase() || "?";
+    const node = this._el("div", fallback, className || "avatar");
+    if (url && /^https:\/\/(?:cdn\.discordapp\.com|media\.discordapp\.net)\//i.test(url)) {
+      const image = this._el("img");
+      image.src = url;
+      image.alt = String(label || "Discord user") + " profile picture";
+      image.loading = "lazy";
+      image.referrerPolicy = "no-referrer";
+      image.addEventListener("error", () => image.remove(), { once: true });
+      node.replaceChildren(image);
+    }
+    return node;
+  }
+
   _render() {
     if (!this._hass) return;
     const root = this.shadowRoot;
@@ -154,7 +169,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       .nav{display:flex;gap:6px;padding:6px;border:1px solid var(--divider-color);background:var(--card-background-color);border-radius:14px;margin-bottom:16px;overflow:auto}
       .nav button{white-space:nowrap;border:0;background:transparent;color:var(--secondary-text-color);padding:10px 15px;border-radius:10px;font:inherit;font-size:13px;cursor:pointer}
       .nav button.active{background:var(--primary-color);color:var(--text-primary-color);font-weight:650}
-      .workspace{display:grid;grid-template-columns:290px minmax(0,1fr);gap:15px;min-height:660px}
+      .workspace{display:grid;grid-template-columns:290px minmax(0,1fr);gap:15px;min-height:0;align-items:stretch}
       .sidebar,.main,.panel{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:16px;min-width:0}
       .sidebar{padding:13px;display:flex;flex-direction:column;max-height:calc(100vh - 205px);min-height:560px}
       .sidehead{display:flex;justify-content:space-between;align-items:center;padding:5px 5px 12px}
@@ -167,21 +182,24 @@ class DiscordGameGhostPanel extends HTMLElement {
       .person{display:flex;align-items:flex-start;gap:10px;text-align:left;border:1px solid transparent;border-radius:11px;padding:10px;background:transparent;color:var(--primary-text-color);cursor:pointer;width:100%}
       .person:hover{background:var(--secondary-background-color)}
       .person.selected{background:var(--secondary-background-color);border-color:var(--primary-color)}
-      .avatar{width:34px;height:34px;flex:0 0 34px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);font-size:14px;font-weight:700}
+      .avatar{width:38px;height:38px;flex:0 0 38px;border-radius:50%;display:grid;place-items:center;background:var(--secondary-background-color);font-size:14px;font-weight:700;overflow:hidden}
+      .avatar img{width:100%;height:100%;display:block;object-fit:cover}
+      .chatidentity{display:flex;align-items:center;gap:12px;min-width:0}
+      .chatavatar{width:42px;height:42px;flex:0 0 42px}
       .personbody{min-width:0;flex:1}
       .personname{font-size:13px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .preview{font-size:11px;color:var(--secondary-text-color);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:4px}
       .personmeta{font-size:10px;color:var(--secondary-text-color);margin-top:4px}
-      .main{display:flex;flex-direction:column;min-height:660px;overflow:hidden}
+      .main{display:flex;flex-direction:column;height:calc(100vh - 245px);min-height:560px;overflow:hidden}
       .chathead{padding:17px 20px;border-bottom:1px solid var(--divider-color);display:flex;align-items:center;justify-content:space-between;gap:12px}
       .chathead strong{font-size:15px}
-      .messages{padding:20px;display:flex;flex-direction:column;gap:11px;overflow:auto;flex:1;min-height:390px;max-height:calc(100vh - 390px)}
+      .messages{padding:20px;display:flex;flex-direction:column;gap:11px;overflow:auto;overflow-anchor:auto;overscroll-behavior:contain;flex:1;min-height:0;max-height:none;scroll-behavior:auto}
       .message{max-width:min(78%,760px);padding:10px 13px;border-radius:13px;background:var(--secondary-background-color);align-self:flex-start;overflow-wrap:anywhere}
       .message.ghost{align-self:flex-end;background:color-mix(in srgb,var(--primary-color) 16%,var(--card-background-color));border:1px solid color-mix(in srgb,var(--primary-color) 30%,var(--divider-color))}
       .message .who{font-size:10px;color:var(--secondary-text-color);margin-bottom:5px;font-weight:650}
       .message .body{font-size:13px;white-space:pre-wrap;line-height:1.5}
       .message .time{font-size:10px;color:var(--secondary-text-color);margin-top:6px;text-align:right}
-      .composer{padding:13px 16px;border-top:1px solid var(--divider-color);display:flex;align-items:flex-end;gap:9px;background:var(--card-background-color)}
+      .composer{padding:13px 16px;border-top:1px solid var(--divider-color);display:flex;align-items:flex-end;gap:9px;background:var(--card-background-color);flex:0 0 auto}
       .composer textarea{min-height:48px;max-height:180px;resize:vertical;flex:1}
       .send{height:46px;min-width:84px}
       button{font:inherit}
@@ -221,7 +239,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       details summary{cursor:pointer;color:var(--secondary-text-color);font-size:12px;margin:8px 0}
       pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--secondary-background-color);padding:10px;border-radius:9px;max-height:260px;overflow:auto;font-size:11px}
       .footnote{font-size:11px;color:var(--secondary-text-color);margin-top:8px}
-      @media(max-width:850px){.workspace{grid-template-columns:1fr}.sidebar{max-height:330px;min-height:220px}.conversation-list{max-height:235px}.main{min-height:540px}.messages{max-height:55vh}}
+      @media(max-width:850px){.workspace{grid-template-columns:1fr}.sidebar{max-height:330px;min-height:220px}.conversation-list{max-height:235px}.main{height:70vh;min-height:540px}.messages{max-height:none}}
       @media(max-width:560px){.shell{padding:10px}.top{align-items:flex-start}.workspace{gap:10px}.message{max-width:92%}.composer{padding:10px}.send{min-width:65px}.contactrow{grid-template-columns:1fr}.nav{margin-bottom:10px}}
     `;
     root.append(style);
@@ -281,6 +299,11 @@ class DiscordGameGhostPanel extends HTMLElement {
         if (typeof field.setSelectionRange === "function" && start !== undefined) field.setSelectionRange(start, end);
       }
     }
+    // Every conversation opens at its newest message; no manual scrolling needed.
+    requestAnimationFrame(() => {
+      const messages = root.querySelector(".messages");
+      if (messages) messages.scrollTop = messages.scrollHeight;
+    });
   }
 
   _renderChats(shell, d) {
@@ -336,7 +359,9 @@ class DiscordGameGhostPanel extends HTMLElement {
     for (const item of ordered) {
       const row = this._el("button", null, "person" + (item.key === this._selectedConversation ? " selected" : ""));
       row.dataset.search = (this._conversationLabel(item) + " " + (item.subtitle || "")).toLowerCase();
-      const initial = this._el("div", item.kind === "friend" ? this._conversationLabel(item).slice(0,1).toUpperCase() : "#", "avatar");
+      const initial = item.kind === "friend"
+        ? this._avatar(this._conversationLabel(item), item.avatar_url, "avatar")
+        : this._el("div", "#", "avatar");
       const body = this._el("div", null, "personbody");
       body.append(this._el("div", this._conversationLabel(item), "personname"));
       body.append(this._el("div", item.last_message || item.subtitle || (item.kind === "friend" ? "No messages yet" : "Server channel"), "preview"));
@@ -357,9 +382,12 @@ class DiscordGameGhostPanel extends HTMLElement {
       main.append(empty);
     } else {
       const chathead = this._el("div", null, "chathead");
-      const heading = this._el("div");
-      heading.append(this._el("strong", this._conversationLabel(selected)));
-      heading.append(this._el("p", selected.subtitle || (selected.kind === "friend" ? "Private direct message" : "Server group conversation"), "muted"));
+      const heading = this._el("div", null, "chatidentity");
+      if (selected.kind === "friend") heading.append(this._avatar(this._conversationLabel(selected), selected.avatar_url, "avatar chatavatar"));
+      const identity = this._el("div");
+      identity.append(this._el("strong", this._conversationLabel(selected)));
+      identity.append(this._el("p", selected.subtitle || (selected.kind === "friend" ? "Private direct message" : "Server group conversation"), "muted"));
+      heading.append(identity);
       chathead.append(heading);
       const actions = this._el("div", null, "actions");
       if (d.paused) actions.append(this._button("Resume", () => this._service("resume", {})));
@@ -530,6 +558,17 @@ class DiscordGameGhostPanel extends HTMLElement {
       reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear private-DM reminders, so a tiny model does not have to discover or invoke a tool. It should accept name plus either duration_seconds or alarm_time (and optional date), and return success: true. GHOST does not send announce_message or text fields unless a future explicit option is added.", "help"));
     }
     form.append(reminderWrap);
+    const statusWrap = this._el("div", null, "field");
+    statusWrap.append(this._el("label", "GHOST live status helper"));
+    const statusEntity = this._el("input");
+    statusEntity.name = "ghost_status_entity";
+    statusEntity.value = settings.ghost_status_entity || "input_text.ghost_status";
+    statusEntity.placeholder = "input_text.ghost_status";
+    statusEntity.dataset.keep = "cfg-ghost_status_entity";
+    statusWrap.append(statusEntity);
+    statusWrap.append(this._el("p", "GHOST reads this entity directly from Home Assistant and includes its current value in every model context. It does not need to be exposed to Assist or enabled as an AI tool.", "help"));
+    form.append(statusWrap);
+
     const grid = this._el("div", null, "fieldgrid");
     const number = (key, title, value, min, max, step, help) => {
       const wrap = this._el("div", null, "field");
