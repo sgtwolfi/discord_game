@@ -854,6 +854,7 @@ class DiscordAssistant:
               "assistant_mode": getattr(self, "mode", "local"),
               "local_reminder_script": getattr(self, "local_reminder_script", "script.set_timer_alarm_or_reminder"),
               "ghost_status_entity": getattr(self, "status_entity", "input_text.ghost_status"),
+              "owner_name": getattr(self, "owner_name", "Harvey"),
               "fallback_after_failures": getattr(self, "retries", 2),
               "queue_debounce_seconds": getattr(self, "delay", 2.5),
               "max_context_messages": getattr(self, "limit", 20),
