@@ -60,6 +60,7 @@ LIVE_STATE_QUERY = re.compile(
     r"is .{0,40} (?:home|away|online|offline|on|off)|"
     r"are .{0,40} (?:on|off|set to)|what(?:'s| is) happening right now|"
     r"what(?:'s| is) (?:your|ghost(?:'s)?|the assistant's) status|ghost status|status report|what are you up to|what are you doing|"
+    r"what(?:'s|s| is) my (?:current )?status|what am i (?:currently )?(?:doing|up to)|"
     r"check (?:the )?(?:status|state|lights|temperature|presence)|"
     r"tell me what .{0,60} (?:doing|up to)|"
     r"tell me (?:the )?(?:current )?(?:status|state) of)\b",
