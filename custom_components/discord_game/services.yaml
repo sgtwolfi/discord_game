@@ -126,7 +126,7 @@ update_settings:
       required: true
       selector:
         number:
-          min: 10
+          min: 20
           max: 200
           mode: box
     conversation_history_limit:
