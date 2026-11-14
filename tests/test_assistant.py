@@ -1652,3 +1652,46 @@ def test_local_status_reader_reports_missing_weather_without_inventing_it():
     )
     assert "Saturday 09:05" in answer
     assert "can't see a Home Assistant weather entity" in answer
+
+
+
+def test_local_reminder_executor_requires_script_success_response():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.local_reminder_script = "script.set_timer_alarm_or_reminder"
+
+    class FakeServices:
+        def has_service(self, domain, service):
+            return (domain, service) == ("script", "set_timer_alarm_or_reminder")
+
+        async def async_call(self, domain, service, data, **kwargs):
+            assert domain == "script"
+            assert service == "set_timer_alarm_or_reminder"
+            assert data == {"name": "take bins out", "duration_seconds": 1200}
+            assert kwargs == {"blocking": True, "return_response": True}
+            return {"success": True, "name": "take bins out", "kind": "reminder"}
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    result = asyncio.run(assistant._execute_local_reminder({
+        "name": "take bins out", "duration_seconds": 1200
+    }))
+    assert assistant_module.action_result_error(result) is None
+    snapshot = assistant_module.action_result_snapshot(result)
+    assert snapshot["success"][0]["id"] == "script.set_timer_alarm_or_reminder"
+
+
+def test_local_reminder_executor_does_not_claim_success_without_success_flag():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.local_reminder_script = "script.set_timer_alarm_or_reminder"
+
+    class FakeServices:
+        def has_service(self, domain, service):
+            return True
+
+        async def async_call(self, *args, **kwargs):
+            return {"message": "The script did not return its success flag"}
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    result = asyncio.run(assistant._execute_local_reminder({
+        "name": "take bins out", "duration_seconds": 1200
+    }))
+    assert assistant_module.action_result_error(result) is not None
