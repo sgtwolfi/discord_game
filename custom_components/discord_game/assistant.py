@@ -97,6 +97,18 @@ def is_text_addressed(content):
     return bool(re.search(r"\bghost\b", str(content or ""), re.IGNORECASE))
 
 
+def is_function_configuration_error(value):
+    """Detect provider-side function YAML loading errors returned as normal speech."""
+    text = str(value or "").casefold()
+    markers = (
+        "failed to load functions",
+        "verify functions are valid in a yaml format",
+        "failed to load function definitions",
+        "invalid function yaml",
+    )
+    return any(marker in text for marker in markers)
+
+
 def speech(data):
     """Extract user-facing speech from a Home Assistant conversation result."""
     response = data.get("response", data) if isinstance(data, dict) else {}
@@ -1171,6 +1183,13 @@ class DiscordAssistant:
         if not answer:
             usage["errors"] += 1
             raise RuntimeError("Conversation agent returned no speech")
+        if is_function_configuration_error(answer):
+            usage["errors"] += 1
+            raise RuntimeError(
+                "The selected Home Assistant conversation agent could not load its configured functions. "
+                "Check that agent's function definitions and YAML; GHOST will use its configured fallback "
+                "for eligible non-action requests."
+            )
         return answer
     def _history(self,item):
         if item["is_dm"]:
@@ -1806,6 +1825,11 @@ class DiscordAssistant:
             agent = str(self.agents.get("conversation_agent") or "").strip()
         if not agent:
             return False, "No separate local group-relevance agent is configured; GHOST stayed quiet safely."
+        if (
+            getattr(self, "mode", "local") == "api"
+            and agent == str(self.agents.get("conversation_agent") or "").strip()
+        ):
+            return False, "The group-relevance agent must be a separate local agent, not the tool-enabled API agent."
 
         prompt = [
             "Decide whether GHOST should reply in this Discord group.",
