@@ -2282,3 +2282,11 @@ def test_reminder_confirmation_recovers_for_clock_time_wording():
     assert result == {
         "name": "text Ryan", "alarm_time": "19:00", "date": "2026-11-15"
     }
+
+
+def test_ghost_status_snapshot_reports_unavailable_helper_safely():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: None))
+    assert assistant._ghost_status_value() is None
+    assert "unavailable" in assistant._ghost_status_context()
