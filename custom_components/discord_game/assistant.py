@@ -264,7 +264,7 @@ class DiscordAssistant:
             channel_id = key.rsplit(":", 1)[-1]
             if channel_id not in self.group_channels:
                 raise ValueError("This server channel is not enabled for GHOST")
-        if key not in self.conversation_logs and key not in self.conversation_meta:
+        if key not in self.conversation_logs and key not in self.conversation_meta and not key.startswith("dm:"):
             raise ValueError("Conversation was not found")
         return {
             "conversation": key,
