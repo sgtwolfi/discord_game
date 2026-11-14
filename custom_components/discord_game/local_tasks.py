@@ -82,7 +82,7 @@ def parse_local_reminder(text: str, now: datetime) -> dict | None:
     ampm = (clock.group("ampm") or "").lower()
     if minute > 59 or hour > 23 or (ampm and not 1 <= hour <= 12):
         return {"needs_clarification": True, "clarification": "That clock time is invalid. Please give me a valid time."}
-    if not ampm and hour <= 12 and clock.group("minute") is None:
+    if not ampm and 0 < hour <= 12:
         return {"needs_clarification": True, "clarification": "Is that AM or PM? I don't want to guess the time."}
     if ampm:
         hour = hour % 12
@@ -111,5 +111,10 @@ def parse_local_reminder(text: str, now: datetime) -> dict | None:
                 days_ahead += 7
             target_date = now.date() + timedelta(days=days_ahead)
         reminder_date = target_date.isoformat()
+
+    if reminder_date == now.date().isoformat():
+        requested_time = datetime.strptime(alarm_time, "%H:%M").time()
+        if requested_time <= now.timetz().replace(tzinfo=None):
+            return {"needs_clarification": True, "clarification": "That time has already passed today. Should I set it for tomorrow instead?"}
 
     return {"name": task[:200], "alarm_time": alarm_time, **({"date": reminder_date} if reminder_date else {})}
