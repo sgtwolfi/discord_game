@@ -50,3 +50,15 @@ cancel_queued_message:
       required: true
       selector:
         text:
+replay_transcript:
+  name: Replay conversation
+  description: Reprocess the original user messages from a retained transcript entry.
+  fields:
+    timestamp:
+      required: true
+      selector:
+        text:
+    conversation:
+      required: true
+      selector:
+        text:
