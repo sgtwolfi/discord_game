@@ -119,8 +119,8 @@ def is_contextual_followup(text):
 def _timestamp_delta_seconds(older, newer):
     """Return a non-negative ISO timestamp difference, or None when unavailable."""
     try:
-        first = datetime.fromisoformat(str(older).replace("Z", "+00:00"))
-        second = datetime.fromisoformat(str(newer).replace("Z", "+00:00"))
+        first = datetime.fromisoformat(str(older))
+        second = datetime.fromisoformat(str(newer))
         if first.tzinfo is None:
             first = first.replace(tzinfo=UTC)
         if second.tzinfo is None:
