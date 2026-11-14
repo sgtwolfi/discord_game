@@ -812,7 +812,10 @@ class DiscordAssistant:
         removed = len(removed_items)
         self.queue.clear()
         for item in removed_items:
-            messages = getattr(self, "conversation_logs", {}).get(item["key"], [])
+            key = item.get("key")
+            if not key:
+                continue
+            messages = getattr(self, "conversation_logs", {}).get(key, [])
             messages[:] = [
                 message for message in messages
                 if str(message.get("message_id") or "") != str(item.get("message_id") or "")
