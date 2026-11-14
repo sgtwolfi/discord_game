@@ -13,7 +13,7 @@ from .const import CONF_MEMBERS, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
 ACTION=re.compile(
-    r"\b(remind me|reminder|timer|alarm|turn on|turn off|switch on|switch off|"
+    r"\b(remind me|reminder|timer|alarm|turn on|turn off|turn(?:\s+\w+){0,5}\s+(?:on|off)|switch on|switch off|"
     r"activate|deactivate|lock|unlock|open|close|set|adjust|increase|decrease|"
     r"dim|brighten|cooler|warmer|schedule|cancel|delete|add|remove|toggle|"
     r"enable|disable|play|pause|stop|start|volume|notify|send (?:a )?message|"
@@ -788,6 +788,10 @@ class DiscordAssistant:
                 detail = str(err).strip()[:350]
                 notice = "I couldn't complete that request: " + detail if detail else "I couldn't complete that request. I've logged the failure."
                 await self._send(item["channel"], notice)
+                self._append_conversation_message(item["key"], {
+                    "role": "assistant", "sender": "GHOST", "content": notice,
+                    "timestamp": datetime.now(UTC).isoformat(), "error": True,
+                })
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
