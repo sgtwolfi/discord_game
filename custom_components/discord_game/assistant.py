@@ -521,6 +521,7 @@ class DiscordAssistant:
         model=agent or "unconfigured"
         answer=""
         action_result = None
+        models_attempted = []
         failures=[]
         try:
             history,summary=self._history(item)
@@ -537,7 +538,10 @@ class DiscordAssistant:
             self._refresh_sensor()
             attempts = 1 if role == "advanced" else self.retries
             for attempt in range(attempts):
-                try:answer=await self._call(agent,prompt);break
+                try:
+                    models_attempted.append(agent)
+                    answer=await self._call(agent,prompt)
+                    break
                 except Exception as err:  # noqa: BLE001 - retry any conversation service failure
                     failures.append(str(err));_LOGGER.warning("Local assistant attempt %s failed: %s",attempt+1,err)
                     await asyncio.sleep(min(attempt+1,4))
@@ -551,6 +555,7 @@ class DiscordAssistant:
                 if self.active_request:
                     self.active_request["model"] = model
                     self._refresh_sensor()
+                models_attempted.append(model)
                 answer=await self._call(model,prompt)
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
             if role == "operations":
@@ -566,6 +571,7 @@ class DiscordAssistant:
                     if self.active_request:
                         self.active_request["model"] = model
                         self._refresh_sensor()
+                    models_attempted.append(model)
                     answer = await self._call(model, prompt)
                     verification_error = action_result_error(getattr(self, "_last_call_result", None))
                     action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
@@ -593,6 +599,7 @@ class DiscordAssistant:
               "assistant":answer,"model":model,"role":role,
               "estimated_input_tokens":len(prompt)//4,"estimated_output_tokens":len(answer)//4,"context_snapshot":prompt,
               "action_result": action_result,
+              "models_attempted": models_attempted,
               "fallback_used":model==self.agents["fallback_agent"] and bool(self.agents["fallback_agent"])})
             self.transcript=self.transcript[-100:]
             self._trim_context_snapshots()
@@ -614,7 +621,7 @@ class DiscordAssistant:
               "messages":[{"sender":x["sender_name"],"sender_id":x["sender_id"],"content":x["content"]} for x in batch],
               "assistant":None,"error":self.error,"model":model,
               "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt,
-              "action_result": action_result})
+              "action_result": action_result,"models_attempted":models_attempted})
             self.transcript=self.transcript[-100:]
             self._trim_context_snapshots()
             await self._save()
