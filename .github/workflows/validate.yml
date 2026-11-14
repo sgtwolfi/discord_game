@@ -24,7 +24,7 @@ jobs:
       - name: Lint new assistant runtime
         run: |
           pip install ruff
-          ruff check custom_components/discord_game/assistant.py custom_components/discord_game/services.py
+          ruff check custom_components/discord_game/assistant.py custom_components/discord_game/services.py custom_components/discord_game/panel.py custom_components/discord_game/__init__.py tests/test_assistant.py
       - name: Validate frontend panel JavaScript
         run: node --check custom_components/discord_game/frontend/ghost-panel.js
       - name: Validate service descriptions
