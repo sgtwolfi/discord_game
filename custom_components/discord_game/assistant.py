@@ -183,7 +183,7 @@ class DiscordAssistant:
             "model_usage": self.model_usage_data,
         })
     def attributes(self):
-        return {"enabled":self.enabled,"paused":self.paused,"queue_length":len(self.queue),"processing":self.active,
+        return {"enabled":self.enabled,"paused":self.paused,"approved_users":sorted(self.approved_users),"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
           "pending_messages":[
