@@ -22,7 +22,8 @@ ACTION=re.compile(
 )
 COMPLEX_REQUEST = re.compile(
     r"\b(research|compare|analyse|analyze|debug|troubleshoot|architect|"
-    r"investigate|evaluate|multi[- ]step|complex|design a system|write a report)\b",
+    r"investigate|evaluate|multi[- ]step|complex|fix|review|diagnose|refactor|"
+    r"optimise|optimize|design a system|write a report)\b",
     re.IGNORECASE,
 )
 
