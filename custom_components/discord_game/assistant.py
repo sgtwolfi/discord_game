@@ -70,10 +70,10 @@ COMPLEX_REQUEST = re.compile(
 ACTION_REQUEST = re.compile(
     r"\b(turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
     r"activate|deactivate|lock|unlock|open|close|play|pause|stop|start|run|"
-    r"enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\\b|"
-    r"\b(?:i want|make|put|set them|have them)\\b.{0,80}\\b"
+    r"enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\b|"
+    r"\b(?:i want|make|put|set them|have them)\b.{0,80}\b"
     r"(?:red|blue|green|white|warm|cool|colour|color|brightness|brighter|dimmer|"
-    r"on|off|volume|temperature)\\b",
+    r"on|off|volume|temperature)\b",
     re.IGNORECASE,
 )
 
@@ -139,7 +139,7 @@ def extract_durable_memory_facts(messages):
 
         # Only retain facts the speaker explicitly asks GHOST to remember.
         remembered = re.search(
-            r"\b(?:please\\s+)?(?:remember(?:\\s+that)?|don't\\s+forget(?:\\s+that)?)\\s+(.+)",
+            r"\b(?:please\s+)?(?:remember(?:\s+that)?|don't\s+forget(?:\s+that)?)\s+(.+)",
             content,
             re.IGNORECASE,
         )
@@ -149,7 +149,7 @@ def extract_durable_memory_facts(messages):
 
         # Capture clear first-person preferences, not inferred personality traits.
         preference = re.search(
-            r"\bI\\s+(?:really\\s+)?(like|love|prefer|enjoy|hate|dislike|can't\\s+stand)\\s+([^.!?]{2,180})",
+            r"\bI\s+(?:really\s+)?(like|love|prefer|enjoy|hate|dislike|can't\s+stand)\s+([^.!?]{2,180})",
             content,
             re.IGNORECASE,
         )
@@ -158,7 +158,7 @@ def extract_durable_memory_facts(messages):
             continue
 
         favourite = re.search(
-            r"\bmy\\s+(favourite|favorite)\\s+([^.!?]{1,60}?)\\s+is\\s+([^.!?]{2,140})",
+            r"\bmy\s+(favourite|favorite)\s+([^.!?]{1,60}?)\s+is\s+([^.!?]{2,140})",
             content,
             re.IGNORECASE,
         )
@@ -170,7 +170,7 @@ def extract_durable_memory_facts(messages):
             continue
 
         occupation = re.search(
-            r"\bI\\s+work\\s+(as|at|for)\\s+([^.!?]{2,140})",
+            r"\bI\s+work\s+(as|at|for)\s+([^.!?]{2,140})",
             content,
             re.IGNORECASE,
         )
@@ -1427,7 +1427,7 @@ class DiscordAssistant:
             # the administrator explicitly authored the current summary.
             if record.get("summary_source") != "administrator":
                 chatter = re.compile(
-                    r"(what's on your mind|right[, ]+mate|\\binnit\\b|"
+                    r"(what's on your mind|right[, ]+mate|\binnit\b|"
                     r"proper shockin|proper shocking|red-ing|i'm just a ghost)",
                     re.IGNORECASE,
                 )
@@ -1440,7 +1440,7 @@ class DiscordAssistant:
 
             # Preserve manually corrected memory, add only explicit new facts,
             # and cap storage so a long-running contact cannot grow without bound.
-            record["summary"] = "\\n".join(existing_lines[-40:])[:3500]
+            record["summary"] = "\n".join(existing_lines[-40:])[:3500]
             # Consume only the selected snapshot. Any newer evidence appended
             # while this method is running remains pending for the next pass.
             record["pending_messages"] = pending[:-len(selected)] if selected else pending
