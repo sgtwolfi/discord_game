@@ -1397,102 +1397,42 @@ class DiscordAssistant:
                     "The Home Assistant operations agent is not configured. "
                     "I cannot safely execute actions or report live device states."
                 )
-            is_operation = bool(
-                self.agents["operations_agent"]
-                and kind in {"action", "query"}
-                and group_action_is_addressed
+            local_reminder = (
+                parse_local_reminder(request_text, dt_util.now())
+                if self.mode == "local" and item["is_dm"]
+                else None
             )
-            is_action = is_operation and kind == "action"
-            is_complex = bool(
-                COMPLEX_REQUEST.search(request_text) or len(request_text) > 1200
-            )
-            if is_operation:
-                role = "operations"
-                agent = self.agents["operations_agent"]
-            elif is_complex:
-                # Advanced is a reasoning mode, not a second model selector.
-                # Keep the primary model here; fallback remains a recovery model.
-                role = "advanced"
-                agent = self.agents["conversation_agent"]
-            else:
-                role = "conversation"
-                agent = self.agents["conversation_agent"]
-            model = agent or "unconfigured"
-            prompt = self._prompt(batch, prior_history, summary, role, context_note)
-            self.active_request = {
-                "conversation": item["key"],
-                "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
-                "messages": [x["content"] for x in batch],
-                "model": model,
-                "role": role,
-                "request_kind": kind,
-                "batch_size": len(batch),
-                "models_attempted": models_attempted,
-                "stage": "Generating a response",
-                "started_at": datetime.now(UTC).isoformat(),
-                "context_snapshot": prompt,
-            }
-            self._refresh_sensor()
-            # Never replay a side-effecting request automatically: even a timeout
-            # can occur after Home Assistant has executed the action.
-            attempts = 1 if is_action else self.retries
-            for attempt in range(attempts):
-                try:
-                    models_attempted.append(agent)
+            if local_reminder is not None:
+                role = "local_reminder"
+                model = "local-script:" + self.local_reminder_script
+                prompt = self._prompt(batch, prior_history, summary, "conversation", context_note)
+                self.active_request = {
+                    "conversation": item["key"],
+                    "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
+                    "messages": [x["content"] for x in batch],
+                    "model": model,
+                    "role": role,
+                    "request_kind": kind,
+                    "batch_size": len(batch),
+                    "models_attempted": [],
+                    "stage": "Checking reminder details",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "context_snapshot": prompt,
+                }
+                self._refresh_sensor()
+                if local_reminder.get("needs_clarification"):
+                    answer = local_reminder["clarification"]
+                else:
+                    is_action = True
                     if self.active_request:
-                        self.active_request["stage"] = f"Primary model attempt {attempt + 1}/{attempts}"
-                        self.active_request["models_attempted"] = list(models_attempted)
+                        self.active_request["stage"] = "Calling configured Home Assistant reminder script"
                         self._refresh_sensor()
-                    answer = await self._call(agent, prompt)
-                    break
-                except Exception as err:  # noqa: BLE001
-                    failures.append(str(err))
-                    _LOGGER.warning(
-                        "Local assistant attempt %s failed: %s", attempt + 1, err
-                    )
-                    await asyncio.sleep(min(attempt + 1, 4))
-            if not answer and is_action:
-                raise RuntimeError(
-                    "Home Assistant did not return a usable result. The action was not retried because "
-                    "it may have partially executed."
-                )
-            if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
-                model = self.agents["fallback_agent"]
-                role = "fallback"
-                prompt = self._prompt(batch, prior_history, summary, role, context_note)
-                if self.active_request:
-                    self.active_request["model"] = model
-                    self.active_request["role"] = role
-                    self.active_request["stage"] = "Recovering with fallback agent"
-                    self.active_request["context_snapshot"] = prompt
-                    self.active_request["models_attempted"] = list(models_attempted)
-                    self._refresh_sensor()
-                models_attempted.append(model)
-                answer = await self._call(model, prompt)
-            if not answer:
-                raise RuntimeError("; ".join(failures) or "All models failed")
-            if role == "operations":
-                operation_result = getattr(self, "_last_call_result", None)
-                action_result = action_result_snapshot(operation_result) if is_action else None
-                if is_action:
+                    operation_result = await self._execute_local_reminder(local_reminder)
+                    action_result = action_result_snapshot(operation_result)
                     verification_error = action_result_error(operation_result)
-                    if verification_error and action_result_retryable(operation_result):
-                        retry_answer, merged_result = await self._retry_failed_action(
-                            agent, prompt, operation_result, models_attempted
-                        )
-                        if merged_result is not None:
-                            operation_result = merged_result
-                            action_result = action_result_snapshot(operation_result)
-                            verification_error = action_result_error(operation_result)
-                            if not verification_error:
-                                answer = retry_answer or answer
-                        else:
-                            verification_error = (
-                                "The controlled retry did not return a structured Home Assistant action result "
-                                "covering exactly the failed targets. The original failures remain unconfirmed."
-                            )
                     if verification_error:
-                        raise RuntimeError("Action not confirmed: " + verification_error)
+                        raise RuntimeError("Reminder not confirmed: " + verification_error)
+                    answer = "Right, I've set your reminder: " + str(local_reminder["name"]) + "."
                     event_key = "|".join((
                         str(item["key"]),
                         ",".join(str(entry.get("message_id", "")) for entry in batch),
@@ -1501,7 +1441,112 @@ class DiscordAssistant:
                     self._capture_action_outcome_for_memory(
                         item, request_text, action_result, None, event_key
                     )
-
+            else:
+                is_operation = bool(
+                    self.agents["operations_agent"]
+                    and kind in {"action", "query"}
+                    and group_action_is_addressed
+                )
+                is_action = is_operation and kind == "action"
+                is_complex = bool(
+                    COMPLEX_REQUEST.search(request_text) or len(request_text) > 1200
+                )
+                if is_operation:
+                    role = "operations"
+                    agent = self.agents["operations_agent"]
+                elif is_complex:
+                    # Advanced is a reasoning mode, not a second model selector.
+                    # Keep the primary model here; fallback remains a recovery model.
+                    role = "advanced"
+                    agent = self.agents["conversation_agent"]
+                else:
+                    role = "conversation"
+                    agent = self.agents["conversation_agent"]
+                model = agent or "unconfigured"
+                prompt = self._prompt(batch, prior_history, summary, role, context_note)
+                self.active_request = {
+                    "conversation": item["key"],
+                    "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
+                    "messages": [x["content"] for x in batch],
+                    "model": model,
+                    "role": role,
+                    "request_kind": kind,
+                    "batch_size": len(batch),
+                    "models_attempted": models_attempted,
+                    "stage": "Generating a response",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "context_snapshot": prompt,
+                }
+                self._refresh_sensor()
+                # Never replay a side-effecting request automatically: even a timeout
+                # can occur after Home Assistant has executed the action.
+                attempts = 1 if is_action else self.retries
+                for attempt in range(attempts):
+                    try:
+                        models_attempted.append(agent)
+                        if self.active_request:
+                            self.active_request["stage"] = f"Primary model attempt {attempt + 1}/{attempts}"
+                            self.active_request["models_attempted"] = list(models_attempted)
+                            self._refresh_sensor()
+                        answer = await self._call(agent, prompt)
+                        break
+                    except Exception as err:  # noqa: BLE001
+                        failures.append(str(err))
+                        _LOGGER.warning(
+                            "Local assistant attempt %s failed: %s", attempt + 1, err
+                        )
+                        await asyncio.sleep(min(attempt + 1, 4))
+                if not answer and is_action:
+                    raise RuntimeError(
+                        "Home Assistant did not return a usable result. The action was not retried because "
+                        "it may have partially executed."
+                    )
+                if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
+                    model = self.agents["fallback_agent"]
+                    role = "fallback"
+                    prompt = self._prompt(batch, prior_history, summary, role, context_note)
+                    if self.active_request:
+                        self.active_request["model"] = model
+                        self.active_request["role"] = role
+                        self.active_request["stage"] = "Recovering with fallback agent"
+                        self.active_request["context_snapshot"] = prompt
+                        self.active_request["models_attempted"] = list(models_attempted)
+                        self._refresh_sensor()
+                    models_attempted.append(model)
+                    answer = await self._call(model, prompt)
+                if not answer:
+                    raise RuntimeError("; ".join(failures) or "All models failed")
+                if role == "operations":
+                    operation_result = getattr(self, "_last_call_result", None)
+                    action_result = action_result_snapshot(operation_result) if is_action else None
+                    if is_action:
+                        verification_error = action_result_error(operation_result)
+                        if verification_error and action_result_retryable(operation_result):
+                            retry_answer, merged_result = await self._retry_failed_action(
+                                agent, prompt, operation_result, models_attempted
+                            )
+                            if merged_result is not None:
+                                operation_result = merged_result
+                                action_result = action_result_snapshot(operation_result)
+                                verification_error = action_result_error(operation_result)
+                                if not verification_error:
+                                    answer = retry_answer or answer
+                            else:
+                                verification_error = (
+                                    "The controlled retry did not return a structured Home Assistant action result "
+                                    "covering exactly the failed targets. The original failures remain unconfirmed."
+                                )
+                        if verification_error:
+                            raise RuntimeError("Action not confirmed: " + verification_error)
+                        event_key = "|".join((
+                            str(item["key"]),
+                            ",".join(str(entry.get("message_id", "")) for entry in batch),
+                            request_text[:300],
+                        ))
+                        self._capture_action_outcome_for_memory(
+                            item, request_text, action_result, None, event_key
+                        )
+    
             await self._send(item["channel"], answer)
             now = datetime.now(UTC).isoformat()
             self._append_conversation_message(
