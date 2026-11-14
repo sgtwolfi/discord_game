@@ -12,12 +12,12 @@ _NUMBER_WORDS = {
     "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
     "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
     "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40,
-    "fifty": 50, "sixty": 60, "ninety": 90, "a": 1, "an": 1,
+    "fifty": 50, "sixty": 60, "ninety": 90, "a": 1, "an": 1, "half": 0.5,
 }
 _DURATION = re.compile(
     r"\bin\s+(?P<amount>\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
     r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety|a|an)"
-    r"\s*(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\b",
+    r"\s*(?:an?\s+)?(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|m|h|d)\b",
     re.IGNORECASE,
 )
 _CLOCK = re.compile(
@@ -72,8 +72,13 @@ def parse_local_reminder(text: str, now: datetime) -> dict | None:
         amount_text = duration.group("amount").lower()
         amount = int(amount_text) if amount_text.isdigit() else _NUMBER_WORDS[amount_text]
         unit = duration.group("unit").lower()
-        multiplier = 1 if unit.startswith(("second", "sec")) else 60 if unit.startswith(("minute", "min")) else 3600 if unit.startswith(("hour", "hr")) else 86400
-        seconds = amount * multiplier
+        multiplier = (
+            1 if unit.startswith(("second", "sec")) else
+            60 if unit.startswith(("minute", "min")) or unit == "m" else
+            3600 if unit.startswith(("hour", "hr")) or unit == "h" else
+            86400
+        )
+        seconds = int(amount * multiplier)
         if seconds < 1 or seconds > 31_536_000:
             return {"needs_clarification": True, "clarification": "That reminder duration is outside the supported range."}
         return {"name": task[:200], "duration_seconds": seconds}
