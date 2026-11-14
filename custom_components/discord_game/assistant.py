@@ -601,7 +601,7 @@ class DiscordAssistant:
         except Exception as err:
             if role == "operations" and action_result is None:
                 action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
-            self.error=str(err)[:500];self._state="error"
+            self.error=(str(err).strip() or err.__class__.__name__)[:500];self._state="error"
             _LOGGER.exception("Discord assistant failed")
             try:
                 detail = str(err).strip()[:350]
