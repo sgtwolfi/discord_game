@@ -151,7 +151,20 @@ class DiscordGameGhostPanel extends HTMLElement {
       const card = this._node("article", undefined, "item");
       card.append(this._node("p", item.sender + " · " + item.conversation));
       card.append(this._node("p", item.timestamp, "muted"));
-      card.append(this._node("p", item.message));
+      const edit = this._node("textarea");
+      edit.value = item.message || "";
+      edit.rows = 3;
+      card.append(edit);
+      const queueActions = this._node("div", undefined, "actions");
+      queueActions.append(this._button("Save edit", () => {
+        this._service("edit_queued_message", { message_id: item.id, message: edit.value });
+      }, true));
+      queueActions.append(this._button("Cancel message", () => {
+        if (confirm("Remove this pending message from the queue?")) {
+          this._service("cancel_queued_message", { message_id: item.id });
+        }
+      }, true));
+      card.append(queueActions);
       queueList.append(card);
     }
     if (!queueList.childElementCount) queueList.append(this._node("p", "No messages waiting.", "muted"));
