@@ -178,6 +178,13 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             # Keep advanced panel settings when saving the integration's model selectors.
             advanced_defaults = {
                 "assistant_mode": self._get_current("assistant_mode", "local"),
+                "api_fallback_agent": self._get_current("api_fallback_agent", ""),
+                "spam_local_agent": self._get_current("spam_local_agent", ""),
+                "spam_policy": self._get_current("spam_policy", "defer_local"),
+                "spam_message_limit": self._get_current("spam_message_limit", 8),
+                "spam_window_seconds": self._get_current("spam_window_seconds", 30),
+                "spam_defer_minutes": self._get_current("spam_defer_minutes", 10),
+                "spam_timeout_minutes": self._get_current("spam_timeout_minutes", 5),
                 "local_reminder_script": self._get_current("local_reminder_script", "script.set_timer_alarm_or_reminder"),
                 "fallback_after_failures": 2,
                 "queue_debounce_seconds": 2.5,
@@ -247,6 +254,15 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional("conversation_agent", default=self._get_current("conversation_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("operations_agent", default=self._get_current("operations_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
+                vol.Optional("api_fallback_agent", default=self._get_current("api_fallback_agent", "")): selector.ConversationAgentSelector(),
+                vol.Optional("spam_local_agent", default=self._get_current("spam_local_agent", "")): selector.ConversationAgentSelector(),
+                vol.Required("spam_policy", default=self._get_current("spam_policy", "defer_local")): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=[{"label": "Defer to local model", "value": "defer_local"}, {"label": "Discord timeout", "value": "timeout"}, {"label": "Ignore during cooldown", "value": "ignore"}], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
+                ),
+                vol.Required("spam_message_limit", default=self._get_current("spam_message_limit", 8)): vol.All(vol.Coerce(int), vol.Range(min=3, max=30)),
+                vol.Required("spam_window_seconds", default=self._get_current("spam_window_seconds", 30)): vol.All(vol.Coerce(int), vol.Range(min=5, max=300)),
+                vol.Required("spam_defer_minutes", default=self._get_current("spam_defer_minutes", 10)): vol.All(vol.Coerce(int), vol.Range(min=1, max=1440)),
+                vol.Required("spam_timeout_minutes", default=self._get_current("spam_timeout_minutes", 5)): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=options_schema, errors=errors)
