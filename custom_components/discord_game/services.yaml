@@ -62,3 +62,16 @@ replay_transcript:
       required: true
       selector:
         text:
+set_friend_memory:
+  name: Correct contact memory
+  description: Replace the durable memory summary for an approved Discord contact.
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+    summary:
+      required: true
+      selector:
+        text:
+          multiline: true
