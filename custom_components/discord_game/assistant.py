@@ -50,12 +50,12 @@ ACTION=re.compile(
     re.IGNORECASE,
 )
 LIVE_STATE_QUERY = re.compile(
-    r"\\b(what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
+    r"\b(what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
     r"what(?:'s| is) the (?:current )?(?:status|state)|current status|"
     r"is .{0,40} (?:home|away|online|offline|on|off)|"
     r"are .{0,40} (?:on|off|set to)|what(?:'s| is) happening right now|"
     r"check (?:the )?(?:status|state|lights|temperature|presence)|"
-    r"tell me (?:the )?(?:current )?(?:status|state) of)",
+    r"tell me (?:the )?(?:current )?(?:status|state) of)\b",
     re.IGNORECASE,
 )
 
@@ -67,15 +67,15 @@ COMPLEX_REQUEST = re.compile(
 )
 
 ACTION_REQUEST = re.compile(
-    r"^\\s*(?:please\\s+)?(?:turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
+    r"^\s*(?:please\s+)?(?:turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
     r"activate|deactivate|lock|unlock|open|close|play|pause|stop|start|run|enable|disable|"
-    r"cancel|delete|add|remove|schedule|remind|notify|send)\\b|"
-    r"\\b(?:can|could|would)\\s+you\\s+(?:please\\s+)?(?:turn|switch|set|change|adjust|dim|"
+    r"cancel|delete|add|remove|schedule|remind|notify|send)\b|"
+    r"\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:turn|switch|set|change|adjust|dim|"
     r"brighten|increase|decrease|toggle|activate|deactivate|lock|unlock|open|close|play|pause|"
-    r"stop|start|run|enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\\b|"
-    r"\\b(?:i want|make|put|set them|have them)\\b.{0,80}\\b"
+    r"stop|start|run|enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\b|"
+    r"\b(?:i want|make|put|set them|have them)\b.{0,80}\b"
     r"(?:red|blue|green|white|warm|cool|colour|color|brightness|brighter|dimmer|"
-    r"on|off|volume|temperature|percent)\\b",
+    r"on|off|volume|temperature|percent)\b",
     re.IGNORECASE,
 )
 
