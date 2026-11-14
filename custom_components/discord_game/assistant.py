@@ -1882,13 +1882,9 @@ class DiscordAssistant:
         addressed = any(entry.get("directly_addressed") for entry in batch)
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
-        if getattr(self, "group_require_mention", False):
-            if addressed:
-                return True, "GHOST was directly addressed; mention-only mode skipped relevance inference."
-            return False, "GHOST stayed quiet because mention-only mode is enabled."
-
         # A clear follow-up from the same speaker shortly after GHOST replied
-        # belongs to the active thread. HA actions and live-state queries remain
+        # belongs to the active thread, even when ordinary group messages are
+        # configured as mention-only. HA actions and live-state queries remain
         # separately mention-gated by _process.
         assistant_turn = next((entry for entry in reversed(history) if entry.get("role") == "assistant"), None)
         if assistant_turn and getattr(self, "group_continuity_seconds", 300):
@@ -1908,6 +1904,9 @@ class DiscordAssistant:
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
             if same_speaker and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
                 return True, "GHOST continued the recent conversation; the message was recognised as a follow-up."
+
+        if getattr(self, "group_require_mention", False):
+            return False, "GHOST stayed quiet because mention-only mode is enabled."
 
         # Never send untrusted group text to the API agent, which may have HA tools.
         agent = str(getattr(self, "group_relevance_agent", "") or "").strip()
