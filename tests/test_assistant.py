@@ -2268,6 +2268,45 @@ def test_ghost_status_is_injected_into_api_and_local_model_context():
         prompt = assistant._prompt(batch, [], "")
         assert "Checking the network" in prompt
         assert "input_text.ghost_status" in prompt
+        assert "AUTHORITATIVE LIVE OWNER STATUS" in prompt
+
+
+def test_owner_status_is_not_injected_into_unaddressed_group_context():
+    state = SimpleNamespace(state="At the downstairs PC")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = hass
+    assistant.diagnostics_revision = 0
+    assistant.limit = 8
+    assistant.budget = 10000
+    assistant.config = {}
+    group_batch = [{"sender_name": "Max", "content": "Hello", "is_dm": False}]
+    prompt = assistant._prompt(group_batch, [], "")
+    assert "At the downstairs PC" not in prompt
+    assert "private and is not included" in prompt
+
+
+def test_owner_status_can_be_included_for_directly_addressed_group_request():
+    state = SimpleNamespace(state="At the downstairs PC")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = hass
+    assistant.diagnostics_revision = 0
+    assistant.limit = 8
+    assistant.budget = 10000
+    assistant.config = {}
+    group_batch = [{
+        "sender_name": "Max", "content": "What's Harvey doing?",
+        "is_dm": False, "directly_addressed": True,
+    }]
+    prompt = assistant._prompt(group_batch, [], "")
+    assert "At the downstairs PC" in prompt
 
 
 def test_ghost_status_question_is_classified_as_live_query():
