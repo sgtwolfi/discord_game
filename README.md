@@ -1,4 +1,4 @@
-# Discord Game + GHOST Assistant (v8.2.2)
+# Discord Game + GHOST Assistant (v8.2.3)
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
@@ -26,7 +26,7 @@ Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → As
 - GHOST does not overwrite that agent's system prompt or tool configuration. It sends bounded conversation context and the approved contact's private saved facts with each request.
 - GHOST still owns Discord queueing, contact isolation, memory extraction/consolidation, audit history and action-result verification. Switching models or changing the agent does not disable or erase memory.
 - Group relevance can be inferred by a separately selected local, tool-free conversation agent; untrusted group text is never sent to the tool-enabled API agent just to decide whether GHOST should speak. The optional mention-only setting bypasses inference and requires an explicit mention or reply.
-- A bounded continuity window recognises clear same-speaker follow-ups to GHOST's recent group reply. Group history is restored from persisted conversation logs after Home Assistant restarts. Continuity only applies to ordinary chat; group Home Assistant actions and live-state queries still require a direct mention or reply.
+- A bounded continuity window recognises clear same-speaker follow-ups to GHOST's recent group reply, including when mention-only mode is enabled. Unrelated messages remain suppressed, and Home Assistant actions/live-state queries still require a direct mention or reply. Group history is restored from persisted conversation logs after Home Assistant restarts. Continuity only applies to ordinary chat; group Home Assistant actions and live-state queries still require a direct mention or reply.
 - Select **API fallback agent** separately from the primary Conversation Agent in Discord Game → Configure. It is used for recoverable primary-model failures on conversation and read-only work. Side-effecting actions are never replayed through fallback after an ambiguous result.
 - The Local Operations and Local Fallback selectors are not used by API Mode. The selected API Conversation Agent handles ordinary chat, live-state queries and actions; the API fallback is a separate recovery model.
 
