@@ -481,7 +481,7 @@ class DiscordAssistant:
                     self._refresh_sensor()
                 continue
 
-            pending = self._has_pending_memories() and bool(self.agents.get("memory_agent"))
+            pending = not self.queue and self._has_pending_memories() and bool(self.agents.get("memory_agent"))
             timeout = None
             if pending:
                 if self._last_message_monotonic is None:
@@ -599,6 +599,7 @@ class DiscordAssistant:
                 "content": str(record.get("content") or ""),
                 "timestamp": now.isoformat(),
                 "sort": queued_at,
+                "directly_addressed": bool(record.get("directly_addressed")) ,
                 "channel_id": str(channel.id),
                 "channel": channel,
             })
@@ -832,7 +833,7 @@ class DiscordAssistant:
                         "is_dm": False,
                         "user_messages": [x["content"] for x in batch],
                         "messages": [
-                            {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"]}
+                            {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "directly_addressed": x.get("directly_addressed", False)}
                             for x in batch
                         ],
                         "assistant": None,
@@ -966,7 +967,7 @@ class DiscordAssistant:
                 "is_dm": item["is_dm"],
                 "user_messages": [x["content"] for x in batch],
                 "messages": [
-                    {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"]}
+                    {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "directly_addressed": x.get("directly_addressed", False)}
                     for x in batch
                 ],
                 "assistant": answer,
