@@ -308,6 +308,9 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (active.models_attempted && active.models_attempted.length) {
         card.append(this._el("p", "Models attempted: " + active.models_attempted.join(" → "), "muted"));
       }
+      if (active.retry_targets && active.retry_targets.length) {
+        card.append(this._el("p", "Retrying failed targets only: " + active.retry_targets.join(", "), "muted"));
+      }
       shell.append(card);
     }
 
