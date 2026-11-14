@@ -494,77 +494,85 @@ def test_memory_without_agent_retains_pending_messages():
     assert len(assistant.friends["123"]["pending_messages"]) == 1
 
 
-def test_memory_consolidation_uses_latest_configured_messages_and_revises_summary():
-    prompts = []
+def test_memory_consolidation_uses_only_explicit_facts_and_keeps_unprocessed_evidence():
+    saved = []
+    events = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.friends = {"123": {
+        "summary": "Right, mate, what's on your mind? The lights are definitely red-ing this morning, proper shockin', innit?",
+        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+        "pending_messages": [
+            {"role": "user", "sender": "Max", "content": "hello"},
+            {"role": "user", "sender": "Max", "content": "I prefer comedy films"},
+            {"role": "user", "sender": "Max", "content": "Remember that I use Home Assistant"},
+        ],
+    }}
+    assistant.memory_batch_messages = 2
+    assistant.history_limit = 1
+    assistant.contact_names = {"123": "Max"}
+    assistant.last_memory_consolidation = None
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(
+        async_fire=lambda *args, **kwargs: events.append((args, kwargs))
+    ))
+
+    async def save():
+        saved.append(True)
+
+    assistant._save = save
+    result = asyncio.run(assistant._consolidate_pending_memories())
+
+    assert result == 1
+    summary = assistant.friends["123"]["summary"]
+    assert "Right, mate" not in summary
+    assert "red-ing" not in summary
+    assert "Preference: prefer comedy films" in summary
+    assert "Explicitly remembered: I use Home Assistant" in summary
+    assert len(assistant.friends["123"]["pending_messages"]) == 1
+    assert assistant.friends["123"]["pending_messages"][0]["content"] == "hello"
+    assert len(assistant.friends["123"]["messages"]) == 1
+    assert saved and events
+
+
+def test_memory_extractor_ignores_assistant_text_and_unverified_claims():
+    facts = assistant_module.extract_durable_memory_facts([
+        {"role": "assistant", "content": "The lights are definitely red this morning, mate."},
+        {"role": "user", "content": "The lights are red."},
+        {"role": "user", "content": "I love science fiction films."},
+        {"role": "user", "content": "Remember that my server is called GHOST."},
+    ])
+
+    assert facts == [
+        "Preference: love science fiction films",
+        "Explicitly remembered: my server is called GHOST",
+    ]
+
+
+def test_memory_consolidation_does_not_need_a_memory_model():
     saved = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
-        "summary": "Old summary",
-        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
-        "pending_messages": [{"role": "user", "sender": "Max", "content": str(i)} for i in range(5)],
+        "summary": "Preference: likes tea",
+        "messages": [],
+        "pending_messages": [{"role": "user", "content": "hello"}],
     }}
-    assistant.agents = {"memory_agent": "conversation.memory"}
-    assistant.memory_batch_messages = 2
-    assistant.limit = 3
-    assistant.history_limit = 1
-    assistant.budget = 1000
-    assistant.config = {}
+    assistant.memory_batch_messages = 5
+    assistant.history_limit = 0
     assistant.contact_names = {"123": "Max"}
     assistant.last_memory_consolidation = None
     assistant.sensor = SimpleNamespace(hass=None)
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
 
-    async def successful_call(agent, prompt):
-        prompts.append(prompt)
-        return "Updated durable memory"
-
     async def save():
         saved.append(True)
 
-    assistant._call = successful_call
     assistant._save = save
-
-    result = asyncio.run(assistant._consolidate_pending_memories())
-
-    assert result == 1
-    assert "Max: 3" in prompts[0] and "Max: 4" in prompts[0]
-    assert "Max: 0" not in prompts[0]
-    assert "Do not turn one event into a lasting preference" in prompts[0]
-    assert "VERIFIED SYSTEM EVENT" in prompts[0] or "CONTACT MESSAGE" in prompts[0]
-    assert assistant.friends["123"]["summary"] == "Updated durable memory"
+    assert asyncio.run(assistant._consolidate_pending_memories()) == 1
+    assert assistant.friends["123"]["summary"] == "Preference: likes tea"
     assert assistant.friends["123"]["pending_messages"] == []
-    assert len(assistant.friends["123"]["messages"]) == 1
     assert saved
-
-
-def test_failed_memory_consolidation_retains_pending_evidence():
-    assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.friends = {"123": {
-        "summary": "existing",
-        "messages": [],
-        "pending_messages": [{"role": "user", "content": "new evidence"}],
-    }}
-    assistant.agents = {"memory_agent": "conversation.memory"}
-    assistant.memory_batch_messages = 5
-    assistant.limit = 3
-    assistant.history_limit = 1
-    assistant.budget = 1000
-    assistant.config = {}
-    assistant.contact_names = {"123": "Max"}
-    assistant._last_message_monotonic = 1
-
-    async def failed_call(agent, prompt):
-        raise RuntimeError("model unavailable")
-
-    assistant._call = failed_call
-
-    result = asyncio.run(assistant._consolidate_pending_memories())
-
-    assert result == 0
-    assert assistant.friends["123"]["summary"] == "existing"
-    assert len(assistant.friends["123"]["pending_messages"]) == 1
-    assert assistant._last_message_monotonic > 1
 
 
 def test_group_relevance_gate_uses_ai_decision_before_reply():
@@ -737,13 +745,13 @@ def test_manual_send_rejects_two_destinations():
 
 
 
-def test_fallback_retry_is_allowed_for_missing_action_result():
-    assert assistant_module.action_result_retryable({
+def test_action_outcomes_are_never_automatically_retried():
+    assert not assistant_module.action_result_retryable({
         "response": {"response_type": "success", "speech": {"plain": {"speech": "Done"}}}
     })
 
 
-def test_fallback_retry_is_blocked_for_partial_action_failure():
+def test_partial_action_failure_is_not_retryable():
     assert not assistant_module.action_result_retryable({
         "response": {
             "response_type": "action_done",
@@ -755,11 +763,10 @@ def test_fallback_retry_is_blocked_for_partial_action_failure():
     })
 
 
-def test_fallback_retry_is_allowed_when_action_has_no_reported_targets():
-    assert assistant_module.action_result_retryable({
+def test_empty_action_result_is_not_retryable():
+    assert not assistant_module.action_result_retryable({
         "response": {"response_type": "action_done", "data": {"success": [], "failed": []}}
     })
-
 
 
 def test_model_call_does_not_retry_completed_action_without_speech():
@@ -1104,6 +1111,29 @@ def test_action_classifier_routes_colour_changes_to_operations():
     assert action.search("could you change the lights?")
     assert action.search("i want them red")
     assert action.search("set the rooms brightness to 50%")
+
+
+def test_request_kind_separates_actions_queries_and_conversation():
+    assert assistant_module.request_kind("Set the room brightness to 50%") == "action"
+    assert assistant_module.request_kind("I want the lights red") == "action"
+    assert assistant_module.request_kind("What's Harvey doing right now?") == "query"
+    assert assistant_module.request_kind("What's the current state of the room lights?") == "query"
+    assert assistant_module.request_kind("What do you think of this film?") == "conversation"
+
+
+def test_conversation_batch_coalesces_interleaved_messages_without_crossing_users():
+    queue = [
+        {"key": "dm:1", "sort": 1, "content": "first"},
+        {"key": "dm:2", "sort": 2, "content": "other person"},
+        {"key": "dm:1", "sort": 3, "content": "second"},
+        {"key": "guild:3:4", "sort": 4, "content": "group"},
+    ]
+
+    batch = assistant_module.take_conversation_batch(queue)
+
+    assert [item["content"] for item in batch] == ["first", "second"]
+    assert [item["content"] for item in queue] == ["other person", "group"]
+
 
 
 def test_live_state_classifier_routes_presence_questions_to_operations():
