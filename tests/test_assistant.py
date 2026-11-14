@@ -504,3 +504,48 @@ def test_context_audit_keeps_ten_newest_prompts_complete():
     assert len(assistant.transcript[1]["context_snapshot"]) < 5000
     assert len(assistant.transcript[2]["context_snapshot"]) == 5000
     assert len(assistant.transcript[-1]["context_snapshot"]) == 5000
+
+
+
+def test_model_call_tracks_per_agent_estimated_usage():
+    from types import SimpleNamespace
+    import asyncio
+
+    class FakeServices:
+        async def async_call(self, domain, service, data, blocking, return_response):
+            assert domain == "conversation"
+            assert service == "process"
+            assert data["agent_id"] == "conversation.local"
+            assert blocking is True
+            assert return_response is True
+            return {"response": {"speech": {"plain": {"speech": "Hello"}}}}
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    assistant.model_usage_data = {}
+
+    answer = asyncio.run(assistant._call("conversation.local", "x" * 40))
+
+    assert answer == "Hello"
+    assert assistant.model_usage_data["conversation.local"] == {
+        "requests": 1, "input_tokens": 10, "output_tokens": 1, "errors": 0
+    }
+
+
+def test_model_call_counts_provider_errors():
+    from types import SimpleNamespace
+    import asyncio
+    import pytest
+
+    class FakeServices:
+        async def async_call(self, *args, **kwargs):
+            raise RuntimeError("provider unavailable")
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    assistant.model_usage_data = {}
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        asyncio.run(assistant._call("conversation.local", "hello"))
+
+    assert assistant.model_usage_data["conversation.local"]["errors"] == 1
