@@ -456,10 +456,10 @@ class DiscordAssistant:
         if context_note:
             lines.append(
                 "Administrator-provided context for this conversation:\n"
-                + str(context_note)[:4000]
+                + str(context_note)[:min(4000, self.budget // 10)]
             )
 
-        summary_limit = min(2500, max(0, self.budget // 8))
+        summary_limit = min(2500, max(0, self.budget // 10))
         if summary and summary_limit:
             lines.append(
                 "Private memory for this approved DM contact:\n"
