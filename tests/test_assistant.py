@@ -232,7 +232,7 @@ def test_action_result_snapshot_keeps_success_and_failure_targets():
             "response_type": "action_done",
             "data": {
                 "success": [{"name": "Bedroom", "entity_id": "light.bedroom"}],
-                "failed": [{"name": "Hall", "id": "light.hall"}],
+                "failed": [{"name": "Hall", "id": "light.hall", "error": "entity unavailable"}],
             },
         },
     })
@@ -240,7 +240,7 @@ def test_action_result_snapshot_keeps_success_and_failure_targets():
     assert snapshot == {
         "response_type": "action_done",
         "success": [{"name": "Bedroom", "id": "light.bedroom"}],
-        "failed": [{"name": "Hall", "id": "light.hall"}],
+        "failed": [{"name": "Hall", "id": "light.hall", "error": "entity unavailable"}],
     }
 
 
