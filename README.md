@@ -25,6 +25,7 @@ Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → As
 - Configure its provider, API credentials, model, system prompt and available tools/functions in that agent's own Home Assistant integration settings.
 - GHOST does not overwrite that agent's system prompt or tool configuration. It sends bounded conversation context and the approved contact's private saved facts with each request.
 - GHOST still owns Discord queueing, contact isolation, memory extraction/consolidation, audit history and action-result verification. Switching models or changing the agent does not disable or erase memory.
+- For safety, API Mode only responds to group messages that directly mention or reply to GHOST. It does not send untrusted group text to the tool-enabled agent for a relevance decision.
 - The Operations and Fallback selectors are ignored in this mode. The selected Conversation Agent handles ordinary chat, relevance decisions, live-state queries and actions.
 
 ### Local Mode
