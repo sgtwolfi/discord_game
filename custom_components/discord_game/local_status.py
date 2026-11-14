@@ -14,11 +14,9 @@ _TIME_QUERY = re.compile(r"\b(?:current time|what time is it|what's the time|wha
 _WEATHER_QUERY = re.compile(r"\b(?:weather|forecast|temperature outside|how warm is it outside)\b", re.IGNORECASE)
 _LIGHT_QUERY = re.compile(r"\b(?:light|lights|lamp|lamps)\b", re.IGNORECASE)
 _STATUS_QUERY = re.compile(
-    r"\b(?:what(?:'s|s| is)\s+(?:your|my|ghost(?:'s)?|the assistant's)\s+(?:current\s+)?status|"
-    r"what(?:'s| is)\s+the\s+(?:current\s+)?status\s+of\s+(?:ghost|the assistant)|"
-    r"ghost status|status report|what are you up to|what are you doing|"
-    r"what(?:'s| is)\s+(?:ghost|the assistant)\s+(?:doing|up to)|"
-    r"what am i\s+(?:currently\s+)?(?:doing|up to)|how are you getting on)\b",
+    r"\b(?:what(?:'s|s| is)\s+my\s+(?:current\s+)?status|"
+    r"what am i\s+(?:currently\s+)?(?:doing|up to)|"
+    r"how am i getting on|my status|my current activity)\b",
     re.IGNORECASE,
 )
 
@@ -159,7 +157,10 @@ def answer_local_status(
         return _owner_status(hass, status_entity, owner)
     if person:
         requested = re.sub(r"['’]s$", "", person.group(1).strip()).casefold()
-        if requested in {owner.casefold(), "the owner", "me", "myself", "i"}:
+        if (
+            requested in {owner.casefold(), "the owner", "me", "myself", "i"}
+            or difflib.SequenceMatcher(None, requested, owner.casefold()).ratio() >= 0.82
+        ):
             return _owner_status(hass, status_entity, owner)
     parts = []
     if person:
