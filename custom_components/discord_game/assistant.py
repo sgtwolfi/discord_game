@@ -703,6 +703,9 @@ class DiscordAssistant:
         for item in self.queue:
             if item["message_id"] == str(message_id):
                 item["content"] = content
+                for message in getattr(self, "conversation_logs", {}).get(item["key"], []):
+                    if str(message.get("message_id") or "") == str(message_id):
+                        message["content"] = content
                 self.hass.bus.async_fire("discord_game_assistant_queue_edited", {
                     "message_id": str(message_id),
                     "conversation": item["key"],
@@ -716,6 +719,11 @@ class DiscordAssistant:
         for index, item in enumerate(self.queue):
             if item["message_id"] == str(message_id):
                 removed = self.queue.pop(index)
+                messages = getattr(self, "conversation_logs", {}).get(removed["key"], [])
+                messages[:] = [
+                    message for message in messages
+                    if str(message.get("message_id") or "") != str(message_id)
+                ]
                 self.hass.bus.async_fire("discord_game_assistant_queue_message_cancelled", {
                     "message_id": str(message_id),
                     "conversation": removed["key"],
@@ -800,8 +808,15 @@ class DiscordAssistant:
 
     async def clear_queue(self):
         """Discard pending messages without interrupting the active response."""
-        removed = len(self.queue)
+        removed_items = list(self.queue)
+        removed = len(removed_items)
         self.queue.clear()
+        for item in removed_items:
+            messages = getattr(self, "conversation_logs", {}).get(item["key"], [])
+            messages[:] = [
+                message for message in messages
+                if str(message.get("message_id") or "") != str(item.get("message_id") or "")
+            ]
         self.error = None
         self._refresh_sensor()
         self.hass.bus.async_fire("discord_game_assistant_queue_cleared", {"removed": removed})
