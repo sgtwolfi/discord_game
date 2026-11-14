@@ -99,12 +99,15 @@ class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None):
         errors: Dict[str, str] = {}
         if user_input is not None:
-            try:
-                self.members, self.user_names, self.channels, self.channel_names, \
-                    self.voice_channels, self.voice_channel_names = \
-                    await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
-            except ValueError:
-                errors["base"] = "auth"
+            if user_input.get("assistant_enabled") and not str(user_input.get("conversation_agent", "")).strip():
+                errors["base"] = "assistant_agent_required"
+            if not errors:
+                try:
+                    self.members, self.user_names, self.channels, self.channel_names, \
+                        self.voice_channels, self.voice_channel_names = \
+                        await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
+                except ValueError:
+                    errors["base"] = "auth"
             if not errors:
                 self.data = user_input
                 self.data[CONF_MEMBERS] = []
