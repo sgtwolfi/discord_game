@@ -20,7 +20,8 @@ Use IDs such as `conversation.my_ollama_agent`. This integration does not store 
 - GHOST reads its live status directly from `input_text.ghost_status` by default. Change the entity in GHOST → Configuration → Assistant behaviour if your helper has a different ID. The integration reads the state itself and injects the current value into both Local and API model context; it does **not** need to be exposed to Assist or enabled as an AI tool.
 - Questions such as “what's your status?” are answered directly from that helper, without a model call. If the helper is missing or unavailable, GHOST says so rather than inventing a status.
 - The typing indicator starts before group relevance checks and model calls, and stays active while GHOST works. This is enabled by default for DMs and configured group channels.
-- Friend profile pictures are retrieved from Discord user profiles, with the existing Discord Game user sensors as a fallback. The chat panel uses these avatars and opens each conversation at the newest message automatically.
+- Friend profile pictures are taken from Discord Game's tracked-user sensor attributes where available, with the same Discord client profile as a fallback. The chat panel uses these avatars and opens each conversation at the newest message automatically.
+- The admin chat dashboard displays the current helper value and marks the assistant as needing attention when its latest request failed.
 
 ## Runtime modes
 
