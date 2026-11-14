@@ -1,4 +1,4 @@
-# Discord Game + GHOST Assistant (v9.0.0)
+# Discord Game + GHOST Assistant (v9.0.1)
 
 This integration also includes the GHOST Discord assistant, live status reader, verified reminders, Discord profile avatars and an administrator chat panel. See the [full GHOST documentation](https://github.com/sgtwolfi/discord_game#readme) for assistant setup and configuration.
 
