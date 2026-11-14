@@ -971,6 +971,7 @@ class DiscordAssistant:
         role = "conversation"
         answer = ""
         action_result = None
+        is_action = False
         models_attempted = []
         failures = []
         try:
