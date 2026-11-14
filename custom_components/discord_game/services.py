@@ -30,6 +30,19 @@ REPLAY = vol.Schema({
     vol.Required("timestamp"): cv.string,
     vol.Required("conversation"): cv.string,
 })
+SETTINGS = vol.Schema({
+    vol.Required("fallback_after_failures"): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
+    vol.Required("queue_debounce_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
+    vol.Required("max_context_messages"): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
+    vol.Required("context_budget_chars"): vol.All(vol.Coerce(int), vol.Range(min=2000, max=50000)),
+    vol.Required("history_limit"): vol.All(vol.Coerce(int), vol.Range(min=10, max=200)),
+    vol.Required("typing_enabled"): cv.boolean,
+    vol.Required("assistant_group_channels"): cv.string,
+    vol.Required("conversation_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    vol.Required("operations_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    vol.Required("advanced_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    vol.Required("memory_system_prompt"): vol.All(cv.string, vol.Length(max=4000)),
+})
 
 
 def assistants(hass: HomeAssistant):
@@ -137,6 +150,18 @@ async def async_setup_services(hass: HomeAssistant):
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_queue()
 
+    async def update_settings(call: ServiceCall):
+        """Persist advanced assistant settings and reload the integration."""
+        await ensure_admin(call)
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if not entries:
+            raise HomeAssistantError("Discord Game config entry was not found")
+        entry = entries[0]
+        hass.config_entries.async_update_entry(
+            entry,
+            options={**entry.options, **dict(call.data)},
+        )
+
     hass.services.async_register(DOMAIN, "send_message", send, schema=SEND)
     hass.services.async_register(DOMAIN, "clear_friend_memory", clear, schema=CLEAR)
     hass.services.async_register(DOMAIN, "set_friend_memory", set_memory, schema=SET_MEMORY)
@@ -147,6 +172,7 @@ async def async_setup_services(hass: HomeAssistant):
     hass.services.async_register(DOMAIN, "edit_queued_message", edit_queue, schema=EDIT_QUEUE)
     hass.services.async_register(DOMAIN, "cancel_queued_message", cancel_queued, schema=CANCEL_QUEUE)
     hass.services.async_register(DOMAIN, "replay_transcript", replay, schema=REPLAY)
+    hass.services.async_register(DOMAIN, "update_settings", update_settings, schema=SETTINGS)
     hass.data[DOMAIN]["_assistant_services"] = True
 
 
@@ -154,7 +180,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript"):
+    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)

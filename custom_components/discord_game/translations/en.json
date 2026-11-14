@@ -29,7 +29,7 @@
     "step": {
       "init": {
         "title": "Discord Game and GHOST Assistant Options",
-        "description": "Existing Discord settings are retained. Configure assistant agents only when you are ready to enable the assistant.",
+        "description": "Choose the conversation, operations, memory and fallback agents here. Fine-tuning, queue behaviour and editable system prompts are managed in the GHOST sidebar panel.",
         "data": {
           "access_token": "Discord Bot access token",
           "image_format": "Image format",
@@ -39,14 +39,7 @@
           "conversation_agent": "Conversation model agent ID",
           "operations_agent": "Operations model agent ID",
           "memory_agent": "Memory manager agent ID (optional)",
-          "fallback_agent": "Paid API fallback agent ID (optional)",
-          "fallback_after_failures": "Local attempts before fallback",
-          "queue_debounce_seconds": "Message grouping delay (seconds)",
-          "max_context_messages": "Maximum context messages",
-          "context_budget_chars": "Approximate context budget (characters)",
-          "history_limit": "Messages before memory compression",
-          "typing_enabled": "Show Discord typing indicator",
-          "assistant_group_channels": "Server AI channels (comma-separated channel IDs)"
+          "fallback_agent": "Paid API fallback agent ID (optional)"
         }
       },
       "members": {
@@ -61,7 +54,8 @@
     },
     "error": {
       "auth": "Provided Discord Bot access token is not valid.",
-      "assistant_agent_required": "Select a conversation agent before enabling the Discord assistant."
+      "assistant_agent_required": "Select a conversation agent before enabling the Discord assistant.",
+      "discord_api": "Discord could not load the server member/channel list. Check the Home Assistant logs and Discord bot permissions, then try again."
     }
   }
 }

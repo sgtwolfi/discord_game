@@ -168,25 +168,54 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: Optional[Dict[str, Any]] = None):
         errors: Dict[str, str] = {}
+        current_token = self._get_current(CONF_ACCESS_TOKEN)
         if user_input is not None:
-            try:
-                self.members, self.user_names, self.channels, self.channel_names, \
-                    self.voice_channels, self.voice_channel_names = \
-                    await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
-            except ValueError:
-                errors["base"] = "auth"
+            self.options_data = dict(user_input)
+            # Keep advanced panel settings when saving the integration's model selectors.
+            advanced_defaults = {
+                "fallback_after_failures": 2,
+                "queue_debounce_seconds": 2.5,
+                "max_context_messages": 20,
+                "context_budget_chars": 10000,
+                "history_limit": 60,
+                "typing_enabled": True,
+                "assistant_group_channels": "",
+                "conversation_system_prompt": "",
+                "operations_system_prompt": "",
+                "advanced_system_prompt": "",
+                "memory_system_prompt": "",
+            }
+            for key, default in advanced_defaults.items():
+                self.options_data.setdefault(key, self._get_current(key, default))
+            if self.options_data.get("assistant_enabled") and not str(self.options_data.get("conversation_agent", "")).strip():
+                errors["base"] = "assistant_agent_required"
+            # Saving assistant settings must not trigger a needless Discord API
+            # login/member scan. That scan can fail on privileged intents or
+            # transient Discord API errors and used to surface as HA "Unknown error".
+            if not errors and str(user_input.get(CONF_ACCESS_TOKEN, "")).strip() == str(current_token).strip():
+                self.options_data[CONF_MEMBERS] = list(self._get_current(CONF_MEMBERS, []))
+                self.options_data[CONF_CHANNELS] = list(self._get_current(CONF_CHANNELS, []))
+                self.options_data[CONF_VOICE_CHANNELS] = list(self._get_current(CONF_VOICE_CHANNELS, []))
+                return self.async_create_entry(title="", data=self.options_data)
+
             if not errors:
-                self.options_data = user_input
+                try:
+                    self.members, self.user_names, self.channels, self.channel_names, \
+                        self.voice_channels, self.voice_channel_names = \
+                        await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
+                except Exception as err:  # noqa: BLE001 - surface Discord/API failures in the form
+                    _LOGGER.exception("Unable to validate updated Discord token or load server choices")
+                    errors["base"] = "auth" if isinstance(err, ValueError) else "discord_api"
+
+            if not errors:
                 self.options_data[CONF_MEMBERS] = []
                 self.options_data[CONF_CHANNELS] = []
                 self.options_data[CONF_VOICE_CHANNELS] = []
                 return await self.async_step_members()
 
-        current_token = self._get_current(CONF_ACCESS_TOKEN)
         current_image_format = self._get_current(CONF_IMAGE_FORMAT, "webp")
         current_steam_key = self._get_current(CONF_STEAM_API_KEY)
         current_entities_disabled = self._get_current(CONF_ENTITIES_DISABLED_DEFAULT, False)
-
         options_schema = vol.Schema(
             {
                 vol.Required(CONF_ACCESS_TOKEN, default=current_token): cv.string,
@@ -204,16 +233,8 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional("operations_agent", default=self._get_current("operations_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("memory_agent", default=self._get_current("memory_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
-                vol.Required("fallback_after_failures", default=self._get_current("fallback_after_failures", 2)): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
-                vol.Required("queue_debounce_seconds", default=self._get_current("queue_debounce_seconds", 2.5)): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
-                vol.Required("max_context_messages", default=self._get_current("max_context_messages", 20)): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
-                vol.Required("context_budget_chars", default=self._get_current("context_budget_chars", 10000)): vol.All(vol.Coerce(int), vol.Range(min=2000, max=50000)),
-                vol.Required("history_limit", default=self._get_current("history_limit", 60)): vol.All(vol.Coerce(int), vol.Range(min=10, max=200)),
-                vol.Required("typing_enabled", default=self._get_current("typing_enabled", True)): selector.BooleanSelector(),
-                vol.Optional("assistant_group_channels", default=self._get_current("assistant_group_channels", "")): cv.string,
             }
         )
-
         return self.async_show_form(step_id="init", data_schema=options_schema, errors=errors)
 
     async def async_step_members(self, user_input: Optional[Dict[str, Any]] = None):

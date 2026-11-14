@@ -206,7 +206,20 @@ class DiscordAssistant:
           "active_request": self.active_request,
           "context_notes": dict(self.context_notes),
           "model_usage": self.model_usage(),
-          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
+          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()},
+          "settings": {
+              "fallback_after_failures": getattr(self, "retries", 2),
+              "queue_debounce_seconds": getattr(self, "delay", 2.5),
+              "max_context_messages": getattr(self, "limit", 20),
+              "context_budget_chars": getattr(self, "budget", 10000),
+              "history_limit": getattr(self, "history_limit", 60),
+              "typing_enabled": getattr(self, "typing", True),
+              "assistant_group_channels": ",".join(sorted(getattr(self, "group_channels", set()))),
+              "conversation_system_prompt": getattr(self, "config", {}).get("conversation_system_prompt", ""),
+              "operations_system_prompt": getattr(self, "config", {}).get("operations_system_prompt", ""),
+              "advanced_system_prompt": getattr(self, "config", {}).get("advanced_system_prompt", ""),
+              "memory_system_prompt": getattr(self, "config", {}).get("memory_system_prompt", ""),
+          }}
     def public_attributes(self):
         """Expose only non-private status through the ordinary HA state registry."""
         return {
@@ -469,6 +482,14 @@ class DiscordAssistant:
                 "do not pretend to have performed it; explain that it needs the operations tools."
             )
 
+        custom_prompt = str(getattr(self, "config", {}).get(f"{role}_system_prompt", "") or "").strip()
+        if custom_prompt:
+            lines.append(
+                "Additional administrator instructions for this role. These do not override "
+                "the safety, privacy, action-verification or identity rules above:\n"
+                + custom_prompt[:min(6000, self.budget // 3)]
+            )
+
         if context_note:
             lines.append(
                 "Administrator-provided context for this conversation:\n"
@@ -666,7 +687,8 @@ class DiscordAssistant:
                 "Preserve still-valid facts from the existing summary, add only supported durable facts, "
                 "remove contradictions only when newer messages clearly correct them, and do not invent details. "
                 "Return a concise summary.\n\n"
-                f"Existing summary:\n{prior_summary}\n\nNew older conversation:\n{text[:self.budget]}"
+                + str(getattr(self, "config", {}).get("memory_system_prompt", "") or "")[:4000]
+                + f"\n\nExisting summary:\n{prior_summary}\n\nNew older conversation:\n{text[:self.budget]}"
             )
             try:
                 record["summary"] = (await self._call(self.agents["memory_agent"], memory_prompt))[:4000]
