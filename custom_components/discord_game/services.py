@@ -36,6 +36,7 @@ SETTINGS = vol.Schema({
     vol.Required("max_context_messages"): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
     vol.Required("context_budget_chars"): vol.All(vol.Coerce(int), vol.Range(min=2000, max=50000)),
     vol.Required("history_limit"): vol.All(vol.Coerce(int), vol.Range(min=10, max=200)),
+    vol.Required("conversation_history_limit"): vol.All(vol.Coerce(int), vol.Range(min=50, max=2000)),
     vol.Required("typing_enabled"): cv.boolean,
     vol.Required("assistant_group_channels"): cv.string,
     vol.Required("conversation_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
@@ -150,6 +151,13 @@ async def async_setup_services(hass: HomeAssistant):
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_queue()
 
+    async def update_contacts(call: ServiceCall):
+        await ensure_admin(call)
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].update_contacts(call.data["contacts"])
+
     async def update_settings(call: ServiceCall):
         """Persist advanced assistant settings and reload the integration."""
         await ensure_admin(call)
@@ -173,6 +181,7 @@ async def async_setup_services(hass: HomeAssistant):
     hass.services.async_register(DOMAIN, "cancel_queued_message", cancel_queued, schema=CANCEL_QUEUE)
     hass.services.async_register(DOMAIN, "replay_transcript", replay, schema=REPLAY)
     hass.services.async_register(DOMAIN, "update_settings", update_settings, schema=SETTINGS)
+    hass.services.async_register(DOMAIN, "update_contacts", update_contacts, schema=vol.Schema({vol.Required("contacts"): [vol.Schema({vol.Required("user_id"): cv.string, vol.Optional("name", default=""): cv.string})]}))
     hass.data[DOMAIN]["_assistant_services"] = True
 
 
@@ -180,7 +189,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings"):
+    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings", "update_contacts"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)
