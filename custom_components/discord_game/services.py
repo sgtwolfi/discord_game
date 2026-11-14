@@ -40,6 +40,8 @@ RESET_PROMPT = vol.Schema({
 
 SETTINGS = vol.Schema({
     vol.Required("assistant_mode", default="local"): vol.In({"api", "local"}),
+    vol.Required("group_relevance_agent", default=""): cv.string,
+    vol.Required("group_require_mention", default=False): cv.boolean,
     vol.Required("local_reminder_script", default="script.set_timer_alarm_or_reminder"): vol.All(
         cv.string, vol.Match(r"^script[.][a-z0-9_]+$")
     ),
