@@ -175,9 +175,11 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             advanced_defaults = {
                 "fallback_after_failures": 2,
                 "queue_debounce_seconds": 2.5,
-                "max_context_messages": 20,
+                "max_context_messages": 12,
                 "context_budget_chars": 10000,
-                "history_limit": 60,
+                "history_limit": 8,
+                "memory_idle_seconds": 300,
+                "memory_batch_messages": 20,
                 "conversation_history_limit": 500,
                 "typing_enabled": True,
                 "assistant_group_channels": "",
