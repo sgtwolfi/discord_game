@@ -701,8 +701,8 @@ class DiscordGameGhostPanel extends HTMLElement {
         this._render(); return;
       }
       const data = {};
-      data.assistant_mode = settings.assistant_mode || d.mode || "local";
-      data.local_reminder_script = settings.local_reminder_script || "script.set_timer_alarm_or_reminder";
+      data.assistant_mode = modeSelect.value;
+      data.local_reminder_script = reminderScript.value || "script.set_timer_alarm_or_reminder";
       data.fallback_after_failures = Number(settings.fallback_after_failures ?? 2);
       data.queue_debounce_seconds = Number(settings.queue_debounce_seconds ?? 2.5);
       data.max_context_messages = Number(settings.max_context_messages ?? 12);
