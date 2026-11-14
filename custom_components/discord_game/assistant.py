@@ -149,6 +149,7 @@ class DiscordAssistant:
         self.transcript=[]
         self.model_usage_data = {}
         self.active_request = None
+        self.diagnostics_revision = 0
         self._state="starting" if self.enabled else "disabled"
         self.sensor=AssistantSensor(self)
     @property
@@ -156,6 +157,7 @@ class DiscordAssistant:
         return "disabled" if not self.enabled else "processing" if self.active else "paused" if self.paused else "queued" if self.queue else self._state
     def _refresh_sensor(self):
         """Push queue and processing changes to the Home Assistant entity."""
+        self.diagnostics_revision += 1
         if self.sensor.hass is not None:
             self.sensor.async_write_ha_state()
 
@@ -210,6 +212,7 @@ class DiscordAssistant:
         return {
             "enabled": self.enabled,
             "paused": self.paused,
+            "diagnostics_revision": self.diagnostics_revision,
             "queue_length": len(self.queue),
             "processing": self.active,
             "last_activity": self.last_activity,
