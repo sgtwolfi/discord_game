@@ -53,7 +53,7 @@ ACTION=re.compile(
     re.IGNORECASE,
 )
 LIVE_STATE_QUERY = re.compile(
-    r"\b(what(?:'s| is) .{0,50} (?:doing|up to)|what is .{0,50} doing|"
+    r"\b(what(?:'s|s| is) .{0,50} (?:doing|up to)|what is .{0,50} doing|"
     r"what(?:'s| is) the (?:current )?(?:status|state)|current status|"
     r"is .{0,40} (?:home|away|online|offline|on|off)|"
     r"are .{0,40} (?:on|off)|what(?:'s| is) happening right now|"
