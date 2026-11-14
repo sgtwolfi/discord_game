@@ -2202,3 +2202,109 @@ def test_function_configuration_errors_are_non_retryable_and_detected_for_fallba
     assert assistant_module.is_function_configuration_error(
         "The selected Home Assistant conversation agent could not load its configured functions."
     )
+
+
+def test_local_status_reader_reads_ghost_status_helper_without_assist_exposure():
+    status = SimpleNamespace(state="Optimising the downstairs server")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: status if entity_id == "input_text.ghost_status" else None))
+    answer = answer_local_status(
+        hass, "What's your status?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "My current status is: Optimising the downstairs server"
+
+
+def test_local_status_reader_reports_missing_ghost_status_helper():
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: None))
+    answer = answer_local_status(
+        hass, "What's GHOST's status?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "I can't read my current status because input_text.ghost_status is unavailable."
+
+
+def test_ghost_status_is_injected_into_api_and_local_model_context():
+    state = SimpleNamespace(state="Checking the network")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    batch = [{"sender_name": "Max", "content": "Hello", "is_dm": True}]
+    for mode in ("api", "local"):
+        assistant = DiscordAssistant.__new__(DiscordAssistant)
+        assistant.mode = mode
+        assistant.status_entity = "input_text.ghost_status"
+        assistant.hass = hass
+        assistant.diagnostics_revision = 0
+        assistant.limit = 8
+        assistant.budget = 10000
+        assistant.config = {}
+        prompt = assistant._prompt(batch, [], "")
+        assert "Checking the network" in prompt
+        assert "input_text.ghost_status" in prompt
+
+
+def test_ghost_status_question_is_classified_as_live_query():
+    assert assistant_module.request_kind("What's your status?") == "query"
+    assert assistant_module.request_kind("What are you doing?") == "query"
+
+
+def test_local_reminder_parser_handles_half_hour_and_compact_units():
+    now = datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
+    assert parse_local_reminder("Remind me to call Max in half an hour", now) == {
+        "name": "call Max", "duration_seconds": 1800
+    }
+    assert parse_local_reminder("Remind me to call Max in 2h", now) == {
+        "name": "call Max", "duration_seconds": 7200
+    }
+
+
+def test_reminder_confirmation_recovers_absolute_clock_time():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yes"}],
+        [{
+            "role": "assistant",
+            "content": "Would you like me to set a reminder tomorrow at 7pm to text Ryan?",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result == {
+        "name": "text Ryan", "alarm_time": "19:00", "date": "2026-11-15"
+    }
+
+
+def test_reminder_confirmation_recovers_for_clock_time_wording():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yep"}],
+        [{
+            "role": "assistant",
+            "content": "You want a reminder for 7pm tomorrow to text Ryan, right? Confirm if you'd like me to set it.",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result == {
+        "name": "text Ryan", "alarm_time": "19:00", "date": "2026-11-15"
+    }
+
+
+def test_ghost_status_snapshot_reports_unavailable_helper_safely():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: None))
+    assert assistant._ghost_status_value() is None
+    assert "unavailable" in assistant._ghost_status_context()
+
+
+def test_local_status_reader_accepts_current_and_third_person_phrasings():
+    state = SimpleNamespace(state="Running a maintenance check")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    for question in ("What's your current status?", "What's the current status of GHOST?"):
+        assert answer_local_status(
+            hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
+        ) == "My current status is: Running a maintenance check"
+
+
+def test_ghost_activity_question_uses_ghost_status_not_discord_friend_lookup():
+    state = SimpleNamespace(state="Waiting for the next command")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    assert answer_local_status(
+        hass, "What's GHOST doing?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    ) == "My current status is: Waiting for the next command"

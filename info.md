@@ -1,3 +1,7 @@
+# Discord Game + GHOST Assistant (v9.0.0)
+
+This integration also includes the GHOST Discord assistant, live status reader, verified reminders, Discord profile avatars and an administrator chat panel. See the [full GHOST documentation](https://github.com/sgtwolfi/discord_game#readme) for assistant setup and configuration.
+
 # Discord user game status Custom Component (for Home Assistant)
 
 This component pulls information about user's status, and the game they're currently playing from the Discord.

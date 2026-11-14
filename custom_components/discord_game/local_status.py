@@ -6,7 +6,6 @@ import difflib
 import re
 from datetime import datetime
 
-
 _PERSON_ACTIVITY = re.compile(
     r"\b(?:what(?:'s|s| is)|tell me what)\s+(.+?)\s+(?:doing|up to)\b",
     re.IGNORECASE,
@@ -14,6 +13,13 @@ _PERSON_ACTIVITY = re.compile(
 _TIME_QUERY = re.compile(r"\b(?:current time|what time is it|what's the time|whats the time|time right now)\b", re.IGNORECASE)
 _WEATHER_QUERY = re.compile(r"\b(?:weather|forecast|temperature outside|how warm is it outside)\b", re.IGNORECASE)
 _LIGHT_QUERY = re.compile(r"\b(?:light|lights|lamp|lamps)\b", re.IGNORECASE)
+_STATUS_QUERY = re.compile(
+    r"\b(?:what(?:'s| is)\s+(?:your|ghost(?:'s)?|the assistant's)\s+(?:current\s+)?status|"
+    r"what(?:'s| is)\s+the\s+(?:current\s+)?status\s+of\s+(?:ghost|the assistant)|"
+    r"ghost status|status report|what are you up to|what are you doing|"
+    r"what(?:'s| is)\s+(?:ghost|the assistant)\s+(?:doing|up to)|how are you getting on)\b",
+    re.IGNORECASE,
+)
 
 
 def _name(state) -> str:
@@ -116,9 +122,14 @@ def _lights(hass, query: str) -> str:
     return "; ".join(readings) + "." + extra
 
 
-def answer_local_status(hass, query: str, now: datetime) -> str | None:
+def answer_local_status(hass, query: str, now: datetime, status_entity: str = "input_text.ghost_status") -> str | None:
     """Answer simple live-state questions from HA state, without an LLM tool call."""
     value = str(query or "").strip()
+    if _STATUS_QUERY.search(value):
+        state = hass.states.get(status_entity) if hasattr(hass.states, "get") else None
+        if state is None or str(state.state).strip().lower() in {"", "unknown", "unavailable", "none"}:
+            return f"I can't read my current status because {status_entity} is unavailable."
+        return "My current status is: " + str(state.state).strip()[:1000]
     person = _PERSON_ACTIVITY.search(value)
     parts = []
     if person:
