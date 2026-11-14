@@ -334,6 +334,8 @@ def test_transcript_replay_requeues_original_dm_messages():
     assistant.queue = []
     assistant.max_queue = 200
     assistant.bot = FakeBot()
+    assistant.approved_users = {"123"}
+    assistant.group_channels = set()
     assistant.wake = asyncio.Event()
     assistant.sensor = SimpleNamespace(hass=None)
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(
@@ -459,3 +461,27 @@ def test_memory_compression_trims_to_short_history_after_success():
 
     assert len(assistant.friends["123"]["messages"]) == 3
     assert assistant.friends["123"]["summary"] == "durable summary"
+
+
+
+def test_manual_dm_send_rejects_unapproved_user():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+
+    with pytest.raises(ValueError, match="not on the approved"):
+        asyncio.run(assistant.send_manual(message="Hello", user_id="456"))
+
+
+def test_manual_channel_send_rejects_unselected_channel():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.group_channels = {"789"}
+
+    with pytest.raises(ValueError, match="not enabled for GHOST"):
+        asyncio.run(assistant.send_manual(message="Hello", channel_id="456"))
