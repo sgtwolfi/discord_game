@@ -1474,11 +1474,13 @@ class DiscordAssistant:
             local_status_answer = (
                 answer_local_status(self.hass, request_text, dt_util.now())
                 if self.mode == "local" and kind == "query"
+                and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             local_reminder = (
                 parse_local_reminder(request_text, dt_util.now())
                 if self.mode == "local" and item["is_dm"]
+                and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             if (
