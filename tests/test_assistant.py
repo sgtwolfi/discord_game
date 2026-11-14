@@ -1946,6 +1946,7 @@ def test_group_history_is_restored_from_persisted_conversation_logs(monkeypatch)
 
     monkeypatch.setattr(assistant_module, "Store", FakeStore)
     assistant = DiscordAssistant(SimpleNamespace(), "entry", {"assistant_enabled": False}, None)
+    assistant._refresh_sensor = lambda: None
     asyncio.run(assistant.async_start())
     assert [message["role"] for message in assistant.groups["guild:1:2"]] == ["user", "assistant"]
     assert assistant.groups["guild:1:2"][-1]["content"] == "What do you need help with?"
