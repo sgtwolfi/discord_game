@@ -126,8 +126,15 @@ update_settings:
       required: true
       selector:
         number:
-          min: 10
+          min: 20
           max: 200
+          mode: box
+    conversation_history_limit:
+      required: true
+      selector:
+        number:
+          min: 50
+          max: 2000
           mode: box
     typing_enabled:
       required: true
@@ -157,3 +164,12 @@ update_settings:
       selector:
         text:
           multiline: true
+
+update_contacts:
+  name: Update GHOST friend list
+  description: Add or remove contacts approved to message GHOST.
+  fields:
+    contacts:
+      required: true
+      selector:
+        object:

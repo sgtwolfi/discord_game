@@ -13,7 +13,7 @@ from .const import CONF_MEMBERS, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
 ACTION=re.compile(
-    r"\b(remind me|reminder|timer|alarm|turn on|turn off|switch on|switch off|"
+    r"\b(remind me|reminder|timer|alarm|turn on|turn off|turn(?:\s+\w+){0,5}\s+(?:on|off)|switch on|switch off|"
     r"activate|deactivate|lock|unlock|open|close|set|adjust|increase|decrease|"
     r"dim|brighten|cooler|warmer|schedule|cancel|delete|add|remove|toggle|"
     r"enable|disable|play|pause|stop|start|volume|notify|send (?:a )?message|"
@@ -130,9 +130,13 @@ class DiscordAssistant:
         self.limit=max(4,min(80,int(config.get("max_context_messages",20))))
         self.budget=max(2000,min(50000,int(config.get("context_budget_chars",10000))))
         self.history_limit=max(self.limit,min(200,int(config.get("history_limit",60))))
+        self.conversation_history_limit=max(50,min(2000,int(config.get("conversation_history_limit",500))))
         self.typing=bool(config.get("typing_enabled",True))
         self.group_channels={x.strip() for x in str(config.get("assistant_group_channels","")).split(",") if x.strip().isdigit()}
-        self.approved_users = {str(user_id) for user_id in config.get(CONF_MEMBERS, [])}
+        self.approved_users = {str(user_id) for user_id in config.get("assistant_approved_users", config.get(CONF_MEMBERS, []))}
+        self.contact_names = {str(k): str(v) for k, v in (config.get("assistant_contact_names") or {}).items()}
+        self.conversation_logs = defaultdict(list)
+        self.conversation_meta = {}
         self.store=Store(hass,1,f"{DOMAIN}_{entry_id}_assistant")
         self.friends={}
         self.groups=defaultdict(list)
@@ -166,6 +170,66 @@ class DiscordAssistant:
         self.friends = saved.get("friends", {})
         self.transcript = saved.get("transcript", [])[-100:]
         self.model_usage_data = saved.get("model_usage", {})
+        self.conversation_logs = defaultdict(list, saved.get("conversation_logs", {}))
+        self.conversation_meta = saved.get("conversation_meta", {})
+        if not self.conversation_logs:
+            # Migrate the earlier audit transcript into the new chat-history store.
+            for entry in self.transcript:
+                key = str(entry.get("conversation") or "")
+                if not key:
+                    continue
+                for message in entry.get("messages", []):
+                    self.conversation_logs[key].append({
+                        "role": "user", "sender": message.get("sender") or "Discord user",
+                        "sender_id": str(message.get("sender_id") or ""),
+                        "content": message.get("content") or "",
+                        "timestamp": entry.get("timestamp"),
+                    })
+                if entry.get("assistant"):
+                    self.conversation_logs[key].append({
+                        "role": "assistant", "sender": "GHOST",
+                        "content": entry["assistant"], "timestamp": entry.get("timestamp"),
+                        "model": entry.get("model"),
+                    })
+                self.conversation_meta.setdefault(key, {
+                    "label": entry.get("sender") or key,
+                    "channel_id": str(entry.get("channel_id") or ""),
+                    "kind": "friend" if entry.get("is_dm") else "group",
+                })
+        # Older releases stored durable DM history separately from the audit
+        # transcript. Seed the new chat view from that history when needed.
+        for user_id, record in self.friends.items():
+            key = f"dm:{user_id}"
+            if not self.conversation_logs.get(key):
+                for message in record.get("messages", []):
+                    role = message.get("role", "user")
+                    self.conversation_logs[key].append({
+                        "role": role,
+                        "sender": message.get("sender") or ("GHOST" if role == "assistant" else self._display_name(user_id)),
+                        "sender_id": str(user_id) if role == "user" else "",
+                        "content": message.get("content", ""),
+                        "timestamp": message.get("timestamp"),
+                        "model": message.get("model"),
+                    })
+        if self.enabled:
+            for user_id in self.approved_users:
+                if user_id not in self.contact_names:
+                    try:
+                        user = self.bot.get_user(int(user_id)) or await self.bot.fetch_user(int(user_id))
+                        self.contact_names[user_id] = getattr(user, "global_name", None) or user.name
+                    except Exception:  # noqa: BLE001 - Discord name lookup is best-effort
+                        self.contact_names.setdefault(user_id, user_id)
+            for channel_id in self.group_channels:
+                try:
+                    channel = self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id))
+                    key = f"guild:{channel.guild.id}:{channel_id}"
+                    self.conversation_meta.setdefault(key, {
+                        "label": channel.name, "subtitle": channel.guild.name,
+                        "channel_name": channel.name, "channel_id": channel_id,
+                        "guild_id": str(channel.guild.id), "kind": "group",
+                    })
+                except Exception:
+                    _LOGGER.debug("Unable to resolve GHOST group channel %s", channel_id, exc_info=True)
         if not self.enabled:
             self._refresh_sensor()
             return
@@ -185,8 +249,73 @@ class DiscordAssistant:
             "friends": self.friends,
             "transcript": self.transcript[-100:],
             "model_usage": self.model_usage_data,
+            "conversation_logs": {key: value[-getattr(self, "conversation_history_limit", 500):] for key, value in getattr(self, "conversation_logs", {}).items()},
+            "conversation_meta": getattr(self, "conversation_meta", {}),
         })
+    def _display_name(self, user_id):
+        return getattr(self, "contact_names", {}).get(str(user_id), str(user_id))
+
+    def conversation_messages(self, key):
+        """Return a bounded, chronological transcript for one approved conversation."""
+        key = str(key)
+        if key.startswith("dm:") and key[3:] not in self.approved_users:
+            raise ValueError("This Discord contact is not approved")
+        if key.startswith("guild:"):
+            channel_id = key.rsplit(":", 1)[-1]
+            if channel_id not in self.group_channels:
+                raise ValueError("This server channel is not enabled for GHOST")
+        if key not in self.conversation_logs and key not in self.conversation_meta:
+            raise ValueError("Conversation was not found")
+        return {
+            "conversation": key,
+            "meta": self.conversation_meta.get(key, {}),
+            "messages": list(self.conversation_logs.get(key, []))[-self.conversation_history_limit:],
+        }
+
     def diagnostics(self):
+        conversations = []
+        logs = getattr(self, "conversation_logs", {})
+        meta_map = getattr(self, "conversation_meta", {})
+        bot = getattr(self, "bot", None)
+        keys = {key for key in set(logs) | set(meta_map) if (key.startswith("dm:") and key[3:] in self.approved_users) or (key.startswith("guild:") and key.rsplit(":", 1)[-1] in self.group_channels)}
+        keys.update(f"dm:{user_id}" for user_id in self.approved_users)
+        for channel_id in self.group_channels:
+            channel = bot.get_channel(int(channel_id)) if bot else None
+            guild_id = str(getattr(getattr(channel, "guild", None), "id", ""))
+            if guild_id:
+                keys.add(f"guild:{guild_id}:{channel_id}")
+        for key in keys:
+            meta = meta_map.get(key, {})
+            messages = logs.get(key, [])
+            conversations.append({
+                "key": key,
+                "kind": "friend" if key.startswith("dm:") else "group",
+                "label": meta.get("label") or (self._display_name(key[3:]) if key.startswith("dm:") else meta.get("channel_name") or "Server group"),
+                "subtitle": meta.get("subtitle") or ("Direct message" if key.startswith("dm:") else "Server channel"),
+                "message_count": len(messages),
+                "last_message": messages[-1].get("content", "")[:140] if messages else "",
+                "last_timestamp": messages[-1].get("timestamp") if messages else None,
+            })
+        conversations.sort(key=lambda item: item.get("last_timestamp") or "", reverse=True)
+        contacts = [{
+            "user_id": user_id,
+            "name": self._display_name(user_id),
+            "summary": self.friends.get(user_id, {}).get("summary", ""),
+            "memory_messages": len(self.friends.get(user_id, {}).get("messages", [])),
+        } for user_id in sorted(self.approved_users)]
+        groups = []
+        for channel_id in sorted(self.group_channels):
+            channel = bot.get_channel(int(channel_id)) if bot else None
+            saved_key = next((key for key, value in meta_map.items() if str(value.get("channel_id", "")) == channel_id), None)
+            saved_meta = meta_map.get(saved_key or "", {})
+            guild_id = str(getattr(getattr(channel, "guild", None), "id", "") or saved_meta.get("guild_id", ""))
+            key = saved_key or (f"guild:{guild_id}:{channel_id}" if guild_id else None)
+            groups.append({
+                "channel_id": channel_id,
+                "guild_id": guild_id,
+                "name": getattr(channel, "name", None) or saved_meta.get("channel_name") or saved_meta.get("label") or channel_id,
+                "conversation": key,
+            })
         return {"enabled":self.enabled,"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
@@ -206,13 +335,17 @@ class DiscordAssistant:
           "active_request": self.active_request,
           "context_notes": dict(self.context_notes),
           "model_usage": self.model_usage(),
-          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()},
+          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "recent_messages": v.get("messages", [])[-getattr(self, "history_limit", 60):]} for k,v in self.friends.items()},
+          "contacts": contacts,
+          "conversations": conversations,
+          "groups": groups,
           "settings": {
               "fallback_after_failures": getattr(self, "retries", 2),
               "queue_debounce_seconds": getattr(self, "delay", 2.5),
               "max_context_messages": getattr(self, "limit", 20),
               "context_budget_chars": getattr(self, "budget", 10000),
               "history_limit": getattr(self, "history_limit", 60),
+              "conversation_history_limit": getattr(self, "conversation_history_limit", 500),
               "typing_enabled": getattr(self, "typing", True),
               "assistant_group_channels": ",".join(sorted(getattr(self, "group_channels", set()))),
               "conversation_system_prompt": getattr(self, "config", {}).get("conversation_system_prompt", ""),
@@ -264,6 +397,22 @@ class DiscordAssistant:
             self._refresh_sensor()
             return
         key=f"dm:{sender_id}" if is_dm else f"guild:{message.guild.id}:{message.channel.id}"
+        channel_name = getattr(message.channel, "name", None) or ("Direct message" if is_dm else "Server group")
+        label = sender_name if is_dm else channel_name
+        self.conversation_meta[key] = {
+            "label": label,
+            "subtitle": "Direct message" if is_dm else getattr(getattr(message, "guild", None), "name", "Server channel"),
+            "channel_name": channel_name,
+            "channel_id": str(message.channel.id),
+            "guild_id": str(getattr(getattr(message, "guild", None), "id", "")),
+            "kind": "friend" if is_dm else "group",
+        }
+        self.contact_names[str(sender_id)] = sender_name if is_dm else self.contact_names.get(str(sender_id), sender_name)
+        self._append_conversation_message(key, {
+            "role": "user", "sender": sender_name, "sender_id": str(sender_id),
+            "content": content, "timestamp": message.created_at.isoformat(),
+            "message_id": str(message.id),
+        })
         self.queue.append({"key":key,"message_id":str(message.id),"is_dm":is_dm,"sender_id":str(sender_id),"sender_name":sender_name,
           "content":content,"timestamp":message.created_at.isoformat(),
           "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel})
@@ -295,6 +444,13 @@ class DiscordAssistant:
                 self.error = "Unexpected worker error; the queue worker remains active."
                 self._state = "error"
                 self._refresh_sensor()
+        await self._save()
+    def _append_conversation_message(self, key, message):
+        """Append one private DM or volatile-context group message to the admin-visible log."""
+        messages = self.conversation_logs[key]
+        messages.append(message)
+        if len(messages) > self.conversation_history_limit:
+            del messages[:-self.conversation_history_limit]
     async def edit_queued_message(self, message_id, content):
         """Edit one pending message before it is sent to a model."""
         content = str(content).strip()
@@ -616,6 +772,7 @@ class DiscordAssistant:
                     raise RuntimeError("Action not confirmed: " + verification_error)
             await self._send(item["channel"],answer)
             now=datetime.now(UTC).isoformat()
+            self._append_conversation_message(item["key"], {"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model})
             for msg in batch:
                 history.append({
                     "role": "user",
@@ -651,6 +808,10 @@ class DiscordAssistant:
                 detail = str(err).strip()[:350]
                 notice = "I couldn't complete that request: " + detail if detail else "I couldn't complete that request. I've logged the failure."
                 await self._send(item["channel"], notice)
+                self._append_conversation_message(item["key"], {
+                    "role": "assistant", "sender": "GHOST", "content": notice,
+                    "timestamp": datetime.now(UTC).isoformat(), "error": True,
+                })
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
@@ -713,14 +874,18 @@ class DiscordAssistant:
         elif channel_id:
             if str(channel_id) not in self.group_channels:
                 raise ValueError("This Discord channel is not enabled for GHOST")
-            channel=self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id));key=f"channel:{channel_id}"
+            channel=self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id));key=f"guild:{channel.guild.id}:{channel_id}"
         else:raise ValueError("Provide user_id or channel_id")
         await self._send(channel,message)
         now=datetime.now(UTC).isoformat()
         self.transcript.append({"timestamp":now,"conversation":key,"sender":"Harvey (manual, as GHOST)","sender_ids":[],
           "channel_id":str(channel.id),"is_dm":bool(user_id),"user_messages":[],"assistant":message,"model":"manual",
           "role":"manual_override","estimated_input_tokens":0,"estimated_output_tokens":len(message)//4,"context_snapshot":""})
-        self.transcript=self.transcript[-100:];await self._save()
+        self.transcript=self.transcript[-100:]
+        label = self._display_name(user_id) if user_id else getattr(channel, "name", str(channel_id))
+        self.conversation_meta[key] = {"label": label, "subtitle": "Direct message" if user_id else getattr(getattr(channel, "guild", None), "name", "Server channel"), "channel_name": getattr(channel, "name", "Direct message"), "channel_id": str(channel.id), "guild_id": str(getattr(getattr(channel, "guild", None), "id", "")), "kind": "friend" if user_id else "group"}
+        self._append_conversation_message(key, {"role": "assistant", "sender": "GHOST (manual)", "content": message, "timestamp": now, "manual": True})
+        await self._save()
         self.hass.bus.async_fire("discord_game_assistant_manual_message",{"conversation":key,"message":message})
         self._refresh_sensor()
     async def set_context_note(self, conversation, context):
@@ -743,6 +908,31 @@ class DiscordAssistant:
         else:
             self.context_notes.pop(conversation, None)
         self._refresh_sensor()
+
+    async def update_contacts(self, contacts):
+        """Replace the assistant's explicit allowlist and friendly-name overrides."""
+        approved = set()
+        names = {}
+        for item in contacts:
+            user_id = str(item.get("user_id", "")).strip()
+            name = str(item.get("name", "")).strip()
+            if not user_id.isdigit() or len(user_id) > 20:
+                raise ValueError("Discord user IDs must be numeric snowflake IDs")
+            approved.add(user_id)
+            if name:
+                names[user_id] = name[:80]
+        entries = self.hass.config_entries.async_entries(DOMAIN)
+        entry = next((item for item in entries if item.entry_id == self.entry_id), None)
+        if entry is None:
+            raise RuntimeError("Discord Game config entry was not found")
+        self.hass.config_entries.async_update_entry(
+            entry,
+            options={
+                **entry.options,
+                "assistant_approved_users": sorted(approved),
+                "assistant_contact_names": names,
+            },
+        )
 
     async def set_friend_memory(self, user_id, summary):
         """Replace one approved contact's durable memory with an admin correction."""

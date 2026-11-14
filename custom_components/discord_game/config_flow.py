@@ -178,12 +178,15 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "max_context_messages": 20,
                 "context_budget_chars": 10000,
                 "history_limit": 60,
+                "conversation_history_limit": 500,
                 "typing_enabled": True,
                 "assistant_group_channels": "",
                 "conversation_system_prompt": "",
                 "operations_system_prompt": "",
                 "advanced_system_prompt": "",
                 "memory_system_prompt": "",
+                "assistant_approved_users": self._get_current("assistant_approved_users", self._get_current(CONF_MEMBERS, [])),
+                "assistant_contact_names": self._get_current("assistant_contact_names", {}),
             }
             for key, default in advanced_defaults.items():
                 self.options_data.setdefault(key, self._get_current(key, default))
