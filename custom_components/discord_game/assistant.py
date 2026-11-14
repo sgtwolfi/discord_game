@@ -202,11 +202,11 @@ class DiscordAssistant:
                     try:
                         user = self.bot.get_user(int(user_id)) or await self.bot.fetch_user(int(user_id))
                         self.contact_names[user_id] = getattr(user, "global_name", None) or user.name
-                    except Exception:
+                    except Exception:  # noqa: BLE001 - Discord name lookup is best-effort
                         self.contact_names.setdefault(user_id, user_id)
             for channel_id in self.group_channels:
                 try:
-                    channel = bot.get_channel(int(channel_id)) if bot else None or await self.bot.fetch_channel(int(channel_id))
+                    channel = self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id))
                     key = f"guild:{channel.guild.id}:{channel_id}"
                     self.conversation_meta.setdefault(key, {
                         "label": channel.name, "subtitle": channel.guild.name,
