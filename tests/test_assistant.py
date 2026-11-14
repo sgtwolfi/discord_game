@@ -386,6 +386,7 @@ def test_admin_can_correct_contact_memory():
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.friends = {"123": {"messages": [{"content": "hello"}], "summary": "old summary"}}
+    assistant.approved_users = {"123"}
     assistant.store = FakeStore()
     assistant.sensor = SimpleNamespace(hass=None)
 
@@ -612,3 +613,16 @@ def test_model_call_does_not_retry_completed_action_without_speech():
 
     assert "action completed" in answer
     assert assistant_module.action_result_error(assistant._last_call_result) is None
+
+
+
+def test_admin_cannot_create_memory_for_unapproved_contact():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {}
+    assistant.approved_users = {"123"}
+
+    with pytest.raises(ValueError, match="approved GHOST contacts"):
+        asyncio.run(assistant.set_friend_memory("456", "Unapproved memory"))
