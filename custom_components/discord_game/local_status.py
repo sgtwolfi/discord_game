@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import re
 from datetime import datetime
 
@@ -21,9 +22,11 @@ def _name(state) -> str:
 
 def _person_activity(hass, requested_name: str) -> str:
     wanted = requested_name.strip(" ?!.,'\"").casefold()
+    wanted = re.sub(r"['’]s$", "", wanted)
     if not wanted:
         return "I couldn't identify whose Discord activity you wanted."
     candidates = []
+    ranked = []
     for state in hass.states.async_all():
         if not state.entity_id.startswith("sensor.discord_user_"):
             continue
@@ -33,10 +36,20 @@ def _person_activity(hass, requested_name: str) -> str:
             str(attrs.get("display_name") or "").casefold(),
             str(attrs.get("user_name") or "").casefold(),
         }
-        if wanted in names or any(wanted == name for name in names if name):
+        names.discard("")
+        if wanted in names:
             candidates.append(state)
+        else:
+            score = max(difflib.SequenceMatcher(None, wanted, name).ratio() for name in names)
+            ranked.append((score, state))
+    if not candidates and ranked:
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        best_score, best_state = ranked[0]
+        next_score = ranked[1][0] if len(ranked) > 1 else 0
+        if best_score >= 0.72 and best_score - next_score >= 0.08:
+            candidates.append(best_state)
     if not candidates:
-        return f"I can't see a Discord activity sensor for {requested_name.strip()}."
+        return f"I can't see a clear Discord activity match for {requested_name.strip()}."
 
     state = candidates[0]
     attrs = state.attributes
@@ -107,9 +120,14 @@ def answer_local_status(hass, query: str, now: datetime) -> str | None:
     """Answer simple live-state questions from HA state, without an LLM tool call."""
     value = str(query or "").strip()
     person = _PERSON_ACTIVITY.search(value)
-    if person:
-        return _person_activity(hass, person.group(1))
     parts = []
+    if person:
+        person_answer = _person_activity(hass, person.group(1))
+        if "can't see a clear Discord activity match" not in person_answer and "can't see a Discord activity sensor" not in person_answer:
+            return person_answer
+        if not (_TIME_QUERY.search(value) or _WEATHER_QUERY.search(value)):
+            return person_answer
+        parts.append(person_answer)
     if _TIME_QUERY.search(value):
         parts.append("It's " + now.strftime("%A %H:%M") + ".")
     if _WEATHER_QUERY.search(value):
