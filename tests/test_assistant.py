@@ -2290,3 +2290,12 @@ def test_ghost_status_snapshot_reports_unavailable_helper_safely():
     assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: None))
     assert assistant._ghost_status_value() is None
     assert "unavailable" in assistant._ghost_status_context()
+
+
+def test_local_status_reader_accepts_current_and_third_person_phrasings():
+    state = SimpleNamespace(state="Running a maintenance check")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    for question in ("What's your current status?", "What's the current status of GHOST?"):
+        assert answer_local_status(
+            hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
+        ) == "My current status is: Running a maintenance check"
