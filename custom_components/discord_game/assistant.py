@@ -31,10 +31,13 @@ DEFAULT_AGENT_PROMPTS = {
         "If live state or a target is unavailable, say what could not be read or controlled."
     ),
     "advanced": (
-        "JOB: Handle a difficult request or recover when the first agent cannot. "
-        "Follow the user's exact goal. Break complex work into explicit steps. Use available tools only. Check evidence and results. "
-        "Do not guess, invent features, change the requested task or claim unconfirmed success. "
-        "Do not repeat an action that may have partly worked."
+        "JOB: Handle a difficult request. Follow the user's exact goal, break complex work into steps, "
+        "use available tools only, and verify evidence. Never invent results or claim unconfirmed success."
+    ),
+    "fallback": (
+        "JOB: Recover a request after the primary agent failed. Continue the original task using only "
+        "capabilities actually available to you. Do not claim tools ran unless they did. Never repeat "
+        "a side-effecting action that may already have executed."
     ),
     "memory": (
         "JOB: Maintain factual notes about this contact. Output short plain-text facts only. "
@@ -863,9 +866,14 @@ class DiscordAssistant:
             )
         elif role == "advanced":
             lines.append(
-                "You are the advanced reasoning agent and GHOST's fallback specialist. Break difficult work into "
-                "explicit steps, verify facts and tool results, preserve the user's intent, and never claim an action "
-                "succeeded without confirmation."
+                "You are handling a difficult request. Think through the user's goal in simple steps, "
+                "preserve the requested outcome, and verify any factual claims."
+            )
+        elif role == "fallback":
+            lines.append(
+                "You are recovering a request after another model failed. Continue the same task. "
+                "Use only capabilities actually available. Never claim a tool ran without its result. "
+                "Never repeat an action that may already have executed."
             )
         else:
             lines.append(
@@ -1107,8 +1115,13 @@ class DiscordAssistant:
                 )
             if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
                 model = self.agents["fallback_agent"]
+                role = "fallback"
+                prompt = self._prompt(batch, prior_history, summary, role, context_note)
                 if self.active_request:
                     self.active_request["model"] = model
+                    self.active_request["role"] = role
+                    self.active_request["stage"] = "Recovering with fallback agent"
+                    self.active_request["context_snapshot"] = prompt
                     self._refresh_sensor()
                 models_attempted.append(model)
                 answer = await self._call(model, prompt)
@@ -1283,7 +1296,18 @@ class DiscordAssistant:
         )
         prompt.append("Recent conversation, oldest first:\n" + "\n".join(previous + current))
         try:
-            result = await self._call(agent, "\n\n".join(prompt))
+            try:
+                result = await self._call(agent, "\n\n".join(prompt))
+            except Exception:
+                fallback = self.agents.get("fallback_agent")
+                if not fallback or fallback == agent:
+                    raise
+                result = await self._call(
+                    fallback,
+                    "JOB: Decide whether GHOST should reply to this group conversation. "
+                    "Return only JSON with respond true or false and a short reason. "
+                    "Do not write a conversational reply.\n\n" + "\n\n".join(prompt),
+                )
             match = re.search(r"\{[\s\S]*\}", result)
             if not match:
                 raise ValueError("The model did not return the required JSON decision")
