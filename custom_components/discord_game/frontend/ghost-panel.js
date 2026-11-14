@@ -473,7 +473,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     }
     agentsPanel.append(agentGrid);
     agentsPanel.append(this._el("p", d.mode === "api"
-      ? "API Mode uses one Home Assistant conversation agent for chat, status questions and actions. Its model, system prompt and tool/function configuration stay in that agent's own settings. GHOST still injects the correct contact's saved memory and records verified outcomes; changing models does not remove memory."
+      ? "API Mode uses one Home Assistant conversation agent for chat, status questions and actions. Its model, system prompt and tool/function configuration stay in that agent's own settings. GHOST still injects the correct contact's saved memory and records verified outcomes; changing models does not remove memory. For group-chat safety, GHOST only responds when directly mentioned or replied to."
       : "Local Mode splits work between the Conversation, Operations and optional Fallback agents. GHOST supplies short role-specific prompts and keeps memory deterministic, so no memory model is needed.", "help"));
     agentsPanel.append(this._el("p", "Entity exposure and script access are still managed by Home Assistant Assist. The capability manager below lets you expose the exact entities and scripts. Exposing a script makes it available as a tool; it does not automatically explain its arguments or purpose to a weak model, so give scripts clear names and descriptions.", "help"));
     shell.append(agentsPanel);
