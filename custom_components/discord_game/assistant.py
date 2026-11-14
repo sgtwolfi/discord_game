@@ -223,11 +223,12 @@ class DiscordAssistant:
                 try:
                     channel = self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id))
                     key = f"guild:{channel.guild.id}:{channel_id}"
-                    self.conversation_meta.setdefault(key, {
+                    self.conversation_meta[key] = {
+                        **self.conversation_meta.get(key, {}),
                         "label": channel.name, "subtitle": channel.guild.name,
                         "channel_name": channel.name, "channel_id": channel_id,
                         "guild_id": str(channel.guild.id), "kind": "group",
-                    })
+                    }
                 except Exception:
                     _LOGGER.debug("Unable to resolve GHOST group channel %s", channel_id, exc_info=True)
         if not self.enabled:
