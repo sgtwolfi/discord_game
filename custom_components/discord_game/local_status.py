@@ -6,7 +6,6 @@ import difflib
 import re
 from datetime import datetime
 
-
 _PERSON_ACTIVITY = re.compile(
     r"\b(?:what(?:'s|s| is)|tell me what)\s+(.+?)\s+(?:doing|up to)\b",
     re.IGNORECASE,
