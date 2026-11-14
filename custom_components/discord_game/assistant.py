@@ -549,6 +549,7 @@ class DiscordAssistant:
             config.get("local_reminder_script", "script.set_timer_alarm_or_reminder")
         ).strip()
         self.status_entity = str(config.get("ghost_status_entity", "input_text.ghost_status")).strip() or "input_text.ghost_status"
+        self.owner_name = str(config.get("owner_name", "Harvey")).strip() or "Harvey"
         self.agents={k:str(config.get(k,"")).strip() for k in ("conversation_agent","operations_agent","fallback_agent")}
         # API Mode delegates model-facing work to one HA conversation agent.
         # GHOST continues to own memory, queueing, privacy and verification.
@@ -820,6 +821,8 @@ class DiscordAssistant:
             })
         return {"enabled":self.enabled,"mode":getattr(self, "mode", "local"),"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
           "ghost_status_entity": getattr(self, "status_entity", "input_text.ghost_status"),
+              "owner_name": getattr(self, "owner_name", "Harvey"),
+          "owner_status_value": self._ghost_status_value(),
           "ghost_status_value": self._ghost_status_value(),
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
@@ -1374,12 +1377,12 @@ class DiscordAssistant:
         value = self._ghost_status_value()
         if value is None:
             return (
-                f"AUTHORITATIVE LIVE GHOST STATUS from {entity_id}: unavailable. "
-                "If asked what GHOST is doing or for its status, say this value is unavailable; never guess."
+                f"AUTHORITATIVE LIVE OWNER STATUS for {getattr(self, 'owner_name', 'Harvey')} from {entity_id}: unavailable. "
+                "This value describes the Home Assistant owner, NOT GHOST. If asked what the owner is doing, say it is unavailable; never guess."
             )
         return (
-            f"AUTHORITATIVE LIVE GHOST STATUS from {entity_id}: {value}. "
-            "If asked what GHOST is doing or for its status, answer from this exact current value; do not guess."
+            f"AUTHORITATIVE LIVE OWNER STATUS for {getattr(self, 'owner_name', 'Harvey')} from {entity_id}: {value}. "
+            "This value describes the Home Assistant owner, NOT GHOST. If asked what the owner is doing, answer from this exact current value; do not guess."
         )
 
     def _prompt(self, batch, history, summary, role="conversation", context_note=""):
@@ -1688,7 +1691,7 @@ class DiscordAssistant:
             )
             kind = request_kind(request_text)
             local_status_answer = (
-                answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity)
+                answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
                 if kind == "query" and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
