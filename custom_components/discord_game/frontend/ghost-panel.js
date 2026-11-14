@@ -386,6 +386,19 @@ class DiscordGameGhostPanel extends HTMLElement {
 
   _renderSettings(shell, d) {
     const settings = d.settings || {};
+    const agentsPanel = this._el("section", null, "panel");
+    agentsPanel.append(this._el("h2", "Assigned conversation agents"));
+    const agentGrid = this._el("div", null, "fieldgrid");
+    for (const item of [["Conversation", d.conversation_agent], ["Operations", d.operations_agent], ["Memory", d.memory_agent], ["Fallback", d.fallback_agent]]) {
+      const cell = this._el("div", null, "field");
+      cell.append(this._el("label", item[0]));
+      cell.append(this._el("strong", item[1] || "Not selected"));
+      agentGrid.append(cell);
+    }
+    agentsPanel.append(agentGrid);
+    agentsPanel.append(this._el("p", "Change these assignments in Settings → Devices & services → Discord Game → Configure. The operations agent must have access to the Home Assistant actions you want GHOST to perform.", "help"));
+    shell.append(agentsPanel);
+
     const panel = this._el("section", null, "panel");
     panel.append(this._el("h2", "Assistant behaviour"));
     panel.append(this._el("p", "Model assignments remain in Discord Game integration settings. These controls tune how GHOST uses those agents.", "muted"));
