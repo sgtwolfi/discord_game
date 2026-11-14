@@ -248,13 +248,15 @@ def deduplicate_memory_lines(lines):
     result = []
     seen = set()
     for line in lines:
-        value = re.sub(r"\s+", " ", str(line or "")).strip().lstrip("-• ").strip()
+        raw = re.sub(r"\s+", " ", str(line or "")).strip()
+        bullet = "- " if raw.startswith(("-", "•")) else ""
+        value = raw.lstrip("-• ").strip()
         if not value:
             continue
         key = re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
         if key not in seen:
             seen.add(key)
-            result.append("- " + value)
+            result.append(bullet + value)
     return result
 
 
