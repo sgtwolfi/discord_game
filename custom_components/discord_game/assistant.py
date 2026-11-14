@@ -3,7 +3,6 @@ import asyncio
 import logging
 import re
 from collections import defaultdict
-from collections import defaultdict
 from datetime import UTC, datetime
 
 from homeassistant.components.sensor import SensorEntity
@@ -173,6 +172,25 @@ class DiscordAssistant:
         self.model_usage_data = saved.get("model_usage", {})
         self.conversation_logs = defaultdict(list, saved.get("conversation_logs", {}))
         self.conversation_meta = saved.get("conversation_meta", {})
+        if self.enabled:
+            for user_id in self.approved_users:
+                if user_id not in self.contact_names:
+                    try:
+                        user = self.bot.get_user(int(user_id)) or await self.bot.fetch_user(int(user_id))
+                        self.contact_names[user_id] = getattr(user, "global_name", None) or user.name
+                    except Exception:
+                        self.contact_names.setdefault(user_id, user_id)
+            for channel_id in self.group_channels:
+                try:
+                    channel = self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id))
+                    key = f"guild:{channel.guild.id}:{channel_id}"
+                    self.conversation_meta.setdefault(key, {
+                        "label": channel.name, "subtitle": channel.guild.name,
+                        "channel_name": channel.name, "channel_id": channel_id,
+                        "guild_id": str(channel.guild.id), "kind": "group",
+                    })
+                except Exception:
+                    _LOGGER.debug("Unable to resolve GHOST group channel %s", channel_id, exc_info=True)
         if not self.enabled:
             self._refresh_sensor()
             return
