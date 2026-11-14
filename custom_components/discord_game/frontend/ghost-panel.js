@@ -455,6 +455,15 @@ class DiscordGameGhostPanel extends HTMLElement {
       }, true));
       contactsPanel.append(row);
     }
+    if (contacts.length) {
+      contactsPanel.append(this._button("Save friendly names", async () => {
+        const updated = contacts.map((contact) => {
+          const field = this.shadowRoot.querySelector('[data-keep="contact-name-' + contact.user_id + '"]');
+          return { user_id: contact.user_id, name: field ? field.value.trim() : contact.name };
+        });
+        await this._service("update_contacts", { contacts: updated }, true);
+      }, true));
+    }
     if (!contacts.length) contactsPanel.append(this._el("p", "No approved friends. Add a Discord user ID below.", "muted"));
     const add = this._el("div", null, "fieldgrid");
     const idWrap = this._el("div"); idWrap.append(this._el("label", "Discord user ID"));
