@@ -1068,3 +1068,31 @@ def test_action_outcome_memory_ignores_unapproved_and_group_messages():
         {"is_dm": False, "sender_id": "123"}, "action", None
     )
     assert assistant.friends == {}
+
+
+
+def test_backfill_recovers_old_unconfirmed_action_from_transcript_once():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant.transcript = [{
+        "timestamp": "2026-11-14T07:00:00+00:00",
+        "conversation": "dm:123",
+        "is_dm": True,
+        "sender_ids": ["123"],
+        "user_messages": ["Set the room lights to maximum brightness"],
+        "error": "Action not confirmed",
+        "action_result": {
+            "response_type": "action_done",
+            "success": [],
+            "failed": [],
+        },
+    }]
+
+    assistant._backfill_action_outcomes_from_transcript()
+    assistant._backfill_action_outcomes_from_transcript()
+
+    record = assistant.friends["123"]
+    assert len(record["pending_messages"]) == 1
+    assert '"status":"NOT CONFIRMED:' in record["pending_messages"][0]["content"]
+    assert len(record["action_event_keys"]) == 1
