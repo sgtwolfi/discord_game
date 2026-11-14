@@ -702,6 +702,33 @@ def test_memory_consolidation_does_not_need_a_memory_model():
 
 
 
+def test_function_configuration_error_is_detected_for_fallback():
+    assert assistant_module.is_function_configuration_error(
+        "Something went wrong: failed to load functions. Verify functions are valid in a yaml format"
+    )
+    assert not assistant_module.is_function_configuration_error("I could not find that device.")
+
+
+def test_api_group_relevance_refuses_to_use_tool_enabled_primary_agent():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = False
+    assistant.group_relevance_agent = "conversation.api"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected_call(*args):
+        raise AssertionError("The API agent must not be used for group relevance")
+
+    assistant._call = unexpected_call
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Max", "content": "Hello", "directly_addressed": False}],
+        [],
+    ))
+    assert result[0] is False
+    assert "separate local agent" in result[1]
+
+
 def test_api_group_relevance_uses_separate_local_model_without_mention():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
