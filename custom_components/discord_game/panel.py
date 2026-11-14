@@ -18,9 +18,11 @@ async def async_register_panel(hass: HomeAssistant) -> None:
     if hass.data.setdefault(DOMAIN, {}).get("_ghost_panel_registered"):
         return
 
-    await hass.http.async_register_static_paths(
-        [StaticPathConfig(STATIC_URL, str(STATIC_DIR), cache_headers=False)]
-    )
+    if not hass.data[DOMAIN].get("_ghost_static_registered"):
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(STATIC_URL, str(STATIC_DIR), cache_headers=False)]
+        )
+        hass.data[DOMAIN]["_ghost_static_registered"] = True
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name="discord-game-ghost-panel",
