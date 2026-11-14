@@ -1899,7 +1899,7 @@ def test_memory_consolidation_deduplicates_and_supersedes_old_work_and_favourite
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.friends = {
         "123": {
-            "summary": "Work: at the old shop\\nWork: at the old shop\\nFavourite: film — Old Film",
+            "summary": "Work: at the old shop\nWork: at the old shop\nFavourite: film — Old Film",
             "summary_source": "legacy",
             "pending_messages": [{
                 "role": "user",
