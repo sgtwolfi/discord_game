@@ -312,6 +312,23 @@ def merge_action_retry_results(first_result, retry_result):
     retry_failed = retry_data.get("failed") or []
     if not isinstance(retry_success, list) or not isinstance(retry_failed, list):
         return None
+    expected_targets = set(action_retry_targets(first_result))
+    returned_targets = []
+    for item in retry_success + retry_failed:
+        if not isinstance(item, dict):
+            return None
+        target_id = str(item.get("entity_id") or item.get("id") or "").strip()
+        if not target_id:
+            return None
+        returned_targets.append(target_id)
+    # The retry must report exactly every originally failed target once. This
+    # prevents a model from broadening the action or silently omitting failures.
+    if (
+        not returned_targets
+        or len(returned_targets) != len(set(returned_targets))
+        or set(returned_targets) != expected_targets
+    ):
+        return None
     first_response = first_result.get("response", first_result)
     first_data = first_response.get("data") or {}
     return {
