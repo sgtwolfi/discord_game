@@ -5,6 +5,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN, DATA_HASS_CONFIG
 from .services import async_setup_services, async_unload_services
+from .panel import async_register_panel, async_unregister_panel
 
 PLATFORMS = [Platform.SENSOR]
 
@@ -24,6 +25,7 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_setup_services(hass)
+    await async_register_panel(hass)
 
     return True
 
@@ -45,6 +47,12 @@ async def async_unload_entry(
         if unsub:
             unsub()
         await async_unload_services(hass)
+        remaining_entries = [
+            key for key in hass.data.get(DOMAIN, {})
+            if not key.startswith("_") and not key.endswith("_unsub_options")
+        ]
+        if not remaining_entries:
+            async_unregister_panel(hass)
 
     return unload_ok
 
