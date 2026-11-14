@@ -1042,6 +1042,81 @@ def test_action_retry_merge_rejects_targets_outside_failed_set():
     assert assistant_module.merge_action_retry_results(first, retry) is None
 
 
+def test_controlled_action_retry_calls_once_and_only_targets_failed_entities():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.active_request = None
+    assistant._last_call_result = None
+    calls = []
+
+    async def call(agent, prompt):
+        calls.append((agent, prompt))
+        assistant._last_call_result = {
+            "response": {
+                "response_type": "action_done",
+                "data": {
+                    "success": [{"entity_id": "light.hall"}],
+                    "failed": [],
+                },
+            },
+        }
+        return "The failed target is now on."
+
+    assistant._call = call
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.bedroom"}],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+    attempted = []
+
+    answer, merged = asyncio.run(assistant._retry_failed_action(
+        "conversation.operations", "Original request: turn on both lights", first, attempted
+    ))
+
+    assert answer == "The failed target is now on."
+    assert len(calls) == 1
+    assert attempted == ["conversation.operations"]
+    retry_instructions = calls[0][1].split("CONTROLLED ACTION RETRY", 1)[1]
+    assert "light.hall" in retry_instructions
+    assert "light.bedroom" not in retry_instructions
+    assert merged["response"]["data"]["success"] == [
+        {"entity_id": "light.bedroom"},
+        {"entity_id": "light.hall"},
+    ]
+
+
+def test_controlled_action_retry_does_not_retry_again_after_retry_exception():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.active_request = None
+    calls = []
+
+    async def call(agent, prompt):
+        calls.append(agent)
+        raise RuntimeError("retry timed out")
+
+    assistant._call = call
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+
+    with pytest.raises(RuntimeError, match="retry timed out"):
+        asyncio.run(assistant._retry_failed_action(
+            "conversation.operations", "Original request", first, []
+        ))
+
+    assert calls == ["conversation.operations"]
+
+
 def test_action_retry_merge_rejects_unstructured_retry_response():
     first = {
         "response": {
