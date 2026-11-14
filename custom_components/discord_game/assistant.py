@@ -128,7 +128,7 @@ class DiscordAssistant:
         self.retries=max(1,min(5,int(config.get("fallback_after_failures",2))))
         self.delay=max(.5,min(15,float(config.get("queue_debounce_seconds",2.5))))
         self.limit=max(4,min(80,int(config.get("max_context_messages",20))))
-        self.budget=max(1500,min(50000,int(config.get("context_budget_chars",10000))))
+        self.budget=max(2000,min(50000,int(config.get("context_budget_chars",10000))))
         self.history_limit=max(self.limit,min(200,int(config.get("history_limit",60))))
         self.typing=bool(config.get("typing_enabled",True))
         self.group_channels={x.strip() for x in str(config.get("assistant_group_channels","")).split(",") if x.strip().isdigit()}
