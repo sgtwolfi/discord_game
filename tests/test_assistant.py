@@ -686,3 +686,59 @@ def test_group_context_keeps_each_speaker_name():
 
     assert "Max: Earlier group message" in prompt
     assert "Ryan: Current message" in prompt
+
+
+
+def test_admin_can_inject_temporary_context_for_approved_dm():
+    from types import SimpleNamespace
+    import asyncio
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.group_channels = {"789"}
+    assistant.context_notes = {}
+    assistant.sensor = SimpleNamespace(hass=None)
+
+    asyncio.run(assistant.set_context_note("dm:123", "Max is currently testing the new reminder flow."))
+
+    assert assistant.context_notes["dm:123"] == "Max is currently testing the new reminder flow."
+
+
+def test_admin_can_inject_temporary_context_for_selected_group_channel():
+    from types import SimpleNamespace
+    import asyncio
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.group_channels = {"789"}
+    assistant.context_notes = {}
+    assistant.sensor = SimpleNamespace(hass=None)
+
+    asyncio.run(assistant.set_context_note("guild:555:789", "This channel is the game-night chat."))
+
+    assert assistant.context_notes["guild:555:789"] == "This channel is the game-night chat."
+
+
+def test_admin_cannot_inject_context_into_unapproved_conversation():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.group_channels = {"789"}
+    assistant.context_notes = {}
+
+    with pytest.raises(ValueError, match="approved GHOST DMs"):
+        asyncio.run(assistant.set_context_note("dm:456", "Do not store this"))
+
+
+def test_temporary_context_is_included_in_model_prompt():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.limit = 10
+    assistant.budget = 3000
+    batch = [{"sender_name": "Max", "content": "Hello", "is_dm": True}]
+
+    prompt = assistant._prompt(batch, [], "", context_note="Max is testing the new reminder flow.")
+
+    assert "Administrator-provided context" in prompt
+    assert "Max is testing the new reminder flow." in prompt
