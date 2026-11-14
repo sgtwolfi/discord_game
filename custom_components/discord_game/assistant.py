@@ -788,7 +788,7 @@ class DiscordAssistant:
                 "message_count": len(messages),
                 "last_message": messages[-1].get("content", "")[:140] if messages else "",
                 "last_timestamp": messages[-1].get("timestamp") if messages else None,
-                "avatar_url": self.contact_avatars.get(key[3:]) if key.startswith("dm:") else None,
+                "avatar_url": getattr(self, "contact_avatars", {}).get(key[3:]) if key.startswith("dm:") else None,
             })
         conversations.sort(key=lambda item: item.get("last_timestamp") or "", reverse=True)
         contacts = [{
@@ -796,7 +796,7 @@ class DiscordAssistant:
             "name": self._display_name(user_id),
             "summary": self.friends.get(user_id, {}).get("summary", ""),
             "memory_messages": len(self.friends.get(user_id, {}).get("messages", [])),
-            "avatar_url": self.contact_avatars.get(user_id),
+            "avatar_url": getattr(self, "contact_avatars", {}).get(user_id),
         } for user_id in sorted(self.approved_users)]
         groups = []
         for channel_id in sorted(self.group_channels):
