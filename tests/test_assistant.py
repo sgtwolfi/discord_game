@@ -48,10 +48,11 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assistant.budget = 1000
     batch = [{
         "sender_name": "Max",
-        "content": "x" * 2000 + "PLEASE KEEP THIS END",
+        "content": "PLEASE DO THIS FIRST: " + "x" * 2000 + "PLEASE KEEP THIS END",
         "is_dm": True,
     }]
     prompt = assistant._prompt(batch, [], "private contact summary")
+    assert "PLEASE DO THIS FIRST" in prompt
     assert "PLEASE KEEP THIS END" in prompt
     assert len(prompt) <= assistant.budget
     assert "private contact summary" in prompt
