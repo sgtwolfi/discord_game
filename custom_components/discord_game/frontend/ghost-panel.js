@@ -495,6 +495,18 @@ class DiscordGameGhostPanel extends HTMLElement {
       : "Assign separate Conversation, Operations and optional Fallback agents in Discord Game → Configure. Use small local models for narrow tasks; keep tool access restricted.", "help"));
     modeSelect.addEventListener("change", () => this._render());
     form.append(modeWrap);
+    const reminderWrap = this._el("div", null, "field");
+    reminderWrap.append(this._el("label", "Local Mode reminder script entity"));
+    const reminderScript = this._el("input");
+    reminderScript.name = "local_reminder_script";
+    reminderScript.value = settings.local_reminder_script || "script.set_timer_alarm_or_reminder";
+    reminderScript.dataset.keep = "cfg-local_reminder_script";
+    if (modeSelect.value === "api") reminderScript.type = "hidden";
+    reminderWrap.append(reminderScript);
+    if (modeSelect.value !== "api") {
+      reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear reminder requests, so a tiny model does not have to discover or invoke a tool. The script must return success: true for GHOST to confirm it was set.", "help"));
+    }
+    form.append(reminderWrap);
     const grid = this._el("div", null, "fieldgrid");
     const number = (key, title, value, min, max, step, help) => {
       const wrap = this._el("div", null, "field");
@@ -572,7 +584,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     capTitle.append(this._el("p", "Expose entities and scripts so the selected Home Assistant conversation agent can use them.", "muted"));
     capHead.append(capTitle, this._button("Refresh", () => { this._capabilities = null; this._loadCapabilities(); }, true));
     capabilitiesPanel.append(capHead);
-    capabilitiesPanel.append(this._el("p", "This controls Home Assistant's Assist exposure list. It does not grant access to arbitrary services. Scripts are the easiest way to give GHOST a named, reusable function such as setting a reminder.", "help"));
+    capabilitiesPanel.append(this._el("p", "This controls Home Assistant's Assist exposure list. It does not grant access to arbitrary services. Scripts are the easiest way to give GHOST a named, reusable function such as setting a reminder. In Local Mode, the separately configured reminder script can be called directly by GHOST and does not rely on the model discovering a tool.", "help"));
     capabilitiesPanel.append(this._el("p", "One more required step for Ollama: open Settings → Devices & services → Ollama → Configure and enable the Device control AI tool. This exposure list controls which entities that tool can access. The selected model must support tool calling; very small models can struggle even when everything is configured correctly.", "help"));
     if (this._capabilitiesLoading) {
       capabilitiesPanel.append(this._el("p", "Loading your Home Assistant entities…", "muted"));
@@ -690,6 +702,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       }
       const data = {};
       data.assistant_mode = settings.assistant_mode || d.mode || "local";
+      data.local_reminder_script = settings.local_reminder_script || "script.set_timer_alarm_or_reminder";
       data.fallback_after_failures = Number(settings.fallback_after_failures ?? 2);
       data.queue_debounce_seconds = Number(settings.queue_debounce_seconds ?? 2.5);
       data.max_context_messages = Number(settings.max_context_messages ?? 12);
