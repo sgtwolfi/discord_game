@@ -181,6 +181,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "api_fallback_agent": self._get_current("api_fallback_agent", ""),
                 "group_relevance_agent": self._get_current("group_relevance_agent", ""),
                 "group_require_mention": self._get_current("group_require_mention", False),
+                "group_continuity_seconds": self._get_current("group_continuity_seconds", 300),
                 "spam_local_agent": self._get_current("spam_local_agent", ""),
                 "spam_policy": self._get_current("spam_policy", "defer_local"),
                 "spam_message_limit": self._get_current("spam_message_limit", 8),
@@ -259,6 +260,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional("api_fallback_agent", default=self._get_current("api_fallback_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("group_relevance_agent", default=self._get_current("group_relevance_agent", "")): selector.ConversationAgentSelector(),
                 vol.Required("group_require_mention", default=self._get_current("group_require_mention", False)): selector.BooleanSelector(),
+                vol.Required("group_continuity_seconds", default=self._get_current("group_continuity_seconds", 300)): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
                 vol.Optional("spam_local_agent", default=self._get_current("spam_local_agent", "")): selector.ConversationAgentSelector(),
                 vol.Required("spam_policy", default=self._get_current("spam_policy", "defer_local")): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=[{"label": "Defer to local model", "value": "defer_local"}, {"label": "Discord timeout", "value": "timeout"}, {"label": "Ignore during cooldown", "value": "ignore"}], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
