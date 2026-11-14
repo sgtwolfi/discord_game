@@ -140,3 +140,18 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     assert assistant.queue == [{"content": "earlier message"}]
     assert "queue is full" in assistant.error
     assert fired and fired[0][0][0] == "discord_game_assistant_error"
+
+
+
+def test_action_classifier_routes_home_assistant_operations():
+    action = assistant_module.ACTION
+    assert action.search("Set the bedroom lights to 30 percent")
+    assert action.search("Remind me to call Max in ten minutes")
+    assert action.search("Turn off the fan")
+    assert action.search("Set the heating to 19 degrees")
+
+
+def test_action_classifier_does_not_match_ordinary_chat():
+    action = assistant_module.ACTION
+    assert not action.search("What do you think of the new film?")
+    assert not action.search("Tell me a joke")
