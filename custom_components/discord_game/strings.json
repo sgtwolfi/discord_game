@@ -30,12 +30,24 @@
   "options": {
     "step": {
       "init": {
-        "title": "Discord Game Options",
+        "title": "Discord Game and GHOST Assistant Options",
         "data": {
           "access_token": "Token",
           "image_format": "Image format",
           "steam_api_key": "Steam API Key",
-          "entities_disabled_default": "Create sub-entities as disabled"
+          "entities_disabled_default": "Create sub-entities as disabled",
+          "assistant_enabled": "Enable Discord AI assistant",
+          "conversation_agent": "Conversation model agent ID",
+          "operations_agent": "Operations model agent ID",
+          "memory_agent": "Memory manager agent ID",
+          "fallback_agent": "API fallback agent ID",
+          "fallback_after_failures": "Local attempts before fallback",
+          "queue_debounce_seconds": "Message grouping delay (seconds)",
+          "max_context_messages": "Maximum context messages",
+          "context_budget_chars": "Approximate context budget (characters)",
+          "history_limit": "Messages before memory compression",
+          "typing_enabled": "Show Discord typing indicator",
+          "assistant_group_channels": "Server AI channels (comma-separated channel IDs)"
         }
       },
       "members": {
