@@ -45,7 +45,7 @@ def test_speech_accepts_text_response():
 def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 4
-    assistant.budget = 1500
+    assistant.budget = 2000
     batch = [{
         "sender_name": "Max",
         "content": "PLEASE DO THIS FIRST: " + "x" * 2000 + "PLEASE KEEP THIS END",
@@ -64,7 +64,7 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
 def test_prompt_uses_only_supplied_contact_history():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 10
-    assistant.budget = 1500
+    assistant.budget = 2000
     batch = [{"sender_name": "Ryan", "content": "Hello", "is_dm": True}]
     prompt = assistant._prompt(batch, [{"role": "user", "content": "Ryan's own history"}], "")
     assert "Ryan's own history" in prompt
@@ -748,7 +748,7 @@ def test_temporary_context_is_included_in_model_prompt():
 def test_prompt_budget_includes_injected_context_and_durable_memory():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 10
-    assistant.budget = 1500
+    assistant.budget = 2000
     batch = [{
         "sender_name": "Max",
         "content": "Please carry out this task " + "x" * 2000,
