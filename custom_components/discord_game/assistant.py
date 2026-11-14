@@ -22,12 +22,13 @@ DEFAULT_AGENT_PROMPTS = {
         "Never impersonate the owner or claim to have performed an action."
     ),
     "operations": (
-        "JOB: Carry out the requested Home Assistant action. Use only tools actually provided. "
-        "Choose the exact exposed target and its available fields, call the tool, then inspect its result. "
-        "For maximum light brightness, set brightness to 100 percent, not just on. "
-        "Use an exposed script for a named function. Never invent entities, services, fields or results. "
-        "Report success only when Home Assistant confirms it. Do not retry an action that may have partly worked. "
-        "If a tool or target is missing, state exactly what is missing."
+        "JOB: Handle Home Assistant device actions AND live state questions. Use only tools actually provided. "
+        "For a status question, query the relevant exposed entities and report their returned current states. "
+        "For a device request, identify the exact exposed target and use only its available fields, including the requested property such as brightness or colour, "
+        "call the tool, then inspect its result. For maximum brightness use 100 percent; for a requested colour use that colour. "
+        "Use an exposed script for a named function. Never invent entities, states, services, fields or results. "
+        "Report action success only when Home Assistant confirms it. Do not retry an action that may have partly worked. "
+        "If live state or a target is unavailable, say what could not be read or controlled."
     ),
     "advanced": (
         "JOB: Handle a difficult request or recover when the first agent cannot. "
@@ -45,10 +46,18 @@ DEFAULT_AGENT_PROMPTS = {
 
 ACTION=re.compile(
     r"\b(remind me|reminder|timer|alarm|turn on|turn off|turn(?:\s+\w+){0,5}\s+(?:on|off)|switch on|switch off|"
-    r"activate|deactivate|lock|unlock|open|close|set|adjust|increase|decrease|"
-    r"dim|brighten|cooler|warmer|schedule|cancel|delete|add|remove|toggle|"
+    r"activate|deactivate|lock|unlock|open|close|set|change|adjust|increase|decrease|"
+    r"dim|brighten|cooler|warmer|red|blue|green|colour|color|schedule|cancel|delete|add|remove|toggle|"
     r"enable|disable|play|pause|stop|start|volume|notify|send (?:a )?message|"
     r"run (?:the )?.{0,60}\b(?:script|automation|scene))\b",
+    re.IGNORECASE,
+)
+LIVE_STATE_QUERY = re.compile(
+    r"\b(what(?:'s|s| is) .{0,50} (?:doing|up to)|what is .{0,50} doing|"
+    r"what(?:'s| is) the (?:current )?(?:status|state)|current status|"
+    r"is .{0,40} (?:home|away|online|offline|on|off)|"
+    r"are .{0,40} (?:on|off)|what(?:'s| is) happening right now|"
+    r"check (?:the )?(?:status|state|lights|temperature|presence))\b",
     re.IGNORECASE,
 )
 COMPLEX_REQUEST = re.compile(
@@ -734,9 +743,11 @@ class DiscordAssistant:
         ]
         if role == "operations":
             lines.append(
-                "You are the operations agent. Execute the requested Home Assistant task using only exposed tools. "
-                "Identify the exact target, call the correct tool, read its result, and report only confirmed successes. "
-                "Never invent entities, scripts, services, fields or results. Never blindly repeat a possibly partial action."
+                "You are the operations agent. Handle Home Assistant actions and live state queries using only exposed tools. "
+                "For status questions, query the relevant entities and report returned states. For actions, identify the "
+                "exact target and requested properties (including colour or brightness), call the correct tool, and inspect "
+                "its result. Never invent entities, states, scripts, services, fields or results. Never blindly repeat a "
+                "possibly partial action."
             )
         elif role == "advanced":
             lines.append(
@@ -931,7 +942,7 @@ class DiscordAssistant:
             )
             is_operation = bool(
                 self.agents["operations_agent"]
-                and ACTION.search(request_text)
+                and (ACTION.search(request_text) or LIVE_STATE_QUERY.search(request_text))
                 and group_action_is_addressed
             )
             is_complex = bool(
