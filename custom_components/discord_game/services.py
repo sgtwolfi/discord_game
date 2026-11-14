@@ -46,7 +46,17 @@ async def async_setup_services(hass: HomeAssistant):
     if hass.data.setdefault(DOMAIN, {}).get("_assistant_services"):
         return
 
+    async def ensure_admin(call: ServiceCall):
+        """Reject user-initiated control calls from non-admin accounts."""
+        user_id = call.context.user_id
+        if user_id is None:
+            return
+        user = await hass.auth.async_get_user(user_id)
+        if user is None or not user.is_admin:
+            raise HomeAssistantError("Administrator access is required for GHOST controls")
+
     async def send(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
@@ -57,12 +67,14 @@ async def async_setup_services(hass: HomeAssistant):
         )
 
     async def clear(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_history(call.data["user_id"])
 
     async def set_context(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
@@ -71,6 +83,7 @@ async def async_setup_services(hass: HomeAssistant):
         )
 
     async def set_memory(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
@@ -79,6 +92,7 @@ async def async_setup_services(hass: HomeAssistant):
         )
 
     async def replay(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
@@ -87,18 +101,21 @@ async def async_setup_services(hass: HomeAssistant):
         )
 
     async def pause(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].pause()
 
     async def resume(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].resume()
 
     async def edit_queue(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
@@ -106,6 +123,7 @@ async def async_setup_services(hass: HomeAssistant):
             raise HomeAssistantError("Queued message was not found")
 
     async def cancel_queued(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
@@ -113,6 +131,7 @@ async def async_setup_services(hass: HomeAssistant):
             raise HomeAssistantError("Queued message was not found")
 
     async def clear_queue(call: ServiceCall):
+        await ensure_admin(call)
         items = assistants(hass)
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
