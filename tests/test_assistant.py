@@ -1894,6 +1894,63 @@ def test_memory_replaceable_keys_supersede_work_and_same_favourite_category():
     assert assistant_module.replaceable_memory_key("Favourite: film — Interstellar") == "favourite:film"
 
 
+
+def test_memory_consolidation_deduplicates_and_supersedes_old_work_and_favourite():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {
+        "123": {
+            "summary": "Work: at the old shop\\nWork: at the old shop\\nFavourite: film — Old Film",
+            "summary_source": "legacy",
+            "pending_messages": [{
+                "role": "user",
+                "content": "I work at the new shop. My favourite film is New Film",
+            }],
+            "messages": [],
+        }
+    }
+    assistant.memory_batch_messages = 20
+    assistant.history_limit = 8
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+    assistant._save = lambda: asyncio.sleep(0)
+    assistant._refresh_sensor = lambda: None
+    completed = asyncio.run(assistant._consolidate_pending_memories({"123"}))
+    summary = assistant.friends["123"]["summary"]
+    assert completed == 1
+    assert summary.count("Work: at the new shop") == 1
+    assert "Work: at the old shop" not in summary
+    assert "Favourite: film — New Film" in summary
+    assert "Old Film" not in summary
+    assert assistant.friends["123"]["pending_messages"] == []
+
+
+def test_group_history_is_restored_from_persisted_conversation_logs(monkeypatch):
+    saved = {
+        "friends": {},
+        "transcript": [],
+        "model_usage": {},
+        "conversation_logs": {
+            "guild:1:2": [
+                {"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "hello", "timestamp": "2026-11-14T11:44:00+00:00"},
+                {"role": "assistant", "sender": "GHOST", "content": "What do you need help with?", "timestamp": "2026-11-14T11:45:00+00:00"},
+            ],
+        },
+        "conversation_meta": {},
+    }
+
+    class FakeStore:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def async_load(self):
+            return saved
+
+    monkeypatch.setattr(assistant_module, "Store", FakeStore)
+    assistant = DiscordAssistant(SimpleNamespace(), "entry", {"assistant_enabled": False}, None)
+    asyncio.run(assistant.async_start())
+    assert [message["role"] for message in assistant.groups["guild:1:2"]] == ["user", "assistant"]
+    assert assistant.groups["guild:1:2"][-1]["content"] == "What do you need help with?"
+
+
 def test_memory_purge_scopes_preserve_unselected_data():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.approved_users = {"123"}
