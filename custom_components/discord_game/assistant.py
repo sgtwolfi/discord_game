@@ -757,8 +757,9 @@ class DiscordAssistant:
             )
         elif role == "advanced":
             lines.append(
-                "You are GHOST's fallback specialist. Break difficult work into explicit steps, verify facts and tool "
-                "results, preserve the user's intent, and never claim an action succeeded without confirmation."
+                "You are the advanced reasoning agent and GHOST's fallback specialist. Break difficult work into "
+                "explicit steps, verify facts and tool results, preserve the user's intent, and never claim an action "
+                "succeeded without confirmation."
             )
         else:
             lines.append(
@@ -809,25 +810,38 @@ class DiscordAssistant:
             minimum_content = min(32, len(content))
             keep = max(minimum_content, len(content) - excess)
             optional_sections[index] = heading + separator + content[:keep]
-            if len(build_prompt()) > self.budget and keep <= minimum_content:
-                optional_sections[index] = heading
 
         if len(build_prompt()) > self.budget:
-            fixed = "\n\n".join(lines + optional_sections + [header])
-            allowance = max(1, self.budget - len(fixed) - sum(len(line) + 1 for line in previous))
             combined_current = "\n".join(current)
-            if allowance > 80:
-                marker = "\n[Middle of oversized request omitted]\n"
-                content_allowance = max(2, allowance - len(marker))
-                head_length = (content_allowance + 1) // 2
-                tail_length = content_allowance - head_length
-                current = [combined_current[:head_length] + marker + combined_current[-tail_length:]]
-            else:
-                current = [combined_current[:allowance]]
+            marker = "\n[Middle of oversized request omitted]\n"
+            low = 0
+            high = len(combined_current)
+            best = ""
+            # Find the longest version of the live request that fits, preserving
+            # both its beginning and ending so the task and important qualifiers survive.
+            while low <= high:
+                allowance = (low + high) // 2
+                if allowance > len(marker):
+                    content_allowance = allowance - len(marker)
+                    head_length = (content_allowance + 1) // 2
+                    tail_length = content_allowance - head_length
+                    candidate = combined_current[:head_length] + marker + combined_current[-tail_length:]
+                else:
+                    candidate = combined_current[:allowance]
+                current = [candidate]
+                if len(build_prompt()) <= self.budget:
+                    best = candidate
+                    low = allowance + 1
+                else:
+                    high = allowance - 1
+            current = [best or combined_current[:max(1, high)]]
 
         prompt = build_prompt()
-        # The core prompt itself is deliberately kept concise enough for small local models.
-        return prompt[:self.budget]
+        if len(prompt) > self.budget:
+            # This should only be reachable if the configured budget is smaller
+            # than the mandatory identity and safety instructions.
+            raise RuntimeError("Prompt budget is too small for GHOST's mandatory instructions")
+        return prompt
 
     async def _process(self, batch):
         self.active = True
