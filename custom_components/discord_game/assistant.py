@@ -19,6 +19,31 @@ def speech(data):
     plain=sp.get("plain",{}) if isinstance(sp,dict) else {}
     return str(plain.get("speech","") or response.get("text","")).strip() if isinstance(response,dict) else ""
 
+def action_result_error(data):
+    """Return why a requested HA action is not positively confirmed.
+
+    Home Assistant's conversation response includes response_type and, for
+    completed actions, data.success/data.failed. Speech alone is never proof.
+    """
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict):
+        return "Home Assistant returned an unreadable action result."
+    if response.get("response_type") != "action_done":
+        return "The conversation agent did not return a completed Home Assistant action."
+    result_data = response.get("data") or {}
+    if not isinstance(result_data, dict):
+        return "Home Assistant returned no structured action result."
+    failed = result_data.get("failed") or []
+    succeeded = result_data.get("success") or []
+    if failed:
+        return "Home Assistant reported failed targets: " + ", ".join(
+            str(item.get("name") or item.get("id") or "unknown target")
+            for item in failed if isinstance(item, dict)
+        )
+    if not succeeded:
+        return "Home Assistant did not report any successfully completed targets."
+    return None
+
 class AssistantSensor(SensorEntity):
     _attr_has_entity_name=True
     _attr_name="Assistant"
@@ -140,6 +165,7 @@ class DiscordAssistant:
             timeout=90,
         )
         answer=speech(result)
+        self._last_call_result = result
         if not answer:raise RuntimeError("Conversation agent returned no speech")
         return answer
     def _history(self,item):
@@ -190,6 +216,10 @@ class DiscordAssistant:
             if not answer and self.agents["fallback_agent"]:
                 model=self.agents["fallback_agent"];answer=await self._call(model,prompt)
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
+            if role == "operations":
+                verification_error = action_result_error(getattr(self, "_last_call_result", None))
+                if verification_error:
+                    raise RuntimeError("Action not confirmed: " + verification_error)
             await self._send(item["channel"],answer)
             now=datetime.now(UTC).isoformat()
             for msg in batch:history.append({"role":"user","content":msg["content"],"sender_id":msg["sender_id"],"timestamp":msg["timestamp"]})
