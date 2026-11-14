@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.storage import Store
 
-from .const import DOMAIN, CONF_MEMBERS
+from .const import CONF_MEMBERS, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
