@@ -1390,6 +1390,11 @@ class DiscordAssistant:
                 entry.get("directly_addressed") for entry in batch
             )
             kind = request_kind(request_text)
+            local_status_answer = (
+                answer_local_status(self.hass, request_text, dt_util.now())
+                if self.mode == "local" and kind == "query"
+                else None
+            )
             local_reminder = (
                 parse_local_reminder(request_text, dt_util.now())
                 if self.mode == "local" and item["is_dm"]
@@ -1399,13 +1404,33 @@ class DiscordAssistant:
                 kind in {"action", "query"}
                 and group_action_is_addressed
                 and not self.agents.get("operations_agent")
+                and local_status_answer is None
                 and local_reminder is None
             ):
                 raise RuntimeError(
                     "The Home Assistant operations agent is not configured. "
                     "I cannot safely execute actions or report live device states."
                 )
-            if local_reminder is not None:
+            if local_status_answer is not None:
+                role = "local_status"
+                model = "Home Assistant state reader"
+                prompt = self._prompt(batch, prior_history, summary, "conversation", context_note)
+                self.active_request = {
+                    "conversation": item["key"],
+                    "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
+                    "messages": [x["content"] for x in batch],
+                    "model": model,
+                    "role": role,
+                    "request_kind": kind,
+                    "batch_size": len(batch),
+                    "models_attempted": [],
+                    "stage": "Reading Home Assistant state directly",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "context_snapshot": prompt,
+                }
+                self._refresh_sensor()
+                answer = local_status_answer
+            elif local_reminder is not None:
                 role = "local_reminder"
                 model = "local-script:" + self.local_reminder_script
                 prompt = self._prompt(batch, prior_history, summary, "conversation", context_note)
