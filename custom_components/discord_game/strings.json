@@ -60,7 +60,8 @@
       }
     },
     "error": {
-      "auth": "The auth token provided is not valid."
+      "auth": "The auth token provided is not valid.",
+      "assistant_agent_required": "Select a conversation agent before enabling the Discord assistant."
     }
   }
 }
