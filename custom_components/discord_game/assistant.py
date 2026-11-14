@@ -191,7 +191,7 @@ class DiscordAssistant:
         for item in self.transcript[:-10]:
             snapshot = item.get("context_snapshot")
             if isinstance(snapshot, str) and len(snapshot) > 4000:
-                item["context_snapshot"] = snapshot[:4000] + "\\n[Older context snapshot truncated]"
+                item["context_snapshot"] = snapshot[:4000] + "\n[Older context snapshot truncated]"
 
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
         if not self.enabled or self.stopped:
