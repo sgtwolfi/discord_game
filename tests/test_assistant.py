@@ -530,7 +530,8 @@ def test_memory_consolidation_uses_latest_configured_messages_and_revises_summar
     assert result == 1
     assert "Max: 3" in prompts[0] and "Max: 4" in prompts[0]
     assert "Max: 0" not in prompts[0]
-    assert "remove facts that are clearly outdated" in prompts[0]
+    assert "Do not turn one event into a lasting preference" in prompts[0]
+    assert "VERIFIED SYSTEM EVENT" in prompts[0] or "CONTACT MESSAGE" in prompts[0]
     assert assistant.friends["123"]["summary"] == "Updated durable memory"
     assert assistant.friends["123"]["pending_messages"] == []
     assert len(assistant.friends["123"]["messages"]) == 1
