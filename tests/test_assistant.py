@@ -65,3 +65,21 @@ def test_prompt_uses_only_supplied_contact_history():
     prompt = assistant._prompt(batch, [{"role": "user", "content": "Ryan's own history"}], "")
     assert "Ryan's own history" in prompt
     assert "Max's private history" not in prompt
+
+def test_action_result_requires_home_assistant_action_done():
+    assert assistant_module.action_result_error({"response": {"response_type": "action_done", "data": {"success": [{"id": "light.kitchen"}], "failed": []}}}) is None
+
+
+def test_action_result_rejects_plain_speech_as_proof():
+    error = assistant_module.action_result_error({"response": {"response_type": "success", "speech": {"plain": {"speech": "Done!"}}}})
+    assert error and "completed Home Assistant action" in error
+
+
+def test_action_result_reports_failed_targets():
+    error = assistant_module.action_result_error({"response": {"response_type": "action_done", "data": {"success": [], "failed": [{"id": "light.kitchen"}]}}})
+    assert error and "light.kitchen" in error
+
+
+def test_action_result_rejects_empty_success_list():
+    error = assistant_module.action_result_error({"response": {"response_type": "action_done", "data": {"success": [], "failed": []}}})
+    assert error and "successfully completed" in error
