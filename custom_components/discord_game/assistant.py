@@ -455,7 +455,7 @@ class DiscordAssistant:
 
         if context_note:
             lines.append(
-                "Administrator-provided context for this conversation:\\n"
+                "Administrator-provided context for this conversation:\n"
                 + str(context_note)[:4000]
             )
 
