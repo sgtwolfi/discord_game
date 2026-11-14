@@ -986,6 +986,62 @@ def test_action_retry_merge_preserves_first_success_and_uses_retry_outcome():
     assert assistant_module.action_result_error(merged) is None
 
 
+def test_action_retry_merge_rejects_empty_or_incomplete_retry_results():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [
+                    {"entity_id": "light.hall", "error": "Rejected"},
+                    {"entity_id": "light.kitchen", "error": "Rejected"},
+                ],
+            },
+        },
+    }
+    empty_retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": []},
+        },
+    }
+    incomplete_retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.hall"}],
+                "failed": [],
+            },
+        },
+    }
+
+    assert assistant_module.merge_action_retry_results(first, empty_retry) is None
+    assert assistant_module.merge_action_retry_results(first, incomplete_retry) is None
+
+
+def test_action_retry_merge_rejects_targets_outside_failed_set():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+    retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.hall"}, {"entity_id": "light.bedroom"}],
+                "failed": [],
+            },
+        },
+    }
+
+    assert assistant_module.merge_action_retry_results(first, retry) is None
+
+
 def test_action_retry_merge_rejects_unstructured_retry_response():
     first = {
         "response": {
