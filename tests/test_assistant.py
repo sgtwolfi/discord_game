@@ -629,3 +629,46 @@ def test_admin_cannot_create_memory_for_unapproved_contact():
 
     with pytest.raises(ValueError, match="approved GHOST contacts"):
         asyncio.run(assistant.set_friend_memory("456", "Unapproved memory"))
+
+
+
+def test_group_transcript_replay_preserves_each_sender():
+    from types import SimpleNamespace
+    import asyncio
+
+    channel = SimpleNamespace(id=789)
+
+    class FakeBot:
+        def get_channel(self, channel_id):
+            assert channel_id == 789
+            return channel
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.transcript = [{
+        "timestamp": "2026-11-14T00:00:00+00:00",
+        "conversation": "guild:555:789",
+        "is_dm": False,
+        "sender_ids": ["123", "456"],
+        "sender": "Max, Ryan",
+        "channel_id": "789",
+        "user_messages": ["First message", "Second message"],
+        "messages": [
+            {"sender": "Max", "sender_id": "123", "content": "First message"},
+            {"sender": "Ryan", "sender_id": "456", "content": "Second message"},
+        ],
+    }]
+    assistant.queue = []
+    assistant.max_queue = 200
+    assistant.bot = FakeBot()
+    assistant.approved_users = {"123", "456"}
+    assistant.group_channels = {"789"}
+    assistant.wake = asyncio.Event()
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+
+    asyncio.run(assistant.replay_transcript(
+        "2026-11-14T00:00:00+00:00", "guild:555:789"
+    ))
+
+    assert [item["sender_name"] for item in assistant.queue] == ["Max", "Ryan"]
+    assert [item["sender_id"] for item in assistant.queue] == ["123", "456"]
