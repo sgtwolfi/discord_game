@@ -152,7 +152,7 @@ class DiscordAssistant:
     async def _save(self):
         await self.store.async_save({"friends":self.friends,"transcript":self.transcript[-100:]})
     def attributes(self):
-        return {"enabled":self.enabled,"queue_length":len(self.queue),"processing":self.active,
+        return {"enabled":self.enabled,"paused":self.paused,"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
           "pending_messages":[
