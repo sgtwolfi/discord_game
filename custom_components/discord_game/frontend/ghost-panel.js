@@ -197,7 +197,14 @@ class DiscordGameGhostPanel extends HTMLElement {
       label{display:block;color:var(--secondary-text-color);font-size:12px;margin:10px 0 5px}
       .help{font-size:11px;color:var(--secondary-text-color);margin-top:4px}
       .field{min-width:0}
-      .prompt{min-height:130px}
+      .prompt{min-height:150px;width:100%}
+      .prompthead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+      .prompthead label{margin:0}
+      .defaultbadge{display:inline-block;border:1px solid var(--divider-color);border-radius:20px;padding:3px 8px;font-size:10px;color:var(--secondary-text-color);letter-spacing:.04em}
+      .caprow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--divider-color)}
+      .caprow:last-child{border:0}
+      .caprow label{display:flex;align-items:center;gap:7px;white-space:nowrap}
+      .caprow input[type=checkbox]{width:18px;height:18px;accent-color:var(--primary-color)}
       .contactrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--divider-color)}
       .contactrow:last-child{border-bottom:0}
       .notice{padding:10px 13px;background:var(--secondary-background-color);border-radius:10px;font-size:12px;margin:0 0 12px}
