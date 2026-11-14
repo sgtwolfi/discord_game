@@ -62,6 +62,34 @@ replay_transcript:
       required: true
       selector:
         text:
+purge_friend_memory:
+  name: Purge selected contact data
+  description: Remove saved facts, pending evidence, raw chat history or all retained data for one approved contact.
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+    scope:
+      required: true
+      selector:
+        select:
+          options:
+            - label: Saved facts only
+              value: facts
+            - label: Pending evidence only
+              value: pending
+            - label: Raw chat history
+              value: history
+            - label: Everything
+              value: all
+consolidate_friend_memory:
+  name: Consolidate and deduplicate contact memory
+  description: Run deterministic memory extraction and duplicate cleanup now.
+  fields:
+    user_id:
+      selector:
+        text:
 set_friend_memory:
   name: Correct contact memory
   description: Replace the durable memory summary for an approved Discord contact.
@@ -115,6 +143,14 @@ update_settings:
       required: true
       selector:
         boolean:
+    group_continuity_seconds:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 1800
+          step: 30
+          mode: box
     fallback_after_failures:
       required: true
       selector:
