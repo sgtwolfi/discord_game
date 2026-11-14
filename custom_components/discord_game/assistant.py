@@ -428,7 +428,14 @@ class DiscordAssistant:
             fixed_length += sum(len(line) + 1 for line in previous)
             allowance = max(1, self.budget - fixed_length)
             combined_current = "\n".join(current)
-            current = [combined_current[-allowance:]]
+            if allowance > 80:
+                marker = "\\n[Middle of oversized request omitted]\\n"
+                content_allowance = max(2, allowance - len(marker))
+                head_length = (content_allowance + 1) // 2
+                tail_length = content_allowance - head_length
+                current = [combined_current[:head_length] + marker + combined_current[-tail_length:]]
+            else:
+                current = [combined_current[:allowance]]
 
         return build_prompt()
 
