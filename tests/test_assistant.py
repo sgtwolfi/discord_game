@@ -1510,3 +1510,55 @@ def test_live_state_classifier_routes_presence_questions_to_operations():
     assert query.search("whats Harvey doing right now?")
     assert query.search("what is the current status of the bedroom?")
     assert query.search("is Harvey home?")
+
+
+
+def test_legacy_memory_cleanup_removes_assistant_banter_and_unverified_claims():
+    legacy = """
+    Ooh right, Harvey's doing nothing, just chillin' at full brightness mate.
+    Harvey is definitely sat at his PC.
+    Preference: like science fiction films
+    Action record (NOT CONFIRMED): Turn the room lights red
+    """
+    cleaned = assistant_module.sanitize_legacy_memory_summary(legacy)
+    assert "Ooh right" not in cleaned
+    assert "definitely sat at his PC" not in cleaned
+    assert "Preference: like science fiction films" in cleaned
+    assert "Action record (NOT CONFIRMED): Turn the room lights red" in cleaned
+
+
+def test_api_mode_prompt_keeps_ghost_memory_without_overriding_ha_agent_prompt():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.limit = 8
+    assistant.budget = 4000
+    batch = [{"sender_name": "Tokyo", "content": "What is Harvey doing?", "is_dm": True}]
+
+    prompt = assistant._prompt(
+        batch,
+        [{"role": "user", "sender": "Tokyo", "content": "Earlier question"}],
+        "- Preference: likes science fiction films",
+        role="operations",
+    )
+
+    assert "Preference: likes science fiction films" in prompt
+    assert "What is Harvey doing?" in prompt
+    assert "Earlier question" in prompt
+    assert "GHOST reference context" in prompt
+    assert "Role instructions" not in prompt
+    assert "You are GHOST:" not in prompt
+
+
+def test_api_mode_prompt_does_not_include_another_contact_memory():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.limit = 8
+    assistant.budget = 4000
+    prompt = assistant._prompt(
+        [{"sender_name": "Tokyo", "content": "Hello", "is_dm": True}],
+        [],
+        "",
+        role="conversation",
+    )
+    assert "private memory" not in prompt.lower()
+    assert "Saved facts about this approved DM contact" not in prompt
