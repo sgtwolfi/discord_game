@@ -108,7 +108,11 @@ def action_result_error(data):
             details.append(target + (": " + str(reason) if reason else ""))
         return "Home Assistant reported failed targets: " + ", ".join(details)
     if not succeeded:
-        return "Home Assistant did not report any successfully completed targets."
+        return (
+            "Home Assistant returned an action response but no successful or failed targets. "
+            "The agent may not have issued a supported device-control tool call, or the integration "
+            "did not return structured target results."
+        )
     return None
 
 def action_result_retryable(data):
