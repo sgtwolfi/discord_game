@@ -303,7 +303,10 @@ class DiscordAssistant:
         except Exception as err:
             self.error=str(err)[:500];self._state="error"
             _LOGGER.exception("Discord assistant failed")
-            try:await self._send(item["channel"],"I couldn't process that properly. I've logged the failure rather than pretending it worked.")
+            try:
+                detail = str(err).strip()[:350]
+                notice = "I couldn't complete that request: " + detail if detail else "I couldn't complete that request. I've logged the failure."
+                await self._send(item["channel"], notice)
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
