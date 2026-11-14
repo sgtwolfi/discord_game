@@ -220,7 +220,6 @@ def extract_durable_memory_facts(messages):
         )
         if preference:
             add("Preference: " + preference.group(1).lower() + " " + preference.group(2))
-            continue
 
         favourite = re.search(
             r"\bmy\s+(favourite|favorite)\s+([^.!?]{1,60}?)\s+is\s+([^.!?]{2,140})",
@@ -232,7 +231,6 @@ def extract_durable_memory_facts(messages):
                 "Favourite: " + favourite.group(2).strip()
                 + " — " + favourite.group(3).strip()
             )
-            continue
 
         occupation = re.search(
             r"\bI\s+work\s+(as|at|for)\s+([^.!?]{2,140})",
@@ -1881,7 +1879,7 @@ class DiscordAssistant:
         """Use continuity and direct-address signals before local relevance inference."""
         addressed = any(entry.get("directly_addressed") for entry in batch)
         if addressed:
-            return True, "GHOST was explicitly addressed; relevance inference was unnecessary."
+            return True, "GHOST was directly addressed; relevance inference was unnecessary."
         if getattr(self, "group_require_mention", False):
             if addressed:
                 return True, "GHOST was directly addressed; mention-only mode skipped relevance inference."
@@ -1893,10 +1891,17 @@ class DiscordAssistant:
         assistant_turn = next((entry for entry in reversed(history) if entry.get("role") == "assistant"), None)
         if assistant_turn and getattr(self, "group_continuity_seconds", 300):
             last_index = max((index for index, entry in enumerate(history) if entry is assistant_turn), default=-1)
+            preceding = history[:last_index] if last_index >= 0 else []
+            prior_user = next((entry for entry in reversed(preceding) if entry.get("role") == "user"), None)
             trailing = history[last_index + 1:] if last_index >= 0 else []
             current_senders = {str(entry.get("sender_id") or "") for entry in batch}
             trailing_senders = {str(entry.get("sender_id") or "") for entry in trailing if entry.get("role") == "user"}
-            same_speaker = len(current_senders) == 1 and "" not in current_senders and trailing_senders.issubset(current_senders)
+            prior_sender = str((prior_user or {}).get("sender_id") or "")
+            same_speaker = (
+                len(current_senders) == 1 and "" not in current_senders
+                and prior_sender in current_senders
+                and trailing_senders.issubset(current_senders)
+            )
             elapsed = _timestamp_delta_seconds(assistant_turn.get("timestamp"), batch[-1].get("timestamp"))
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
             if same_speaker and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
