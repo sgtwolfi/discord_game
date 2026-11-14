@@ -1,4 +1,4 @@
-# Discord Game + GHOST Assistant (v8 development)
+# Discord Game + GHOST Assistant (v8.1 development)
 
 This branch adds an optional token-conscious assistant runtime while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
@@ -13,6 +13,34 @@ Choose the agents from Home Assistant's conversation-agent dropdowns:
 - Fallback agent: optional API-backed conversation agent used after repeated local service failures.
 
 Use IDs such as `conversation.my_ollama_agent`. This integration does not store API keys.
+
+
+## Runtime modes
+
+Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → Assistant behaviour. The mode is saved with the integration options and takes effect after the integration reloads.
+
+### API Mode
+
+- Select one Home Assistant Conversation Agent in Settings → Devices & services → Discord Game → Configure.
+- Configure its provider, API credentials, model, system prompt and available tools/functions in that agent's own Home Assistant integration settings.
+- GHOST does not overwrite that agent's system prompt or tool configuration. It sends bounded conversation context and the approved contact's private saved facts with each request.
+- GHOST still owns Discord queueing, contact isolation, memory extraction/consolidation, audit history and action-result verification. Switching models or changing the agent does not disable or erase memory.
+- The Operations and Fallback selectors are ignored in this mode. The selected Conversation Agent handles ordinary chat, relevance decisions, live-state queries and actions.
+
+### Local Mode
+
+- Select separate Conversation and Operations agents, with an optional Fallback agent, in Discord Game → Configure.
+- GHOST assigns narrow role-specific prompts and routes Home Assistant work to the Operations Agent. The fallback is for model-call recovery, not a second attempt at an uncertain side effect.
+- Simple live lookups are answered directly from Home Assistant state without asking a model to use a tool: Discord presence/activity sensors, lights, current local time and configured weather entities.
+- Clear private-DM reminder requests are parsed deterministically and sent directly to the configured reminder script. This avoids relying on a tiny model to discover and call a function. The default script entity is `script.set_timer_alarm_or_reminder`; change it in GHOST → Settings if yours is named differently. The script must return `success: true` before GHOST confirms the reminder. Ambiguous times (for example, “at 7”) trigger a clarification instead of a guess.
+- Other device actions still depend on the selected Operations Agent and its Home Assistant tool support. A 0.5B model is not guaranteed to make reliable tool calls merely because prompts are shorter; use the direct handlers where available and test any other action with the Activity panel open.
+
+## Memory ownership and cleanup
+
+Memory is owned by GHOST in both modes, not by the selected model. GHOST adds only the current approved DM contact's saved facts to that contact's request context. Durable memory is extracted deterministically from explicit remember statements, clear first-person preferences/favourites/work facts and structured action outcomes. Assistant replies, jokes, guessed activity and unverified device claims are not memory evidence.
+
+On startup, legacy non-administrator summaries are now allow-listed to evidence-labelled facts only. Old conversational filler and unlabelled generated claims are discarded. Administrator-authored memory corrections are preserved. Recent chat and the bounded audit transcript remain available separately for conversation continuity and administrator diagnostics; they are not promoted to durable facts.
+
 
 ## Behaviour and privacy
 
