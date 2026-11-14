@@ -1456,6 +1456,7 @@ class DiscordAssistant:
                     if self.active_request:
                         self.active_request["stage"] = "Calling configured Home Assistant reminder script"
                         self._refresh_sensor()
+                    self._last_call_result = None
                     operation_result = await self._execute_local_reminder(local_reminder)
                     action_result = action_result_snapshot(operation_result)
                     verification_error = action_result_error(operation_result)
