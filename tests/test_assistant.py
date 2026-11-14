@@ -2299,3 +2299,12 @@ def test_local_status_reader_accepts_current_and_third_person_phrasings():
         assert answer_local_status(
             hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
         ) == "My current status is: Running a maintenance check"
+
+
+def test_ghost_activity_question_uses_ghost_status_not_discord_friend_lookup():
+    state = SimpleNamespace(state="Waiting for the next command")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    assert answer_local_status(
+        hass, "What's GHOST doing?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    ) == "My current status is: Waiting for the next command"
