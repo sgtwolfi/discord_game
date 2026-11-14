@@ -262,7 +262,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       for (const field of configForm.querySelectorAll("[name]")) {
         data[field.name] = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
       }
-      if (!data.assistant_group_channels.trim().split(",").every((id) => !id.trim() || /^\\d+$/.test(id.trim()))) {
+      if (!data.assistant_group_channels.trim().split(",").every((id) => !id.trim() || /^\d+$/.test(id.trim()))) {
         this._notice = "Server channel IDs must be numeric and separated by commas.";
         this._render(); return;
       }
