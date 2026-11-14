@@ -309,10 +309,11 @@ class DiscordGameGhostPanel extends HTMLElement {
   _renderChats(shell, d) {
     const stat = this._el("div", null, "statrow");
     const queued = this._el("div", null, "stat"); queued.append(this._el("span", "Queued messages", "muted"), this._el("b", d.queue_length || 0));
-    const status = this._el("div", null, "stat"); status.append(this._el("span", "Assistant", "muted"), this._el("b", d.processing ? "Working" : d.paused ? "Paused" : d.enabled ? "Ready" : "Disabled"));
+    const status = this._el("div", null, "stat"); status.append(this._el("span", "Assistant", "muted"), this._el("b", d.processing ? "Working" : d.paused ? "Paused" : d.last_error ? "Needs attention" : d.enabled ? "Ready" : "Disabled"));
+    const liveStatus = this._el("div", null, "stat"); liveStatus.append(this._el("span", "Live GHOST status", "muted"), this._el("b", d.ghost_status_value || "Unavailable"));
     const friends = this._el("div", null, "stat"); friends.append(this._el("span", "Approved friends", "muted"), this._el("b", (d.contacts || []).length));
     const groups = this._el("div", null, "stat"); groups.append(this._el("span", "Server chats", "muted"), this._el("b", (d.groups || []).length));
-    stat.append(queued, status, friends, groups);
+    stat.append(queued, status, liveStatus, friends, groups);
     shell.append(stat);
 
     if (d.active_request) {
