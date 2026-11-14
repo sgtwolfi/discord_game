@@ -687,7 +687,7 @@ class DiscordAssistant:
                 "Preserve still-valid facts from the existing summary, add only supported durable facts, "
                 "remove contradictions only when newer messages clearly correct them, and do not invent details. "
                 "Return a concise summary.\n\n"
-                + str(self.config.get("memory_system_prompt", "") or "")[:4000]
+                + str(getattr(self, "config", {}).get("memory_system_prompt", "") or "")[:4000]
                 + f"\n\nExisting summary:\n{prior_summary}\n\nNew older conversation:\n{text[:self.budget]}"
             )
             try:
