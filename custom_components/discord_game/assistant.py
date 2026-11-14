@@ -599,7 +599,7 @@ class DiscordAssistant:
                 "content": str(record.get("content") or ""),
                 "timestamp": now.isoformat(),
                 "sort": queued_at,
-                "directly_addressed": bool(record.get("directly_addressed")) ,
+                "directly_addressed": bool(record.get("directly_addressed")),
                 "channel_id": str(channel.id),
                 "channel": channel,
             })
@@ -1017,7 +1017,7 @@ class DiscordAssistant:
                 "is_dm": item["is_dm"],
                 "user_messages": [x["content"] for x in batch],
                 "messages": [
-                    {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"]}
+                    {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "directly_addressed": x.get("directly_addressed", False)}
                     for x in batch
                 ],
                 "assistant": None,
