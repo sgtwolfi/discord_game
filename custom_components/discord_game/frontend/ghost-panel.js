@@ -170,6 +170,31 @@ class DiscordGameGhostPanel extends HTMLElement {
     } else active.append(this._node("p", "Nothing is currently being processed.", "muted"));
     page.append(active);
 
+    const contextSection = this._section("Inject temporary conversation context", "This note is held in memory only and is cleared when Home Assistant restarts. Use dm:USER_ID or guild:GUILD_ID:CHANNEL_ID.");
+    const contextCard = this._node("div", undefined, "item");
+    contextCard.append(this._node("label", "Conversation key"));
+    const contextKey = this._node("input");
+    contextKey.dataset.preserve = "context-key";
+    contextKey.value = a.active_request?.conversation || "";
+    contextCard.append(contextKey);
+    contextCard.append(this._node("label", "Temporary context note"));
+    const contextValue = this._node("textarea");
+    contextValue.rows = 4;
+    contextValue.dataset.preserve = "context-value";
+    contextValue.value = a.context_notes?.[contextKey.value] || "";
+    contextCard.append(contextValue);
+    contextCard.append(this._button("Inject or update context", () => {
+      const key = contextKey.value.trim();
+      if (!key) {
+        this._notice = "Enter a conversation key.";
+        this._render();
+        return;
+      }
+      this._service("set_context_note", { conversation: key, context: contextValue.value });
+    }, true));
+    contextSection.append(contextCard);
+    page.append(contextSection);
+
     const queue = this._section("Pending messages", "Messages are processed in chronological order. Clearing the queue does not interrupt an active response.");
     const queueList = this._node("div", undefined, "list");
     for (const item of a.pending_messages || []) {
