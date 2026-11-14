@@ -260,6 +260,27 @@ class DiscordGameGhostPanel extends HTMLElement {
     }
     if (!memoryList.childElementCount) memoryList.append(this._node("p", "No contact memories stored yet.", "muted"));
     memories.append(memoryList);
+    const injectWrap = this._node("div", undefined, "item");
+    injectWrap.append(this._node("label", "Approved Discord user ID"));
+    const injectUser = this._node("input");
+    injectUser.dataset.preserve = "inject-memory-user";
+    injectUser.inputMode = "numeric";
+    injectWrap.append(injectUser);
+    injectWrap.append(this._node("label", "Context to inject or correct"));
+    const injectSummary = this._node("textarea");
+    injectSummary.rows = 4;
+    injectSummary.dataset.preserve = "inject-memory-summary";
+    injectWrap.append(injectSummary);
+    injectWrap.append(this._button("Save contact context", () => {
+      const userId = injectUser.value.trim();
+      if (!userId) {
+        this._notice = "Enter an approved Discord user ID.";
+        this._render();
+        return;
+      }
+      this._service("set_friend_memory", { user_id: userId, summary: injectSummary.value });
+    }, true));
+    memories.append(injectWrap);
     page.append(memories);
 
     const manual = this._section("Send a manual Discord message", "Fill in one destination: Discord user ID for a DM, or channel ID for a server channel.");
