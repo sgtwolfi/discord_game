@@ -10,7 +10,8 @@ from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
 
-_LOGGER=logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
+MAX_PENDING_MESSAGES = 200
 ACTION=re.compile(r"\b(remind|timer|alarm|turn on|turn off|switch on|switch off|activate|deactivate|lock|unlock|open the|close the)\b",re.IGNORECASE)
 
 def speech(data):
@@ -73,6 +74,7 @@ class DiscordAssistant:
         self.friends={}
         self.groups=defaultdict(list)
         self.queue=[]
+        self.max_queue = MAX_PENDING_MESSAGES
         self.wake=asyncio.Event()
         self.worker=None
         self.active=False
@@ -128,10 +130,23 @@ class DiscordAssistant:
           "transcript":self.transcript[-20:],
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
-        if not self.enabled or self.stopped:return
+        if not self.enabled or self.stopped:
+            return
+        content = (message.content or "").strip()
+        if not content:
+            return
+        if len(self.queue) >= self.max_queue:
+            self.error = "Assistant queue is full; the newest message was not accepted."
+            self.hass.bus.async_fire("discord_game_assistant_error", {
+                "conversation": f"dm:{sender_id}" if is_dm else f"guild:{message.guild.id}:{message.channel.id}",
+                "error": self.error,
+                "sender_id": str(sender_id),
+            })
+            self._refresh_sensor()
+            return
         key=f"dm:{sender_id}" if is_dm else f"guild:{message.guild.id}:{message.channel.id}"
         self.queue.append({"key":key,"is_dm":is_dm,"sender_id":str(sender_id),"sender_name":sender_name,
-          "content":(message.content or "").strip(),"timestamp":message.created_at.isoformat(),
+          "content":content,"timestamp":message.created_at.isoformat(),
           "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel})
         self.queue.sort(key=lambda x:x["sort"])
         self.wake.set()
@@ -148,7 +163,17 @@ class DiscordAssistant:
             first=self.queue.pop(0);batch=[first]
             while self.queue and self.queue[0]["key"]==first["key"] and self.queue[0]["sort"]-batch[-1]["sort"]<=self.delay:
                 batch.append(self.queue.pop(0))
-            await self._process(batch)
+            try:
+                await self._process(batch)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # A malformed message or unexpected integration error must never
+                # kill the long-running queue worker.
+                _LOGGER.exception("Unhandled error in Discord assistant worker")
+                self.error = "Unexpected worker error; the queue worker remains active."
+                self._state = "error"
+                self._refresh_sensor()
     async def _typing(self,channel):
         while True:
             try: await channel.trigger_typing()
@@ -200,14 +225,16 @@ class DiscordAssistant:
         self._refresh_sensor()
         item=batch[0]
         typing=asyncio.create_task(self._typing(item["channel"])) if self.typing else None
-        history,summary=self._history(item)
-        prompt=self._prompt(batch,history,summary)
+        history = []
+        prompt = ""
         role="operations" if self.agents["operations_agent"] and ACTION.search(" ".join(x["content"] for x in batch)) else "conversation"
         agent=self.agents["operations_agent" if role=="operations" else "conversation_agent"]
         model=agent or "unconfigured"
         answer=""
         failures=[]
         try:
+            history,summary=self._history(item)
+            prompt=self._prompt(batch,history,summary)
             for attempt in range(self.retries):
                 try:answer=await self._call(agent,prompt);break
                 except Exception as err:  # noqa: BLE001 - retry any conversation service failure
@@ -248,6 +275,10 @@ class DiscordAssistant:
         finally:
             if typing:
                 typing.cancel()
+                try:
+                    await typing
+                except asyncio.CancelledError:
+                    pass
             self.active=False
             self.hass.bus.async_fire("discord_game_assistant_updated",{"status":self.status})
             self._refresh_sensor()
