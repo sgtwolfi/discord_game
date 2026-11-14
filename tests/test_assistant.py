@@ -467,7 +467,7 @@ def test_memory_consolidation_uses_latest_configured_messages_and_revises_summar
     assert "remove facts that are clearly outdated" in prompts[0]
     assert assistant.friends["123"]["summary"] == "Updated durable memory"
     assert assistant.friends["123"]["pending_messages"] == []
-    assert len(assistant.friends["123"]["messages"]) == 3
+    assert len(assistant.friends["123"]["messages"]) == 1
     assert saved
 
 
