@@ -403,7 +403,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     number("fallback_after_failures", "Attempts before fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "Number of local model attempts before trying the fallback agent.");
     number("queue_debounce_seconds", "Message grouping delay (seconds)", settings.queue_debounce_seconds ?? 2.5, .5, 15, .5, "Briefly groups rapid messages from the same conversation.");
     number("max_context_messages", "Friend messages included in each prompt", settings.max_context_messages ?? 20, 4, 80, 1, "Recent messages passed to the model for context.");
-    number("history_limit", "Raw friend messages before memory compression", settings.history_limit ?? 60, 10, 200, 1, "When this limit is reached, older messages are summarised into durable memory.");
+    number("history_limit", "Raw friend messages before memory compression", settings.history_limit ?? 60, 20, 200, 1, "When this limit is reached, older messages are summarised into durable memory.");
     number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to both friend DMs and server-group transcripts.");
     number("context_budget_chars", "Maximum prompt size (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500, "Hard limit for the complete prompt sent to an agent.");
     form.append(grid);
