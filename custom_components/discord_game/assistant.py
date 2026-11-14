@@ -181,6 +181,21 @@ def extract_durable_memory_facts(messages):
     return facts
 
 
+
+def sanitize_legacy_memory_summary(summary):
+    """Remove obvious model-generated persona chatter from pre-v8 summaries."""
+    chatter = re.compile(
+        r"(what's on your mind|right[, ]+mate|\binnit\b|"
+        r"proper shockin|proper shocking|red-ing|i'm just a ghost)",
+        re.IGNORECASE,
+    )
+    return "\n".join(
+        line.strip()
+        for line in str(summary or "").splitlines()
+        if line.strip() and not chatter.search(line)
+    ).strip()
+
+
 def take_conversation_batch(queue):
     """Remove all currently queued messages for the oldest conversation."""
     if not queue:
@@ -341,6 +356,15 @@ class DiscordAssistant:
     async def async_start(self):
         saved = await self.store.async_load() or {}
         self.friends = saved.get("friends", {})
+        legacy_memory_cleaned = False
+        for record in self.friends.values():
+            if record.get("summary_source") == "administrator":
+                continue
+            original_summary = str(record.get("summary") or "")
+            cleaned_summary = sanitize_legacy_memory_summary(original_summary)
+            if cleaned_summary != original_summary:
+                record["summary"] = cleaned_summary
+                legacy_memory_cleaned = True
         self.transcript = saved.get("transcript", [])[-100:]
         self.model_usage_data = saved.get("model_usage", {})
         self.last_memory_consolidation = saved.get("last_memory_consolidation")
@@ -408,6 +432,8 @@ class DiscordAssistant:
                     }
                 except Exception:
                     _LOGGER.debug("Unable to resolve GHOST group channel %s", channel_id, exc_info=True)
+        if legacy_memory_cleaned:
+            await self._save()
         if not self.enabled:
             self._refresh_sensor()
             return
@@ -1519,12 +1545,7 @@ class DiscordAssistant:
             # performance as memory. Discard obvious persona/filler lines unless
             # the administrator explicitly authored the current summary.
             if record.get("summary_source") != "administrator":
-                chatter = re.compile(
-                    r"(what's on your mind|right[, ]+mate|\binnit\b|"
-                    r"proper shockin|proper shocking|red-ing|i'm just a ghost)",
-                    re.IGNORECASE,
-                )
-                existing_lines = [line for line in existing_lines if not chatter.search(line)]
+                existing_lines = sanitize_legacy_memory_summary(existing).splitlines()
             known = {line.lstrip("-• ").casefold() for line in existing_lines}
             for fact in new_facts:
                 if fact.casefold() not in known:
