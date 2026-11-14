@@ -586,3 +586,27 @@ def test_fallback_retry_is_allowed_when_action_has_no_reported_targets():
     assert assistant_module.action_result_retryable({
         "response": {"response_type": "action_done", "data": {"success": [], "failed": []}}
     })
+
+
+
+def test_model_call_does_not_retry_completed_action_without_speech():
+    from types import SimpleNamespace
+    import asyncio
+
+    class FakeServices:
+        async def async_call(self, *args, **kwargs):
+            return {
+                "response": {
+                    "response_type": "action_done",
+                    "data": {"success": [{"id": "light.bedroom"}], "failed": []},
+                },
+            }
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    assistant.model_usage_data = {}
+
+    answer = asyncio.run(assistant._call("conversation.operations", "Turn on the light"))
+
+    assert "action completed" in answer
+    assert assistant_module.action_result_error(assistant._last_call_result) is None
