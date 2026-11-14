@@ -432,7 +432,9 @@ class DiscordAssistant:
             "message_id": str(message.id),
         })
         self._last_message_monotonic = time.monotonic()
-        bot_user_id = str(getattr(getattr(self.bot, "user", None), "id", ""))
+        bot_user_id = str(
+            getattr(getattr(getattr(self, "bot", None), "user", None), "id", "")
+        )
         mentioned_bot = any(
             str(getattr(user, "id", "")) == bot_user_id
             for user in getattr(message, "mentions", [])
