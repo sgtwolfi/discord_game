@@ -351,7 +351,7 @@ class DiscordAssistant:
           "last_group_decision": getattr(self, "last_group_decision", None),
           "suppressed_group_messages": getattr(self, "suppressed_group_messages", 0),
           "last_memory_consolidation": getattr(self, "last_memory_consolidation", None),
-          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "pending_messages":len(v.get("pending_messages", [])), "last_consolidated":v.get("last_consolidated"), "recent_messages": v.get("messages", [])[-getattr(self, "history_limit", 8):]} for k,v in self.friends.items()},
+          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "pending_messages":len(v.get("pending_messages", [])), "last_consolidated":v.get("last_consolidated"), "recent_messages": v.get("messages", [])[-max(1, getattr(self, "history_limit", 8)):]} for k,v in self.friends.items()},
           "contacts": contacts,
           "conversations": conversations,
           "groups": groups,
@@ -1104,6 +1104,7 @@ class DiscordAssistant:
         if not self.agents.get("memory_agent"):
             return 0
         completed = 0
+        failed = False
         for user_id, record in list(self.friends.items()):
             pending = list(record.get("pending_messages") or [])
             if not pending:
@@ -1154,7 +1155,11 @@ class DiscordAssistant:
                     user_id,
                     exc_info=True,
                 )
+                failed = True
                 continue
+        if failed:
+            # Retry only after another full idle interval.
+            self._last_message_monotonic = time.monotonic()
         if completed:
             self.last_memory_consolidation = datetime.now(UTC).isoformat()
             self.last_activity = self.last_memory_consolidation
