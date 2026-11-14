@@ -1553,6 +1553,12 @@ class DiscordAssistant:
                     self._capture_action_outcome_for_memory(
                         item, request_text, action_result, None, event_key
                     )
+            elif any(entry.get("forced_agent") for entry in batch) and kind in {"action", "query"}:
+                # Spam deferral is deliberately conversation-only. Never let a
+                # secondary local model execute HA actions or invent live state.
+                role = "spam_guard"
+                model = next(str(entry.get("forced_agent") or "").strip() for entry in batch if entry.get("forced_agent"))
+                answer = "You have hit GHOST’s spam cooldown. I can still chat locally, but Home Assistant controls and live-state lookups are paused until it expires."
             else:
                 forced_agent = next((str(entry.get("forced_agent") or "").strip() for entry in batch if entry.get("forced_agent")), "")
                 is_operation = bool(
