@@ -92,6 +92,11 @@ ACTION_REQUEST = re.compile(
     re.IGNORECASE,
 )
 
+def is_text_addressed(content):
+    """Recognise an explicit natural-language address to GHOST without matching words like ghosted."""
+    return bool(re.search(r"(?<![\\w])ghost(?![\\w])", str(content or ""), re.IGNORECASE))
+
+
 def speech(data):
     """Extract user-facing speech from a Home Assistant conversation result."""
     response = data.get("response", data) if isinstance(data, dict) else {}
@@ -832,7 +837,7 @@ class DiscordAssistant:
             str(getattr(user, "id", "")) == bot_user_id
             for user in getattr(message, "mentions", [])
         ) if bot_user_id else False
-        text_addressed = bool(re.search(r"(?<![\w])ghost(?![\w])", content, re.IGNORECASE))
+        text_addressed = is_text_addressed(content)
         reference = getattr(message, "reference", None)
         resolved_reference = getattr(reference, "resolved", None) if reference else None
         replied_to_bot = bool(
