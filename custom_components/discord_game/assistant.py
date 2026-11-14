@@ -386,6 +386,15 @@ class DiscordAssistant:
             raise
         answer = speech(result)
         self._last_call_result = result
+        response = result.get("response", result) if isinstance(result, dict) else {}
+        if not answer and isinstance(response, dict) and response.get("response_type") == "action_done":
+            result_data = response.get("data") or {}
+            if isinstance(result_data, dict) and result_data.get("failed"):
+                answer = "Home Assistant reported that part of the requested action failed."
+            elif isinstance(result_data, dict) and result_data.get("success"):
+                answer = "Home Assistant reports that the requested action completed."
+            else:
+                answer = "Home Assistant did not confirm any completed targets."
         usage["output_tokens"] += len(answer) // 4
         if not answer:
             usage["errors"] += 1
