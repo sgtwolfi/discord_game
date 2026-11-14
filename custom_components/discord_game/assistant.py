@@ -131,7 +131,13 @@ class DiscordAssistant:
         self.delay=max(.5,min(15,float(config.get("queue_debounce_seconds",2.5))))
         self.limit=max(4,min(80,int(config.get("max_context_messages",12))))
         self.budget=max(2000,min(50000,int(config.get("context_budget_chars",10000))))
-        self.history_limit=max(0,min(200,int(config.get("history_limit",8))))
+        stored_history_limit = int(config.get("history_limit", 8))
+        # Version 7.0.2 used 60 as a compression threshold. In the new idle
+        # consolidation model it means retained raw messages, so migrate the
+        # old default rather than silently retaining sixty messages.
+        if "memory_batch_messages" not in config and stored_history_limit == 60:
+            stored_history_limit = 8
+        self.history_limit=max(0,min(200,stored_history_limit))
         self.memory_idle_seconds=max(30,min(3600,int(config.get("memory_idle_seconds",300))))
         self.memory_batch_messages=max(1,min(100,int(config.get("memory_batch_messages",20))))
         self.conversation_history_limit=max(50,min(2000,int(config.get("conversation_history_limit",500))))
@@ -951,7 +957,7 @@ class DiscordAssistant:
             )
             if item["is_dm"]:
                 history.append({"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model})
-                history[:] = history[-self.limit:]
+                history[:] = history[-max(self.limit, self.history_limit):]
             else:
                 self.groups[item["key"]] = (
                     self.groups[item["key"]]
@@ -1117,7 +1123,7 @@ class DiscordAssistant:
                 "timestamp": item.get("timestamp"),
                 "source": item.get("key"),
             })
-            record["messages"] = record["messages"][-self.limit:]
+            record["messages"] = record["messages"][-max(self.limit, self.history_limit):]
             record.setdefault("pending_messages", []).append({
                 "role": "user",
                 "sender": item.get("sender_name") or self._display_name(user_id),
