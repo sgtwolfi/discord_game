@@ -17,7 +17,8 @@ _LIGHT_QUERY = re.compile(r"\b(?:light|lights|lamp|lamps)\b", re.IGNORECASE)
 _STATUS_QUERY = re.compile(
     r"\b(?:what(?:'s| is)\s+(?:your|ghost(?:'s)?|the assistant's)\s+(?:current\s+)?status|"
     r"what(?:'s| is)\s+the\s+(?:current\s+)?status\s+of\s+(?:ghost|the assistant)|"
-    r"ghost status|status report|what are you up to|what are you doing|how are you getting on)\b",
+    r"ghost status|status report|what are you up to|what are you doing|"
+    r"what(?:'s| is)\s+(?:ghost|the assistant)\s+(?:doing|up to)|how are you getting on)\b",
     re.IGNORECASE,
 )
 
