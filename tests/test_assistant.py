@@ -64,7 +64,7 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
 def test_prompt_uses_only_supplied_contact_history():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 10
-    assistant.budget = 1000
+    assistant.budget = 1500
     batch = [{"sender_name": "Ryan", "content": "Hello", "is_dm": True}]
     prompt = assistant._prompt(batch, [{"role": "user", "content": "Ryan's own history"}], "")
     assert "Ryan's own history" in prompt
