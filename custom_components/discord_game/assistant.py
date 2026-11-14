@@ -98,20 +98,20 @@ def is_text_addressed(content):
 
 
 FOLLOWUP_TEXT = re.compile(
-    r"^(?:you\\b|so\\b|and\\b|but\\b|why\\b|how\\b|what\\b|really\\b|wait\\b|then\\b|that\\b|it\\b|this\\b|right\\b|okay\\b|ok\\b|i mean\\b|what about\\b|how so\\b|what do you mean\\b)",
+    r"^(?:you\b|so\b|and\b|but\b|why\b|how\b|what\b|really\b|wait\b|then\b|that\b|it\b|this\b|right\b|okay\b|ok\b|i mean\b|what about\b|how so\b|what do you mean\b)",
     re.IGNORECASE,
 )
 
 
 def is_contextual_followup(text):
     """Recognise short replies that depend on GHOST's immediately previous turn."""
-    value = re.sub(r"^[\\s\\W]+|[\\s\\W]+$", "", str(text or "")).strip()
+    value = re.sub(r"^[\s\\W]+|[\s\\W]+$", "", str(text or "")).strip()
     if not value or len(value) > 240:
         return False
     if FOLLOWUP_TEXT.search(value):
         return True
     return bool(re.fullmatch(
-        r"(?:and\\s+)?(?:you|yourself|that|it|this|what|why|how|really|then|now)[\\s?!.,]*",
+        r"(?:and\s+)?(?:you|yourself|that|it|this|what|why|how|really|then|now)[\s?!.,]*",
         value, re.IGNORECASE,
     ))
 
@@ -250,7 +250,7 @@ def deduplicate_memory_lines(lines):
     result = []
     seen = set()
     for line in lines:
-        value = re.sub(r"\\s+", " ", str(line or "")).strip().lstrip("-• ").strip()
+        value = re.sub(r"\s+", " ", str(line or "")).strip().lstrip("-• ").strip()
         if not value:
             continue
         key = re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
