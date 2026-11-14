@@ -747,7 +747,8 @@ class DiscordAssistant:
         self.active = True
         self._refresh_sensor()
         item = batch[0]
-        typing = asyncio.create_task(self._typing(item["channel"])) if self.typing else None
+        typing = None
+        group_gate_passed = False
         history = []
         prompt = ""
         request_text = " ".join(x["content"] for x in batch)
@@ -765,6 +766,8 @@ class DiscordAssistant:
             # The prompt is built from the pre-message snapshot to avoid duplication.
             prompt = self._prompt(batch, prior_history, summary, "conversation", context_note)
             self._capture_contact_messages(batch)
+            if item["is_dm"] and self.typing:
+                typing = asyncio.create_task(self._typing(item["channel"]))
 
             if not item["is_dm"]:
                 self.active_request = {
@@ -835,6 +838,9 @@ class DiscordAssistant:
                     "reason": reason,
                     "timestamp": datetime.now(UTC).isoformat(),
                 }
+                group_gate_passed = True
+                if self.typing:
+                    typing = asyncio.create_task(self._typing(item["channel"]))
 
             is_operation = bool(
                 self.agents["operations_agent"] and ACTION.search(request_text)
@@ -965,7 +971,7 @@ class DiscordAssistant:
             self.error = (str(err).strip() or err.__class__.__name__)[:500]
             self._state = "error"
             _LOGGER.exception("Discord assistant failed")
-            if item["is_dm"]:
+            if item["is_dm"] or group_gate_passed:
                 try:
                     detail = str(err).strip()[:350]
                     notice = (
