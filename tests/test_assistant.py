@@ -155,3 +155,33 @@ def test_action_classifier_does_not_match_ordinary_chat():
     action = assistant_module.ACTION
     assert not action.search("What do you think of the new film?")
     assert not action.search("Tell me a joke")
+
+
+
+def test_pause_resume_and_clear_queue_controls():
+    from types import SimpleNamespace
+    import asyncio
+
+    events = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.paused = False
+    assistant.queue = [{"content": "one"}, {"content": "two"}]
+    assistant.error = "old error"
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(
+        async_fire=lambda *args, **kwargs: events.append((args, kwargs))
+    ))
+    assistant.wake = asyncio.Event()
+
+    asyncio.run(assistant.pause())
+    assert assistant.paused is True
+
+    asyncio.run(assistant.resume())
+    assert assistant.paused is False
+    assert assistant.wake.is_set()
+
+    removed = asyncio.run(assistant.clear_queue())
+    assert removed == 2
+    assert assistant.queue == []
+    assert assistant.error is None
+    assert events[-1][0][0] == "discord_game_assistant_queue_cleared"
