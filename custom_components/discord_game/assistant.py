@@ -344,6 +344,7 @@ class DiscordAssistant:
             await asyncio.sleep(8)
     async def _call(self,agent,prompt):
         if not agent:raise RuntimeError("No conversation agent configured")
+        self._last_call_result = None
         usage = self.model_usage_data.setdefault(agent, {
             "requests": 0, "input_tokens": 0, "output_tokens": 0, "errors": 0
         })
@@ -497,6 +498,8 @@ class DiscordAssistant:
             self.transcript=self.transcript[-100:];await self._save()
             self.hass.bus.async_fire("discord_game_assistant_response_sent",{"conversation":item["key"],"model":model,"message":answer})
         except Exception as err:
+            if role == "operations" and action_result is None:
+                action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
             self.error=str(err)[:500];self._state="error"
             _LOGGER.exception("Discord assistant failed")
             try:
