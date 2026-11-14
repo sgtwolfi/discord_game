@@ -463,7 +463,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (help) wrap.append(this._el("p", help, "help"));
       grid.append(wrap);
     };
-    number("fallback_after_failures", "Attempts on the selected agent before fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "GHOST records each attempted agent in Activity so you can see whether fallback actually ran. Actions that may have partially succeeded are never blindly repeated.");
+    number("fallback_after_failures", "Retries after a model call error", settings.fallback_after_failures ?? 2, 1, 5, 1, "This retries a failed model call, not an action. GHOST never blindly repeats an action that may have partially succeeded. Activity records every agent actually attempted.");
     number("queue_debounce_seconds", "Message grouping delay (seconds)", settings.queue_debounce_seconds ?? 2.5, .5, 15, .5, "Briefly groups rapid messages from the same conversation.");
     number("max_context_messages", "Active conversation context messages", settings.max_context_messages ?? 12, 4, 80, 1, "Recent messages from this conversation supplied to the response model.");
     number("memory_idle_seconds", "Idle time before memory consolidation (seconds)", settings.memory_idle_seconds ?? 300, 30, 3600, 30, "GHOST waits this long after the last incoming message and an empty queue before consolidating memories.");
