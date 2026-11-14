@@ -120,6 +120,7 @@ class DiscordAssistant:
         self.error=None
         self.last_activity=None
         self.transcript=[]
+        self.model_usage_data = {}
         self.active_request = None
         self._state="starting" if self.enabled else "disabled"
         self.sensor=AssistantSensor(self)
@@ -138,6 +139,7 @@ class DiscordAssistant:
         saved=await self.store.async_load() or {}
         self.friends=saved.get("friends",{})
         self.transcript=saved.get("transcript",[])[-100:]
+        self.model_usage_data = saved.get("model_usage", {})
         self.worker=asyncio.create_task(self._run())
         self._state="ready"
         self._refresh_sensor()
@@ -150,7 +152,11 @@ class DiscordAssistant:
             except asyncio.CancelledError: pass
         if self.enabled: await self._save()
     async def _save(self):
-        await self.store.async_save({"friends":self.friends,"transcript":self.transcript[-100:]})
+        await self.store.async_save({
+            "friends": self.friends,
+            "transcript": self.transcript[-100:],
+            "model_usage": self.model_usage_data,
+        })
     def attributes(self):
         return {"enabled":self.enabled,"paused":self.paused,"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
@@ -172,17 +178,11 @@ class DiscordAssistant:
           "model_usage": self.model_usage(),
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
     def model_usage(self):
-        """Aggregate approximate token usage from the retained transcript."""
-        usage = {}
-        for item in self.transcript:
-            model = item.get("model") or "unknown"
-            record = usage.setdefault(model, {"requests": 0, "input_tokens": 0, "output_tokens": 0, "errors": 0})
-            record["requests"] += 1
-            record["input_tokens"] += int(item.get("estimated_input_tokens", 0) or 0)
-            record["output_tokens"] += int(item.get("estimated_output_tokens", 0) or 0)
-            if item.get("error"):
-                record["errors"] += 1
-        return usage
+        """Return persisted per-agent call and estimated token totals."""
+        return {
+            model: dict(counts)
+            for model, counts in self.model_usage_data.items()
+        }
 
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
         if not self.enabled or self.stopped:
@@ -339,17 +339,29 @@ class DiscordAssistant:
             await asyncio.sleep(8)
     async def _call(self,agent,prompt):
         if not agent:raise RuntimeError("No conversation agent configured")
-        result=await asyncio.wait_for(
-            self.hass.services.async_call(
-                "conversation","process",
-                {"text":prompt,"agent_id":agent},
-                blocking=True,return_response=True,
-            ),
-            timeout=90,
-        )
-        answer=speech(result)
+        usage = self.model_usage_data.setdefault(agent, {
+            "requests": 0, "input_tokens": 0, "output_tokens": 0, "errors": 0
+        })
+        usage["requests"] += 1
+        usage["input_tokens"] += len(prompt) // 4
+        try:
+            result = await asyncio.wait_for(
+                self.hass.services.async_call(
+                    "conversation", "process",
+                    {"text": prompt, "agent_id": agent},
+                    blocking=True, return_response=True,
+                ),
+                timeout=90,
+            )
+        except Exception:
+            usage["errors"] += 1
+            raise
+        answer = speech(result)
         self._last_call_result = result
-        if not answer:raise RuntimeError("Conversation agent returned no speech")
+        usage["output_tokens"] += len(answer) // 4
+        if not answer:
+            usage["errors"] += 1
+            raise RuntimeError("Conversation agent returned no speech")
         return answer
     def _history(self,item):
         if item["is_dm"]:
