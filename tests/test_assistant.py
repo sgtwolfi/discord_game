@@ -1718,3 +1718,21 @@ def test_local_status_intent_recognises_time_weather_and_informal_presence_quest
     assert assistant_module.request_kind("What's the current time and weather?") == "query"
     assert assistant_module.request_kind("Can you tell me what ahrveys doing?") == "query"
     assert assistant_module.request_kind("The weather is rubbish today") == "conversation"
+
+
+
+def test_api_mode_requires_direct_address_before_group_messages_reach_tool_enabled_agent():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+
+    ignored = asyncio.run(assistant._should_respond_to_group(
+        [{"directly_addressed": False, "sender_name": "Tokyo", "content": "Turn the lights red"}],
+        [],
+    ))
+    allowed = asyncio.run(assistant._should_respond_to_group(
+        [{"directly_addressed": True, "sender_name": "Tokyo", "content": "GHOST, turn the lights red"}],
+        [],
+    ))
+
+    assert ignored[0] is False
+    assert allowed[0] is True
