@@ -83,3 +83,60 @@ def test_action_result_reports_failed_targets():
 def test_action_result_rejects_empty_success_list():
     error = assistant_module.action_result_error({"response": {"response_type": "action_done", "data": {"success": [], "failed": []}}})
     assert error and "successfully completed" in error
+
+
+
+def test_enqueue_rejects_empty_discord_messages():
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    import asyncio
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.enabled = True
+    assistant.stopped = False
+    assistant.queue = []
+    assistant.max_queue = 10
+    assistant.wake = asyncio.Event()
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+    assistant.sensor = SimpleNamespace(hass=None)
+    message = SimpleNamespace(
+        content="   ",
+        guild=None,
+        channel=SimpleNamespace(id=123),
+        created_at=datetime.now(timezone.utc),
+    )
+
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+
+    assert assistant.queue == []
+
+
+def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    import asyncio
+
+    fired = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.enabled = True
+    assistant.stopped = False
+    assistant.queue = [{"content": "earlier message"}]
+    assistant.max_queue = 1
+    assistant.wake = asyncio.Event()
+    assistant.error = None
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(
+        async_fire=lambda *args, **kwargs: fired.append((args, kwargs))
+    ))
+    assistant.sensor = SimpleNamespace(hass=None)
+    message = SimpleNamespace(
+        content="new message",
+        guild=None,
+        channel=SimpleNamespace(id=123),
+        created_at=datetime.now(timezone.utc),
+    )
+
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+
+    assert assistant.queue == [{"content": "earlier message"}]
+    assert "queue is full" in assistant.error
+    assert fired and fired[0][0][0] == "discord_game_assistant_error"
