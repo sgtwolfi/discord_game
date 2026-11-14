@@ -1264,6 +1264,7 @@ def test_request_kind_separates_actions_queries_and_conversation():
     assert assistant_module.request_kind("What's the current state of the room lights?") == "query"
     assert assistant_module.request_kind("What are the lights set to?") == "query"
     assert assistant_module.request_kind("Could you set the lights to red?") == "action"
+    assert assistant_module.request_kind("What's Harvey doing? Also, change the lights to red.") == "action"
     assert assistant_module.request_kind("What do you think of this film?") == "conversation"
 
 
