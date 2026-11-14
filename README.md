@@ -1,4 +1,4 @@
-# Discord Game + GHOST Assistant (v8.2.3)
+# Discord Game + GHOST Assistant (v8.2.4)
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
@@ -46,6 +46,14 @@ Configure the per-sender message threshold and rolling time window in Discord Ga
 - **Ignore during cooldown**: discard that sender's messages until the cooldown expires.
 
 The default threshold is 8 messages in 30 seconds. The default policy is local deferral for 10 minutes. Queue capacity and duplicate-message protection remain in place independently.
+
+
+### API fallback and reminder confirmations (8.2.4)
+
+- GHOST makes one attempt with the primary model, then uses the configured fallback instead of repeating the same failing model and spending tokens on an unchanged request.
+- A Home Assistant action may move to the API fallback only when the primary agent explicitly reports a function/YAML configuration failure before executing tools. Timeouts and ambiguous failures are never replayed.
+- The fallback must be a separate Home Assistant Conversation Agent with the required tools/functions configured in its own settings. For action requests, GHOST requires a structured Home Assistant success result; a spoken "done" is not accepted as proof.
+- In both API and Local modes, a clear reminder request or an explicit yes/no response to GHOST's immediately preceding reminder-confirmation question is handled through the configured reminder script. GHOST only confirms after the script returns `success: true`. A decline never creates the reminder.
 
 ## Memory ownership and cleanup
 
