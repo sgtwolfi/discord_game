@@ -22,7 +22,7 @@ Use IDs such as `conversation.my_ollama_agent`. This integration does not store 
 - Messages are processed in arrival order. Adjacent messages from the same conversation are grouped during the configurable debounce period. The pending queue is capped at 200 messages; when full, new messages are rejected with an error event rather than silently deleting older messages.
 - Discord typing indicators are enabled by default.
 - Context is bounded by a configurable character budget. Token figures are approximate (about four characters per token), not exact provider usage.
-- The configured API fallback is used after local conversation-service failures, for requests explicitly recognised as complex (research, comparisons, debugging, system design, etc.), and to retry operations when the local agent returns an incomplete or unconfirmed action result. The fallback must still return Home Assistant's structured successful-action result before GHOST reports success.
+- The configured API fallback is used after ordinary conversation-agent failures and for requests recognised as complex (research, comparisons, debugging, system design, etc.). For operations, it can retry an incomplete or unconfirmed response only when no target was reported as failed. It does not automatically retry an operations call that failed without returning a result, or a partially failed action, because that could repeat a side effect. The fallback must still return Home Assistant's structured successful-action result before GHOST reports success.
 
 ## Home Assistant
 
