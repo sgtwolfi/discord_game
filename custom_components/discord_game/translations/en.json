@@ -60,7 +60,8 @@
       }
     },
     "error": {
-      "auth": "Provided Discord Bot access token is not valid."
+      "auth": "Provided Discord Bot access token is not valid.",
+      "assistant_agent_required": "Select a conversation agent before enabling the Discord assistant."
     }
   }
 }
