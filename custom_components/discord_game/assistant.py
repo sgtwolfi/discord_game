@@ -186,6 +186,13 @@ class DiscordAssistant:
             for model, counts in self.model_usage_data.items()
         }
 
+    def _trim_context_snapshots(self):
+        """Keep exact context for the ten newest turns and bound older audit records."""
+        for item in self.transcript[:-10]:
+            snapshot = item.get("context_snapshot")
+            if isinstance(snapshot, str) and len(snapshot) > 4000:
+                item["context_snapshot"] = snapshot[:4000] + "\\n[Older context snapshot truncated]"
+
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
         if not self.enabled or self.stopped:
             return
@@ -473,7 +480,7 @@ class DiscordAssistant:
                 "model": model,
                 "role": role,
                 "started_at": datetime.now(UTC).isoformat(),
-                "context_snapshot": prompt[:4000],
+                "context_snapshot": prompt,
             }
             self._refresh_sensor()
             attempts = 1 if role == "advanced" else self.retries
@@ -518,10 +525,12 @@ class DiscordAssistant:
             self.transcript.append({"timestamp":now,"conversation":item["key"],"sender":", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
               "user_messages":[x["content"] for x in batch],"assistant":answer,"model":model,"role":role,
-              "estimated_input_tokens":len(prompt)//4,"estimated_output_tokens":len(answer)//4,"context_snapshot":prompt[:4000],
+              "estimated_input_tokens":len(prompt)//4,"estimated_output_tokens":len(answer)//4,"context_snapshot":prompt,
               "action_result": action_result,
               "fallback_used":model==self.agents["fallback_agent"] and bool(self.agents["fallback_agent"])})
-            self.transcript=self.transcript[-100:];await self._save()
+            self.transcript=self.transcript[-100:]
+            self._trim_context_snapshots()
+            await self._save()
             self.hass.bus.async_fire("discord_game_assistant_response_sent",{"conversation":item["key"],"model":model,"message":answer})
         except Exception as err:
             if role == "operations" and action_result is None:
