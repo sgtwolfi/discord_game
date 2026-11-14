@@ -183,6 +183,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       .btn{border:0;border-radius:9px;padding:10px 14px;background:var(--primary-color);color:var(--text-primary-color);font-size:12px;font-weight:650;cursor:pointer}
       .btn.secondary{background:var(--secondary-background-color);border:1px solid var(--divider-color);color:var(--primary-text-color)}
       .btn:disabled{opacity:.5;cursor:wait}
+      .actions{display:flex;flex-wrap:wrap;gap:8px}
       .empty{margin:auto;text-align:center;max-width:390px;padding:30px;color:var(--secondary-text-color)}
       .empty strong{display:block;color:var(--primary-text-color);font-size:16px;margin-bottom:7px}
       .pagegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
@@ -406,6 +407,11 @@ class DiscordGameGhostPanel extends HTMLElement {
     number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to both friend DMs and server-group transcripts.");
     number("context_budget_chars", "Maximum prompt size (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500, "Hard limit for the complete prompt sent to an agent.");
     form.append(grid);
+    const groupChannelsHidden = this._el("input");
+    groupChannelsHidden.type = "hidden";
+    groupChannelsHidden.name = "assistant_group_channels";
+    groupChannelsHidden.value = settings.assistant_group_channels || "";
+    form.append(groupChannelsHidden);
 
     const typingLabel = this._el("label", "Show Discord typing indicator");
     const typing = this._el("input"); typing.type = "checkbox"; typing.name = "typing_enabled"; typing.checked = settings.typing_enabled !== false;
@@ -493,6 +499,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     const groupsPanel = this._el("section", null, "panel");
     groupsPanel.append(this._el("h2", "Server group chats"));
     groupsPanel.append(this._el("p", "Only these channel IDs receive GHOST replies. Separate IDs with commas. Group messages are retained for chat history, not used as durable stranger memory.", "muted"));
+    for (const group of d.groups || []) groupsPanel.append(this._el("p", (group.name || "Server channel") + " · " + group.channel_id, "help"));
     const channels = this._el("input");
     channels.value = settings.assistant_group_channels || "";
     channels.dataset.keep = "cfg-assistant_group_channels";
@@ -534,7 +541,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       const head = this._el("div", null, "panelhead");
       const names = this._el("div");
       names.append(this._el("strong", contact.name || contact.user_id));
-      names.append(this._el("p", (mem.messages ?? contact.memory_messages ?? 0) + " recent memory messages · " + contact.user_id, "muted"));
+      names.append(this._el("p", (mem.messages ?? contact.memory_messages ?? 0) + " recent memory messages", "muted"));
       head.append(names);
       box.append(head);
       box.append(this._el("label", "Durable memory summary"));
