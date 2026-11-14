@@ -405,7 +405,7 @@ class DiscordAssistant:
         summary_limit = min(2500, max(0, self.budget // 4))
         if summary and summary_limit:
             lines.append(
-                "Private memory for this approved DM contact:\\n"
+                "Private memory for this approved DM contact:\n"
                 + str(summary)[:summary_limit]
             )
 
@@ -414,20 +414,20 @@ class DiscordAssistant:
             for message in history[-self.limit:]
         ]
         current = [f'{message["sender_name"]}: {message["content"]}' for message in batch]
-        header = "Conversation, oldest first:\\n"
+        header = "Conversation, oldest first:\n"
 
         def build_prompt():
-            return "\\n\\n".join(lines + [header + "\\n".join(previous + current)])
+            return "\n\n".join(lines + [header + "\n".join(previous + current)])
 
         # Remove the oldest context first, while preserving the live request.
         while previous and len(build_prompt()) > self.budget:
             previous.pop(0)
 
         if len(build_prompt()) > self.budget:
-            fixed_length = len("\\n\\n".join(lines)) + 2 + len(header)
+            fixed_length = len("\n\n".join(lines)) + 2 + len(header)
             fixed_length += sum(len(line) + 1 for line in previous)
             allowance = max(1, self.budget - fixed_length)
-            combined_current = "\\n".join(current)
+            combined_current = "\n".join(current)
             current = [combined_current[-allowance:]]
 
         return build_prompt()
