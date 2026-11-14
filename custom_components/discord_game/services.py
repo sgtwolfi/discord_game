@@ -35,7 +35,7 @@ SETTINGS = vol.Schema({
     vol.Required("queue_debounce_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
     vol.Required("max_context_messages"): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
     vol.Required("context_budget_chars"): vol.All(vol.Coerce(int), vol.Range(min=2000, max=50000)),
-    vol.Required("history_limit"): vol.All(vol.Coerce(int), vol.Range(min=10, max=200)),
+    vol.Required("history_limit"): vol.All(vol.Coerce(int), vol.Range(min=20, max=200)),
     vol.Required("conversation_history_limit"): vol.All(vol.Coerce(int), vol.Range(min=50, max=2000)),
     vol.Required("typing_enabled"): cv.boolean,
     vol.Required("assistant_group_channels"): cv.string,
