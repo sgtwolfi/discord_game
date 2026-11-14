@@ -786,3 +786,52 @@ def test_public_sensor_attributes_do_not_expose_private_memory_or_transcript():
     assert "context_notes" not in attributes
     assert "approved_users" not in attributes
     assert "group_channels" not in attributes
+
+
+
+def test_action_classifier_routes_natural_turn_device_on_phrasing():
+    assert assistant_module.ACTION.search("Turn the bedroom light on")
+    assert assistant_module.ACTION.search("Turn my desk lamp off")
+
+
+def test_conversation_history_is_private_and_bounded():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.group_channels = {"789"}
+    assistant.conversation_history_limit = 2
+    assistant.conversation_logs = {"dm:123": [
+        {"role": "user", "content": "old", "timestamp": "1"},
+        {"role": "assistant", "content": "middle", "timestamp": "2"},
+        {"role": "user", "content": "latest", "timestamp": "3"},
+    ]}
+    assistant.conversation_meta = {"dm:123": {"label": "Max"}}
+
+    result = assistant.conversation_messages("dm:123")
+    assert [item["content"] for item in result["messages"]] == ["middle", "latest"]
+
+    with pytest.raises(ValueError, match="not approved"):
+        assistant.conversation_messages("dm:456")
+
+
+def test_diagnostics_use_friendly_names_and_include_empty_friend_threads():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.enabled = True
+    assistant.paused = False
+    assistant.approved_users = {"123"}
+    assistant.group_channels = set()
+    assistant.queue = []
+    assistant.active = False
+    assistant.agents = {"conversation_agent": "conversation.local"}
+    assistant.last_activity = None
+    assistant.error = None
+    assistant.transcript = []
+    assistant.model_usage_data = {}
+    assistant.active_request = None
+    assistant.context_notes = {}
+    assistant.friends = {}
+    assistant.contact_names = {"123": "Max"}
+
+    result = assistant.diagnostics()
+    assert result["contacts"][0]["name"] == "Max"
+    assert result["conversations"][0]["label"] == "Max"
+    assert result["conversations"][0]["message_count"] == 0
