@@ -42,6 +42,9 @@ package = types.ModuleType("custom_components.discord_game")
 package.__path__ = [str(repo_root / "custom_components" / "discord_game")]
 sys.modules["custom_components.discord_game"] = package
 assistant_module = importlib.import_module("custom_components.discord_game.assistant")
+from custom_components.discord_game.local_status import answer_local_status
+from custom_components.discord_game.local_tasks import parse_local_reminder
+
 DiscordAssistant = assistant_module.DiscordAssistant
 speech = assistant_module.speech
 
@@ -1573,12 +1576,9 @@ def test_api_mode_prompt_does_not_include_another_contact_memory():
 
 
 def test_local_reminder_parser_handles_relative_duration():
-    from datetime import datetime, timezone
-    from custom_components.discord_game.local_tasks import parse_local_reminder
-
     parsed = parse_local_reminder(
         "Remind me to take the bins out in 20 minutes",
-        datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert parsed == {"name": "take the bins out", "duration_seconds": 1200}
 
@@ -1630,10 +1630,6 @@ def test_local_reminder_parser_requires_a_time():
 
 
 def test_local_status_reader_uses_discord_presence_sensor():
-    from datetime import datetime, timezone
-    from types import SimpleNamespace
-    from custom_components.discord_game.local_status import answer_local_status
-
     state = SimpleNamespace(
         entity_id="sensor.discord_user_123",
         state="online",
@@ -1652,7 +1648,7 @@ def test_local_status_reader_reports_missing_weather_without_inventing_it():
     from types import SimpleNamespace
     from custom_components.discord_game.local_status import answer_local_status
 
-    hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: []))
+    hass = SimpleNamespace(states=SimpleNamespace(async_all=list))
     answer = answer_local_status(
         hass, "What's the weather and current time?",
         datetime(2026, 11, 14, 9, 5, tzinfo=timezone.utc),
