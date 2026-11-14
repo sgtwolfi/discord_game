@@ -1797,9 +1797,10 @@ def test_local_status_intent_recognises_time_weather_and_informal_presence_quest
 
 
 
-def test_api_mode_requires_direct_address_before_group_messages_reach_tool_enabled_agent():
+def test_api_mode_mention_only_setting_prevents_untrusted_group_text_reaching_api_agent():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
+    assistant.group_require_mention = True
 
     ignored = asyncio.run(assistant._should_respond_to_group(
         [{"directly_addressed": False, "sender_name": "Tokyo", "content": "Turn the lights red"}],
