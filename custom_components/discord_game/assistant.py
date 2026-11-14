@@ -157,6 +157,7 @@ class DiscordAssistant:
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
           "pending_messages":[
               {
+                  "id":item["message_id"],
                   "conversation":item["key"],
                   "sender":item["sender_name"],
                   "sender_id":item["sender_id"],
@@ -199,7 +200,7 @@ class DiscordAssistant:
             self._refresh_sensor()
             return
         key=f"dm:{sender_id}" if is_dm else f"guild:{message.guild.id}:{message.channel.id}"
-        self.queue.append({"key":key,"is_dm":is_dm,"sender_id":str(sender_id),"sender_name":sender_name,
+        self.queue.append({"key":key,"message_id":str(message.id),"is_dm":is_dm,"sender_id":str(sender_id),"sender_name":sender_name,
           "content":content,"timestamp":message.created_at.isoformat(),
           "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel})
         self.queue.sort(key=lambda x:x["sort"])
@@ -230,6 +231,35 @@ class DiscordAssistant:
                 self.error = "Unexpected worker error; the queue worker remains active."
                 self._state = "error"
                 self._refresh_sensor()
+    async def edit_queued_message(self, message_id, content):
+        """Edit one pending message before it is sent to a model."""
+        content = str(content).strip()
+        if not content:
+            raise ValueError("Queued message cannot be empty")
+        for item in self.queue:
+            if item["message_id"] == str(message_id):
+                item["content"] = content
+                self.hass.bus.async_fire("discord_game_assistant_queue_edited", {
+                    "message_id": str(message_id),
+                    "conversation": item["key"],
+                })
+                self._refresh_sensor()
+                return True
+        return False
+
+    async def cancel_queued_message(self, message_id):
+        """Cancel one pending message without affecting other conversations."""
+        for index, item in enumerate(self.queue):
+            if item["message_id"] == str(message_id):
+                removed = self.queue.pop(index)
+                self.hass.bus.async_fire("discord_game_assistant_queue_message_cancelled", {
+                    "message_id": str(message_id),
+                    "conversation": removed["key"],
+                })
+                self._refresh_sensor()
+                return True
+        return False
+
     async def pause(self):
         """Stop starting new replies while allowing an active reply to finish."""
         self.paused = True
