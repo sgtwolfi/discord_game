@@ -222,6 +222,7 @@ class DiscordAssistant:
         if any(record.get("pending_messages") for record in self.friends.values()):
             self._last_message_monotonic = time.monotonic()
         self.conversation_meta = saved.get("conversation_meta", {})
+        self._backfill_action_outcomes_from_transcript()
         if not self.conversation_logs:
             # Migrate the earlier audit transcript into the new chat-history store.
             for entry in self.transcript:
@@ -1209,7 +1210,7 @@ class DiscordAssistant:
             for record in getattr(self, "friends", {}).values()
         )
 
-    def _capture_action_outcome_for_memory(self, item, request_text, action_result, error=None):
+    def _capture_action_outcome_for_memory(self, item, request_text, action_result, error=None, event_key=None):
         """Attach a verified HA action outcome to this approved contact's memory evidence."""
         if not item.get("is_dm"):
             return
@@ -1241,6 +1242,9 @@ class DiscordAssistant:
         record = self.friends.setdefault(user_id, {
             "messages": [], "summary": "", "pending_messages": []
         })
+        processed = record.setdefault("action_event_keys", [])
+        if event_key and event_key in processed:
+            return
         record.setdefault("pending_messages", []).append({
             "role": "system_event",
             "sender": "Home Assistant execution record",
@@ -1249,6 +1253,36 @@ class DiscordAssistant:
             "source": "verified_action_result",
         })
         record["pending_messages"] = record["pending_messages"][-1000:]
+        if event_key:
+            processed.append(event_key)
+            record["action_event_keys"] = processed[-500:]
+
+    def _backfill_action_outcomes_from_transcript(self):
+        """Recover structured action outcomes saved by earlier versions of GHOST."""
+        for entry in getattr(self, "transcript", []):
+            if not entry.get("is_dm") or not entry.get("action_result"):
+                continue
+            sender_ids = entry.get("sender_ids") or []
+            if not sender_ids:
+                continue
+            user_id = str(sender_ids[0])
+            if user_id not in self.approved_users:
+                continue
+            request_text = " ".join(str(message) for message in entry.get("user_messages", []))
+            if not request_text:
+                continue
+            event_key = "|".join((
+                str(entry.get("timestamp") or ""),
+                str(entry.get("conversation") or ""),
+                request_text[:300],
+            ))
+            self._capture_action_outcome_for_memory(
+                {"is_dm": True, "sender_id": user_id},
+                request_text,
+                entry.get("action_result"),
+                entry.get("error"),
+                event_key,
+            )
 
     async def _consolidate_pending_memories(self):
         """Consolidate each active person's recent messages after the whole assistant is idle."""
