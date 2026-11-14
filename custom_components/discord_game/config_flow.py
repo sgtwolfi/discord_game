@@ -177,6 +177,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             legacy_history_limit = self._get_current("history_limit", 8)
             # Keep advanced panel settings when saving the integration's model selectors.
             advanced_defaults = {
+                "assistant_mode": self._get_current("assistant_mode", "local"),
                 "fallback_after_failures": 2,
                 "queue_debounce_seconds": 2.5,
                 "max_context_messages": 12,
@@ -239,6 +240,9 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Required(CONF_ENTITIES_DISABLED_DEFAULT, default=current_entities_disabled): selector.BooleanSelector(),
                 vol.Required("assistant_enabled", default=self._get_current("assistant_enabled", False)): selector.BooleanSelector(),
+                vol.Required("assistant_mode", default=self._get_current("assistant_mode", "local")): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=["local", "api"], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
+                ),
                 vol.Optional("conversation_agent", default=self._get_current("conversation_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("operations_agent", default=self._get_current("operations_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
