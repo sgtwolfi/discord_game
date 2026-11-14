@@ -7,12 +7,12 @@ from datetime import datetime
 
 
 _PERSON_ACTIVITY = re.compile(
-    r"\\b(?:what(?:'s|s| is)|tell me what)\\s+(.+?)\\s+(?:doing|up to)\\b",
+    r"\b(?:what(?:'s|s| is)|tell me what)\s+(.+?)\s+(?:doing|up to)\b",
     re.IGNORECASE,
 )
-_TIME_QUERY = re.compile(r"\\b(?:current time|what time is it|what's the time|whats the time|time right now)\\b", re.IGNORECASE)
-_WEATHER_QUERY = re.compile(r"\\b(?:weather|forecast|temperature outside|how warm is it outside)\\b", re.IGNORECASE)
-_LIGHT_QUERY = re.compile(r"\\b(?:light|lights|lamp|lamps)\\b", re.IGNORECASE)
+_TIME_QUERY = re.compile(r"\b(?:current time|what time is it|what's the time|whats the time|time right now)\b", re.IGNORECASE)
+_WEATHER_QUERY = re.compile(r"\b(?:weather|forecast|temperature outside|how warm is it outside)\b", re.IGNORECASE)
+_LIGHT_QUERY = re.compile(r"\b(?:light|lights|lamp|lamps)\b", re.IGNORECASE)
 
 
 def _name(state) -> str:
