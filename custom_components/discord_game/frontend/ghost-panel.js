@@ -218,7 +218,14 @@ class DiscordGameGhostPanel extends HTMLElement {
       const card = this._node("article", undefined, "item");
       card.append(this._node("strong", userId));
       card.append(this._node("p", (memory.messages || 0) + " retained messages", "muted"));
-      card.append(this._node("p", memory.summary || "No summary saved."));
+      const correctedMemory = this._node("textarea");
+      correctedMemory.rows = 5;
+      correctedMemory.value = memory.summary || "";
+      card.append(this._node("label", "Editable durable memory"));
+      card.append(correctedMemory);
+      card.append(this._button("Save corrected memory", () => {
+        this._service("set_friend_memory", { user_id: userId, summary: correctedMemory.value });
+      }, true));
       card.append(this._button("Clear this contact's memory", () => {
         if (confirm("Clear persistent memory for Discord user " + userId + "?")) this._service("clear_friend_memory", { user_id: userId });
       }, true));
