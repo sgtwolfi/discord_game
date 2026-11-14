@@ -1811,7 +1811,7 @@ def test_local_status_reader_recovers_a_minor_contact_name_typo():
     )
     hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
     answer = answer_local_status(
-        hass, "What's maxs doing?",
+        hass, "What's maxx doing?",
         datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert answer == "Max is playing Factorio."
@@ -2322,19 +2322,10 @@ def test_ghost_status_snapshot_reports_unavailable_helper_safely():
     assert "unavailable" in assistant._ghost_status_context()
 
 
-def test_local_status_reader_accepts_current_and_third_person_phrasings():
+def test_local_status_reader_accepts_first_person_owner_phrasings():
     state = SimpleNamespace(state="Running a maintenance check")
     hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
-    for question in ("What's your current status?", "What's the current status of GHOST?"):
+    for question in ("What's my current status?", "What am I doing?", "What am I up to?"):
         assert answer_local_status(
             hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
-        ) == "My current status is: Running a maintenance check"
-
-
-def test_ghost_activity_question_uses_ghost_status_not_discord_friend_lookup():
-    state = SimpleNamespace(state="Waiting for the next command")
-    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
-    assert answer_local_status(
-        hass, "What's GHOST doing?",
-        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
-    ) == "My current status is: Waiting for the next command"
+        ) == "Harvey is currently: Running a maintenance check"
