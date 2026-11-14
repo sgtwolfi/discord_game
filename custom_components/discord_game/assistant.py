@@ -12,7 +12,13 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
-ACTION=re.compile(r"\b(remind|timer|alarm|turn on|turn off|switch on|switch off|activate|deactivate|lock|unlock|open the|close the)\b",re.IGNORECASE)
+ACTION=re.compile(
+    r"\b(remind|reminder|timer|alarm|turn on|turn off|switch on|switch off|"
+    r"activate|deactivate|lock|unlock|open|close|set|adjust|increase|decrease|"
+    r"dim|brighten|brightness|temperature|thermostat|climate|fan|cover|"
+    r"scene|script|automation|play|pause|stop|volume|notify|send (?:a )?message)\b",
+    re.IGNORECASE,
+)
 
 def speech(data):
     response=data.get("response",data) if isinstance(data,dict) else {}
@@ -245,6 +251,15 @@ class DiscordAssistant:
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
             if role == "operations":
                 verification_error = action_result_error(getattr(self, "_last_call_result", None))
+                # A syntactically valid answer is not enough for an operation.
+                # Give the configured paid agent one chance to recover from a
+                # malformed/incomplete local action result, but apply the same
+                # structured-success requirement to that result too.
+                if verification_error and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
+                    _LOGGER.warning("Operations agent returned an unconfirmed action; retrying with fallback: %s", verification_error)
+                    model = self.agents["fallback_agent"]
+                    answer = await self._call(model, prompt)
+                    verification_error = action_result_error(getattr(self, "_last_call_result", None))
                 if verification_error:
                     raise RuntimeError("Action not confirmed: " + verification_error)
             await self._send(item["channel"],answer)
