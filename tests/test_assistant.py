@@ -251,6 +251,7 @@ def test_sensor_attributes_expose_paused_state_and_active_request():
     assistant.last_activity = None
     assistant.error = None
     assistant.transcript = []
+    assistant.model_usage_data = {}
     assistant.active_request = {"conversation": "dm:123"}
     assistant.friends = {}
 
