@@ -413,67 +413,169 @@ def test_admin_memory_correction_has_a_size_limit():
 
 
 
-def test_memory_compression_keeps_more_raw_history_when_no_memory_agent():
-
+def test_memory_without_agent_retains_pending_messages():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
         "summary": "",
-        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+        "messages": [{"role": "user", "content": "hello"}],
+        "pending_messages": [{"role": "user", "content": "hello"}],
     }}
-    assistant.limit = 3
-    assistant.history_limit = 6
     assistant.agents = {"memory_agent": ""}
-    asyncio.run(assistant._compress("123"))
 
-    assert [item["content"] for item in assistant.friends["123"]["messages"]] == ["2", "3", "4", "5", "6", "7"]
+    result = asyncio.run(assistant._compress("123"))
+
+    assert result is False
+    assert len(assistant.friends["123"]["pending_messages"]) == 1
 
 
-def test_memory_compression_keeps_raw_history_when_memory_agent_fails():
-
+def test_memory_consolidation_uses_latest_configured_messages_and_revises_summary():
+    prompts = []
+    saved = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
-        "summary": "existing",
+        "summary": "Old summary",
         "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+        "pending_messages": [{"role": "user", "sender": "Max", "content": str(i)} for i in range(5)],
     }}
-    assistant.limit = 3
-    assistant.history_limit = 6
     assistant.agents = {"memory_agent": "conversation.memory"}
+    assistant.memory_batch_messages = 2
+    assistant.limit = 3
+    assistant.history_limit = 1
     assistant.budget = 1000
+    assistant.config = {}
+    assistant.contact_names = {"123": "Max"}
+    assistant.last_memory_consolidation = None
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+
+    async def successful_call(agent, prompt):
+        prompts.append(prompt)
+        return "Updated durable memory"
+
+    async def save():
+        saved.append(True)
+
+    assistant._call = successful_call
+    assistant._save = save
+
+    result = asyncio.run(assistant._consolidate_pending_memories())
+
+    assert result == 1
+    assert "Max: 3" in prompts[0] and "Max: 4" in prompts[0]
+    assert "Max: 0" not in prompts[0]
+    assert "remove facts that are clearly outdated" in prompts[0]
+    assert assistant.friends["123"]["summary"] == "Updated durable memory"
+    assert assistant.friends["123"]["pending_messages"] == []
+    assert len(assistant.friends["123"]["messages"]) == 3
+    assert saved
+
+
+def test_failed_memory_consolidation_retains_pending_evidence():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {"123": {
+        "summary": "existing",
+        "messages": [],
+        "pending_messages": [{"role": "user", "content": "new evidence"}],
+    }}
+    assistant.agents = {"memory_agent": "conversation.memory"}
+    assistant.memory_batch_messages = 5
+    assistant.limit = 3
+    assistant.history_limit = 1
+    assistant.budget = 1000
+    assistant.config = {}
+    assistant.contact_names = {"123": "Max"}
+    assistant._last_message_monotonic = 1
 
     async def failed_call(agent, prompt):
         raise RuntimeError("model unavailable")
 
     assistant._call = failed_call
-    asyncio.run(assistant._compress("123"))
 
-    assert len(assistant.friends["123"]["messages"]) == 6
+    result = asyncio.run(assistant._consolidate_pending_memories())
+
+    assert result == 0
     assert assistant.friends["123"]["summary"] == "existing"
+    assert len(assistant.friends["123"]["pending_messages"]) == 1
+    assert assistant._last_message_monotonic > 1
 
 
-def test_memory_compression_trims_to_short_history_after_success():
-
+def test_group_relevance_gate_uses_ai_decision_before_reply():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.diagnostics_revision = 0
-    assistant.friends = {"123": {
-        "summary": "",
-        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
-    }}
-    assistant.limit = 3
-    assistant.history_limit = 6
-    assistant.agents = {"memory_agent": "conversation.memory"}
-    assistant.budget = 1000
+    assistant.agents = {"conversation_agent": "conversation.local"}
+    assistant.limit = 10
 
-    async def successful_call(agent, prompt):
-        return "durable summary"
+    async def classify(agent, prompt):
+        assert agent == "conversation.local"
+        assert "You are NOT writing a reply" in prompt
+        assert "Recent conversation" in prompt
+        return '{"respond": false, "reason": "This is banter between friends"}'
 
-    assistant._call = successful_call
-    asyncio.run(assistant._compress("123"))
+    assistant._call = classify
+    batch = [{"sender_name": "Ryan", "content": "That was rubbish", "is_dm": False}]
 
-    assert len(assistant.friends["123"]["messages"]) == 3
-    assert assistant.friends["123"]["summary"] == "durable summary"
+    should_respond, reason = asyncio.run(
+        assistant._should_respond_to_group(batch, [])
+    )
 
+    assert should_respond is False
+    assert reason == "This is banter between friends"
+
+
+def test_group_relevance_gate_allows_a_relevant_direct_question():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.local"}
+    assistant.limit = 10
+
+    async def classify(agent, prompt):
+        return '{"respond": true, "reason": "GHOST was directly asked"}'
+
+    assistant._call = classify
+    batch = [{"sender_name": "Max", "content": "GHOST, can you check the lights?", "is_dm": False}]
+
+    should_respond, reason = asyncio.run(
+        assistant._should_respond_to_group(batch, [])
+    )
+
+    assert should_respond is True
+    assert "directly asked" in reason
+
+
+def test_group_relevance_gate_fails_silent_on_invalid_model_output():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.local"}
+    assistant.limit = 10
+
+    async def classify(agent, prompt):
+        return "Maybe I should say hello."
+
+    assistant._call = classify
+    batch = [{"sender_name": "Ryan", "content": "Hello Max", "is_dm": False}]
+
+    should_respond, reason = asyncio.run(
+        assistant._should_respond_to_group(batch, [])
+    )
+
+    assert should_respond is False
+    assert "stayed quiet" in reason
+
+
+def test_contact_memory_capture_is_per_approved_speaker_only():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant.contact_names = {"123": "Max"}
+    assistant.limit = 10
+    assistant.history_limit = 4
+
+    assistant._capture_contact_messages([
+        {"sender_id": "123", "sender_name": "Max", "content": "I like strategy games", "timestamp": "1", "key": "guild:5:7"},
+        {"sender_id": "456", "sender_name": "Unknown", "content": "private detail", "timestamp": "2", "key": "guild:5:7"},
+    ])
+
+    assert len(assistant.friends["123"]["pending_messages"]) == 1
+    assert assistant.friends["123"]["pending_messages"][0]["content"] == "I like strategy games"
+    assert "456" not in assistant.friends
 
 
 def test_manual_dm_send_rejects_unapproved_user():
