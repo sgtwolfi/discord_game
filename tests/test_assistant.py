@@ -742,3 +742,28 @@ def test_temporary_context_is_included_in_model_prompt():
 
     assert "Administrator-provided context" in prompt
     assert "Max is testing the new reminder flow." in prompt
+
+
+
+def test_prompt_budget_includes_injected_context_and_durable_memory():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.limit = 10
+    assistant.budget = 1500
+    batch = [{
+        "sender_name": "Max",
+        "content": "Please carry out this task " + "x" * 2000,
+        "is_dm": True,
+    }]
+
+    prompt = assistant._prompt(
+        batch,
+        [],
+        "durable memory " * 500,
+        "operations",
+        "temporary context " * 500,
+    )
+
+    assert len(prompt) <= assistant.budget
+    assert "Private memory for this approved DM contact" in prompt
+    assert "Administrator-provided context" in prompt
+    assert "Please carry out this task" in prompt
