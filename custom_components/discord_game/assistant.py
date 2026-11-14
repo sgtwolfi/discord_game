@@ -1117,6 +1117,51 @@ class DiscordAssistant:
                 if self.typing:
                     typing = asyncio.create_task(self._typing(item["channel"]))
 
+                # Never let an indirectly addressed group message about private
+                # device state or actions fall through to the chat model.
+                group_kind = request_kind(request_text)
+                if group_kind in {"action", "query"} and not any(
+                    entry.get("directly_addressed") for entry in batch
+                ):
+                    now = datetime.now(UTC).isoformat()
+                    reason = "Home Assistant requests in group chats must directly address GHOST."
+                    self.last_group_decision = {
+                        "conversation": item["key"],
+                        "decision": "ignored",
+                        "reason": reason,
+                        "timestamp": now,
+                    }
+                    self.suppressed_group_messages += len(batch)
+                    self.last_activity = now
+                    self.error = None
+                    self._state = "ready"
+                    self.transcript.append({
+                        "timestamp": now,
+                        "conversation": item["key"],
+                        "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
+                        "sender_ids": list(dict.fromkeys(x["sender_id"] for x in batch)),
+                        "channel_id": item["channel_id"],
+                        "is_dm": False,
+                        "user_messages": [x["content"] for x in batch],
+                        "messages": [
+                            {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "message_id": x.get("message_id"), "directly_addressed": x.get("directly_addressed", False)}
+                            for x in batch
+                        ],
+                        "assistant": None,
+                        "suppressed": True,
+                        "suppression_reason": reason,
+                        "role": "relevance_check",
+                        "request_kind": group_kind,
+                        "model": self.agents.get("conversation_agent"),
+                    })
+                    self.transcript = self.transcript[-100:]
+                    await self._save()
+                    self.hass.bus.async_fire(
+                        "discord_game_assistant_message_ignored",
+                        {"conversation": item["key"], "reason": reason},
+                    )
+                    return
+
             group_action_is_addressed = item["is_dm"] or any(
                 entry.get("directly_addressed") for entry in batch
             )
