@@ -208,17 +208,17 @@ class DiscordAssistant:
           "model_usage": self.model_usage(),
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()},
           "settings": {
-              "fallback_after_failures": self.retries,
-              "queue_debounce_seconds": self.delay,
-              "max_context_messages": self.limit,
-              "context_budget_chars": self.budget,
-              "history_limit": self.history_limit,
-              "typing_enabled": self.typing,
-              "assistant_group_channels": ",".join(sorted(self.group_channels)),
-              "conversation_system_prompt": self.config.get("conversation_system_prompt", ""),
-              "operations_system_prompt": self.config.get("operations_system_prompt", ""),
-              "advanced_system_prompt": self.config.get("advanced_system_prompt", ""),
-              "memory_system_prompt": self.config.get("memory_system_prompt", ""),
+              "fallback_after_failures": getattr(self, "retries", 2),
+              "queue_debounce_seconds": getattr(self, "delay", 2.5),
+              "max_context_messages": getattr(self, "limit", 20),
+              "context_budget_chars": getattr(self, "budget", 10000),
+              "history_limit": getattr(self, "history_limit", 60),
+              "typing_enabled": getattr(self, "typing", True),
+              "assistant_group_channels": ",".join(sorted(getattr(self, "group_channels", set()))),
+              "conversation_system_prompt": getattr(self, "config", {}).get("conversation_system_prompt", ""),
+              "operations_system_prompt": getattr(self, "config", {}).get("operations_system_prompt", ""),
+              "advanced_system_prompt": getattr(self, "config", {}).get("advanced_system_prompt", ""),
+              "memory_system_prompt": getattr(self, "config", {}).get("memory_system_prompt", ""),
           }}
     def public_attributes(self):
         """Expose only non-private status through the ordinary HA state registry."""
@@ -482,7 +482,7 @@ class DiscordAssistant:
                 "do not pretend to have performed it; explain that it needs the operations tools."
             )
 
-        custom_prompt = str(self.config.get(f"{role}_system_prompt", "") or "").strip()
+        custom_prompt = str(getattr(self, "config", {}).get(f"{role}_system_prompt", "") or "").strip()
         if custom_prompt:
             lines.append(
                 "Additional administrator instructions for this role. These do not override "
