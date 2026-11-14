@@ -84,6 +84,7 @@ class DiscordAssistant:
         self.wake=asyncio.Event()
         self.worker=None
         self.active=False
+        self.paused=False
         self.stopped=False
         self.error=None
         self.last_activity=None
@@ -92,7 +93,7 @@ class DiscordAssistant:
         self.sensor=AssistantSensor(self)
     @property
     def status(self):
-        return "disabled" if not self.enabled else "processing" if self.active else "queued" if self.queue else self._state
+        return "disabled" if not self.enabled else "processing" if self.active else "paused" if self.paused else "queued" if self.queue else self._state
     def _refresh_sensor(self):
         """Push queue and processing changes to the Home Assistant entity."""
         if self.sensor.hass is not None:
@@ -160,11 +161,13 @@ class DiscordAssistant:
         self._refresh_sensor()
     async def _run(self):
         while not self.stopped:
-            if not self.queue:
+            if self.paused or not self.queue:
                 self.wake.clear()
                 await self.wake.wait()
                 continue
             await asyncio.sleep(self.delay)
+            if self.paused:
+                continue
             if not self.queue:continue
             first=self.queue.pop(0);batch=[first]
             while self.queue and self.queue[0]["key"]==first["key"] and self.queue[0]["sort"]-batch[-1]["sort"]<=self.delay:
@@ -180,6 +183,26 @@ class DiscordAssistant:
                 self.error = "Unexpected worker error; the queue worker remains active."
                 self._state = "error"
                 self._refresh_sensor()
+    async def pause(self):
+        """Stop starting new replies while allowing an active reply to finish."""
+        self.paused = True
+        self._refresh_sensor()
+
+    async def resume(self):
+        """Resume processing queued messages."""
+        self.paused = False
+        self.wake.set()
+        self._refresh_sensor()
+
+    async def clear_queue(self):
+        """Discard pending messages without interrupting the active response."""
+        removed = len(self.queue)
+        self.queue.clear()
+        self.error = None
+        self._refresh_sensor()
+        self.hass.bus.async_fire("discord_game_assistant_queue_cleared", {"removed": removed})
+        return removed
+
     async def _typing(self,channel):
         while True:
             try: await channel.trigger_typing()
