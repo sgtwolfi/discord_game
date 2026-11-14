@@ -169,12 +169,16 @@ def test_enqueue_rejects_empty_discord_messages():
     assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.stopped = False
+    assistant.approved_users = {"456"}
+    assistant.group_channels = set()
+    assistant.transcript = []
     assistant.queue = []
     assistant.max_queue = 10
     assistant.wake = asyncio.Event()
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
     assistant.sensor = SimpleNamespace(hass=None)
     message = SimpleNamespace(
+        id=987,
         content="   ",
         guild=None,
         channel=SimpleNamespace(id=123),
@@ -202,6 +206,7 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     ))
     assistant.sensor = SimpleNamespace(hass=None)
     message = SimpleNamespace(
+        id=988,
         content="new message",
         guild=None,
         channel=SimpleNamespace(id=123),
@@ -214,6 +219,67 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     assert "queue is full" in assistant.error
     assert fired and fired[0][0][0] == "discord_game_assistant_error"
 
+
+
+
+def test_enqueue_deduplicates_message_ids_already_queued_or_processed():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.enabled = True
+    assistant.stopped = False
+    assistant.approved_users = {"456"}
+    assistant.group_channels = set()
+    assistant.transcript = []
+    assistant.queue = []
+    assistant.max_queue = 10
+    assistant.wake = asyncio.Event()
+    assistant.contact_names = {}
+    assistant.conversation_meta = {}
+    assistant.conversation_logs = defaultdict(list)
+    assistant.conversation_history_limit = 100
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
+    assistant.sensor = SimpleNamespace(hass=None)
+    message = SimpleNamespace(
+        id=989,
+        content="Hello GHOST",
+        guild=None,
+        channel=SimpleNamespace(id=123, name="Direct message"),
+        created_at=datetime.now(UTC),
+        mentions=[],
+        reference=None,
+    )
+
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+
+    assert len(assistant.queue) == 1
+    assert len(assistant.conversation_logs["dm:456"]) == 1
+
+    assistant.queue.clear()
+    assistant.transcript.append({
+        "messages": [{"message_id": "989"}],
+    })
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
+    assert assistant.queue == []
+
+
+def test_enqueue_rejects_unapproved_direct_messages():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.enabled = True
+    assistant.stopped = False
+    assistant.approved_users = {"123"}
+    assistant.group_channels = set()
+    assistant.queue = []
+    assistant.transcript = []
+    message = SimpleNamespace(
+        id=990,
+        content="Do something",
+        channel=SimpleNamespace(id=123),
+    )
+
+    asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Unknown"))
+
+    assert assistant.queue == []
 
 
 def test_action_classifier_routes_home_assistant_operations():
