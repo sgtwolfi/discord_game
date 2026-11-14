@@ -118,7 +118,7 @@ class AssistantSensor(SensorEntity):
     @property
     def native_value(self): return self.owner.status
     @property
-    def extra_state_attributes(self): return self.owner.attributes()
+    def extra_state_attributes(self): return self.owner.public_attributes()
 
 class DiscordAssistant:
     def __init__(self,hass,entry_id,config,bot):
@@ -184,7 +184,7 @@ class DiscordAssistant:
             "transcript": self.transcript[-100:],
             "model_usage": self.model_usage_data,
         })
-    def attributes(self):
+    def diagnostics(self):
         return {"enabled":self.enabled,"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
@@ -205,6 +205,19 @@ class DiscordAssistant:
           "context_notes": dict(self.context_notes),
           "model_usage": self.model_usage(),
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
+    def public_attributes(self):
+        """Expose only non-private status through the ordinary HA state registry."""
+        return {
+            "enabled": self.enabled,
+            "paused": self.paused,
+            "queue_length": len(self.queue),
+            "processing": self.active,
+            "last_activity": self.last_activity,
+            "last_error": self.error,
+            "estimated_pending_tokens": sum(len(item["content"]) for item in self.queue) // 4,
+            **self.agents,
+        }
+
     def model_usage(self):
         """Return persisted per-agent call and estimated token totals."""
         return {
