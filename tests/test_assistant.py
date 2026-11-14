@@ -2202,3 +2202,45 @@ def test_function_configuration_errors_are_non_retryable_and_detected_for_fallba
     assert assistant_module.is_function_configuration_error(
         "The selected Home Assistant conversation agent could not load its configured functions."
     )
+
+
+def test_local_status_reader_reads_ghost_status_helper_without_assist_exposure():
+    status = SimpleNamespace(state="Optimising the downstairs server")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: status if entity_id == "input_text.ghost_status" else None))
+    answer = answer_local_status(
+        hass, "What's your status?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "My current status is: Optimising the downstairs server"
+
+
+def test_local_status_reader_reports_missing_ghost_status_helper():
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: None))
+    answer = answer_local_status(
+        hass, "What's GHOST's status?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "I can't read my current status because input_text.ghost_status is unavailable."
+
+
+def test_ghost_status_is_injected_into_api_and_local_model_context():
+    state = SimpleNamespace(state="Checking the network")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    batch = [{"sender_name": "Max", "content": "Hello", "is_dm": True}]
+    for mode in ("api", "local"):
+        assistant = DiscordAssistant.__new__(DiscordAssistant)
+        assistant.mode = mode
+        assistant.status_entity = "input_text.ghost_status"
+        assistant.hass = hass
+        assistant.diagnostics_revision = 0
+        assistant.limit = 8
+        assistant.budget = 10000
+        assistant.config = {}
+        prompt = assistant._prompt(batch, [], "")
+        assert "Checking the network" in prompt
+        assert "input_text.ghost_status" in prompt
+
+
+def test_ghost_status_question_is_classified_as_live_query():
+    assert assistant_module.request_kind("What's your status?") == "query"
+    assert assistant_module.request_kind("What are you doing?") == "query"
