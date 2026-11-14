@@ -951,6 +951,34 @@ class DiscordAssistant:
             try: await channel.trigger_typing()
             except Exception: _LOGGER.debug("Typing indicator failed",exc_info=True)
             await asyncio.sleep(8)
+    async def _retry_failed_action(self, agent, prompt, first_result, models_attempted):
+        """Retry one explicit structured failure, targeting only failed entity IDs."""
+        targets = action_retry_targets(first_result)
+        if not targets:
+            return None, None
+        retry_prompt = (
+            prompt
+            + "\n\nCONTROLLED ACTION RETRY — ONE ATTEMPT ONLY.\n"
+            + "Your previous Home Assistant response explicitly reported these targets as failed: "
+            + ", ".join(targets)
+            + ". The successful targets from the first attempt have already completed and MUST NOT "
+            + "be called again. Retry only the exact failed entity IDs listed above, using the "
+            + "original requested settings. Do not broaden the target, do not repeat successful "
+            + "targets, and do not claim success unless the new Home Assistant response confirms it. "
+            + "If you cannot safely address only those failed entities, do not execute another action; "
+            + "explain the limitation."
+        )
+        active_request = getattr(self, "active_request", None)
+        if active_request:
+            active_request["stage"] = "Retrying explicitly failed targets (one retry maximum)"
+            active_request["retry_targets"] = targets
+            active_request["models_attempted"] = list(models_attempted + [agent])
+            self._refresh_sensor()
+        models_attempted.append(agent)
+        retry_answer = await self._call(agent, retry_prompt)
+        retry_result = getattr(self, "_last_call_result", None)
+        return retry_answer, merge_action_retry_results(first_result, retry_result)
+
     async def _call(self,agent,prompt):
         if not agent:raise RuntimeError("No conversation agent configured")
         self._last_call_result = None
@@ -1345,28 +1373,9 @@ class DiscordAssistant:
                 if is_action:
                     verification_error = action_result_error(operation_result)
                     if verification_error and action_result_retryable(operation_result):
-                        retry_targets = action_retry_targets(operation_result)
-                        retry_prompt = (
-                            prompt
-                            + "\n\nCONTROLLED ACTION RETRY — ONE ATTEMPT ONLY.\n"
-                            + "Your previous Home Assistant response explicitly reported these targets as failed: "
-                            + ", ".join(retry_targets)
-                            + ". The successful targets from the first attempt have already completed and MUST NOT "
-                            + "be called again. Retry only the exact failed entity IDs listed above, using the "
-                            + "original requested settings. Do not broaden the target, do not repeat successful "
-                            + "targets, and do not claim success unless the new Home Assistant response confirms it. "
-                            + "If you cannot safely address only those failed entities, do not execute another action; "
-                            + "explain the limitation."
+                        retry_answer, merged_result = await self._retry_failed_action(
+                            agent, prompt, operation_result, models_attempted
                         )
-                        if self.active_request:
-                            self.active_request["stage"] = "Retrying explicitly failed targets (one retry maximum)"
-                            self.active_request["retry_targets"] = retry_targets
-                            self.active_request["models_attempted"] = list(models_attempted + [agent])
-                            self._refresh_sensor()
-                        models_attempted.append(agent)
-                        retry_answer = await self._call(agent, retry_prompt)
-                        retry_result = getattr(self, "_last_call_result", None)
-                        merged_result = merge_action_retry_results(operation_result, retry_result)
                         if merged_result is not None:
                             operation_result = merged_result
                             action_result = action_result_snapshot(operation_result)
@@ -1375,8 +1384,8 @@ class DiscordAssistant:
                                 answer = retry_answer or answer
                         else:
                             verification_error = (
-                                "The controlled retry did not return a structured Home Assistant action result. "
-                                "The original failed targets remain unconfirmed."
+                                "The controlled retry did not return a structured Home Assistant action result "
+                                "covering exactly the failed targets. The original failures remain unconfirmed."
                             )
                     if verification_error:
                         raise RuntimeError("Action not confirmed: " + verification_error)
