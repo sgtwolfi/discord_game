@@ -493,12 +493,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     modeWrap.append(this._el("p", modeSelect.value === "api"
       ? "Configure the provider, model, system prompt and available tools in the selected Home Assistant conversation agent. GHOST adds private memory and keeps its own conversation records."
       : "Assign separate Conversation, Operations and optional Fallback agents in Discord Game → Configure. Use small local models for narrow tasks; keep tool access restricted.", "help"));
-    modeSelect.addEventListener("change", () => {
-      const help = modeWrap.querySelector("p");
-      help.textContent = modeSelect.value === "api"
-        ? "Configure the provider, model, system prompt and available tools in the selected Home Assistant conversation agent. GHOST adds private memory and keeps its own conversation records."
-        : "Assign separate Conversation, Operations and optional Fallback agents in Discord Game → Configure. Use small local models for narrow tasks; keep tool access restricted.";
-    });
+    modeSelect.addEventListener("change", () => this._render());
     form.append(modeWrap);
     const grid = this._el("div", null, "fieldgrid");
     const number = (key, title, value, min, max, step, help) => {
@@ -530,7 +525,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     typing.dataset.keep = "cfg-typing_enabled"; typingLabel.prepend(typing);
     form.append(typingLabel);
 
-    const apiMode = (settings.assistant_mode || d.mode || "local") === "api";
+    const apiMode = modeSelect.value === "api";
     if (apiMode) {
       form.append(this._el("h3", "System prompts and functions"));
       form.append(this._el("p", "API Mode deliberately does not override your Home Assistant agent's system prompt or function/tool configuration. Edit those in the selected conversation agent's settings. The saved GHOST prompt overrides below are retained but inactive until you switch back to Local Mode.", "help"));
