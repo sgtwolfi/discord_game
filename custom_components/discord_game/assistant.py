@@ -771,7 +771,9 @@ class DiscordAssistant:
         optional_sections = []
         if effective_prompt:
             optional_sections.append(
-                "Additional administrator instructions for this role:\n" + effective_prompt[:min(6000, self.budget // 3)]
+                "Role instructions (administrator override or built-in default). Safety, privacy, identity and "
+                "action-verification rules above always take priority:\n"
+                + effective_prompt[:min(6000, self.budget // 3)]
             )
         if context_note:
             optional_sections.append(
