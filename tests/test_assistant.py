@@ -672,3 +672,17 @@ def test_group_transcript_replay_preserves_each_sender():
 
     assert [item["sender_name"] for item in assistant.queue] == ["Max", "Ryan"]
     assert [item["sender_id"] for item in assistant.queue] == ["123", "456"]
+
+
+
+def test_group_context_keeps_each_speaker_name():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.limit = 10
+    assistant.budget = 2000
+    batch = [{"sender_name": "Ryan", "content": "Current message", "is_dm": False}]
+    history = [{"role": "user", "sender": "Max", "content": "Earlier group message"}]
+
+    prompt = assistant._prompt(batch, history, "")
+
+    assert "Max: Earlier group message" in prompt
+    assert "Ryan: Current message" in prompt
