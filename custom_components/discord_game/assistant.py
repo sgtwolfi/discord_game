@@ -651,6 +651,8 @@ class DiscordAssistant:
         self._refresh_sensor()
     async def set_friend_memory(self, user_id, summary):
         """Replace one approved contact's durable memory with an admin correction."""
+        if str(user_id) not in self.approved_users:
+            raise ValueError("Memory can only be corrected for approved GHOST contacts")
         summary = str(summary).strip()
         if len(summary) > 4000:
             raise ValueError("Memory summary must be 4000 characters or fewer")
