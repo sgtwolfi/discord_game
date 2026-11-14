@@ -422,6 +422,10 @@ def test_queued_message_can_be_edited_and_cancelled_individually():
         "key": "dm:456",
         "content": "keep this",
     }]
+    assistant.conversation_logs = {
+        "dm:123": [{"message_id": "111", "content": "original"}],
+        "dm:456": [{"message_id": "222", "content": "keep this"}],
+    }
     assistant.sensor = SimpleNamespace(hass=None)
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(
         async_fire=lambda *args, **kwargs: events.append((args, kwargs))
@@ -430,11 +434,13 @@ def test_queued_message_can_be_edited_and_cancelled_individually():
     edited = asyncio.run(assistant.edit_queued_message("111", "corrected"))
     assert edited is True
     assert assistant.queue[0]["content"] == "corrected"
+    assert assistant.conversation_logs["dm:123"][0]["content"] == "corrected"
 
     cancelled = asyncio.run(assistant.cancel_queued_message("111"))
     assert cancelled is True
     assert len(assistant.queue) == 1
     assert assistant.queue[0]["message_id"] == "222"
+    assert assistant.conversation_logs["dm:123"] == []
     assert events[0][0][0] == "discord_game_assistant_queue_edited"
     assert events[1][0][0] == "discord_game_assistant_queue_message_cancelled"
 
