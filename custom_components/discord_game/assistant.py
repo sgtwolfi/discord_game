@@ -179,6 +179,17 @@ def extract_durable_memory_facts(messages):
     return facts
 
 
+def take_conversation_batch(queue):
+    """Remove all currently queued messages for the oldest conversation."""
+    if not queue:
+        return []
+    first_key = queue[0]["key"]
+    batch = [entry for entry in queue if entry["key"] == first_key]
+    selected = {id(entry) for entry in batch}
+    queue[:] = [entry for entry in queue if id(entry) not in selected]
+    return sorted(batch, key=lambda entry: entry["sort"])
+
+
 def action_result_error(data):
     """Return why a requested HA action is not positively confirmed.
 
@@ -203,7 +214,14 @@ def action_result_error(data):
             target = str(item.get("name") or item.get("id") or item.get("entity_id") or "unknown target")
             reason = item.get("error") or item.get("message")
             details.append(target + (": " + str(reason) if reason else ""))
-        return "Home Assistant reported failed targets: " + ", ".join(details)
+        prefix = "Home Assistant partially completed the action; failed targets: " if succeeded else "Home Assistant reported failed targets: "
+        completed = ""
+        if succeeded:
+            completed = " Successful targets: " + ", ".join(
+                str(item.get("name") or item.get("id") or item.get("entity_id") or "unknown target")
+                for item in succeeded if isinstance(item, dict)
+            ) + "."
+        return prefix + ", ".join(details) + "." + completed
     if not succeeded:
         return (
             "Home Assistant did not report any successfully completed targets and returned no failed-target details. "
@@ -213,17 +231,8 @@ def action_result_error(data):
     return None
 
 def action_result_retryable(data):
-    """Only retry when no target was reported as failed or partially completed."""
-    response = data.get("response", data) if isinstance(data, dict) else {}
-    if not isinstance(response, dict) or response.get("response_type") != "action_done":
-        return True
-    result_data = response.get("data") or {}
-    if not isinstance(result_data, dict):
-        return True
-    # A partial/failed action must be reported, not blindly repeated.
-    if result_data.get("failed"):
-        return False
-    return not bool(result_data.get("success"))
+    """Legacy compatibility helper: action outcomes are never safe to replay."""
+    return False
 
 
 def action_result_snapshot(data):
@@ -506,6 +515,7 @@ class DiscordAssistant:
           "last_group_decision": getattr(self, "last_group_decision", None),
           "suppressed_group_messages": getattr(self, "suppressed_group_messages", 0),
           "last_memory_consolidation": getattr(self, "last_memory_consolidation", None),
+          "memory_strategy": "explicit_evidence_only",
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "pending_messages":len(v.get("pending_messages", [])), "last_consolidated":v.get("last_consolidated"), "recent_messages": (v.get("messages", [])[-getattr(self, "history_limit", 8):] if getattr(self, "history_limit", 8) else [])} for k,v in self.friends.items()},
           "contacts": contacts,
           "conversations": conversations,
@@ -618,14 +628,9 @@ class DiscordAssistant:
                 await asyncio.sleep(self.delay)
                 if self.paused or not self.queue:
                     continue
-                first = self.queue[0]
-                # Coalesce all currently pending messages for this conversation,
-                # even when another conversation's messages are interleaved.
-                # Different conversations remain separate and preserve their order.
-                batch = [entry for entry in self.queue if entry["key"] == first["key"]]
-                selected_ids = {id(entry) for entry in batch}
-                self.queue = [entry for entry in self.queue if id(entry) not in selected_ids]
-                batch.sort(key=lambda entry: entry["sort"])
+                # Coalesce the oldest conversation's pending messages, even if
+                # another conversation has messages interleaved in the queue.
+                batch = take_conversation_batch(self.queue)
                 self._refresh_sensor()
                 try:
                     await self._process(batch)
@@ -1547,6 +1552,7 @@ class DiscordAssistant:
             raise ValueError("Memory summary must be 4000 characters or fewer")
         record = self.friends.setdefault(str(user_id), {"messages": [], "summary": ""})
         record["summary"] = summary
+        record["summary_source"] = "administrator"
         await self._save()
         self._refresh_sensor()
 
