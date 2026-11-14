@@ -2,26 +2,22 @@
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
+from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .services import assistants
 
 
+@websocket_api.require_admin
 @websocket_api.websocket_command(
     {vol.Required("type"): f"{DOMAIN}/assistant/diagnostics"}
 )
 @websocket_api.async_response
 async def websocket_get_diagnostics(
-    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict
 ) -> None:
     """Return private assistant diagnostics to administrators only."""
-    if not connection.user.is_admin:
-        connection.send_error(
-            msg["id"], "unauthorized", "Administrator access is required"
-        )
-        return
-
     items = assistants(hass)
     if not items:
         connection.send_result(msg["id"], {"available": False})
