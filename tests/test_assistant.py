@@ -2078,3 +2078,75 @@ def test_spam_timeout_policy_drops_messages_during_cooldown():
     assert assistant._record_spam(message, "123", True) == "drop"
     assert assistant._record_spam(message, "123", True) == "drop"
 
+
+
+
+def test_group_continuity_overrides_mention_only_for_same_speaker_followup():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A same-speaker follow-up must not call relevance inference")
+
+    assistant._call = unexpected
+    history = [
+        {
+            "role": "user",
+            "sender": "Tokyo",
+            "sender_id": "123",
+            "content": "so what cunt, you fixed yourself yet?",
+            "timestamp": "2026-11-14T11:44:00+00:00",
+        },
+        {
+            "role": "assistant",
+            "sender": "GHOST",
+            "content": "What do you need help with?",
+            "timestamp": "2026-11-14T11:45:00+00:00",
+        },
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{
+            "sender_name": "Tokyo",
+            "sender_id": "123",
+            "content": "you fixed yourself?",
+            "timestamp": "2026-11-14T11:45:10+00:00",
+            "directly_addressed": False,
+        }],
+        history,
+    ))
+
+    assert result[0] is True
+    assert "follow-up" in result[1]
+
+
+def test_mention_only_still_blocks_unrelated_group_message_without_history():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("Mention-only mode must not call relevance inference")
+
+    assistant._call = unexpected
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{
+            "sender_name": "Tokyo",
+            "sender_id": "123",
+            "content": "Anyone fancy a game?",
+            "timestamp": "2026-11-14T11:45:10+00:00",
+            "directly_addressed": False,
+        }],
+        [],
+    ))
+
+    assert result[0] is False
+    assert "mention-only" in result[1]
