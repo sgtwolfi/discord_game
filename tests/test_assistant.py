@@ -214,3 +214,22 @@ def test_model_usage_aggregates_retained_transcript():
     assert usage["conversation.api"] == {
         "requests": 1, "input_tokens": 200, "output_tokens": 40, "errors": 1
     }
+
+
+
+def test_action_result_snapshot_keeps_success_and_failure_targets():
+    snapshot = assistant_module.action_result_snapshot({
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"name": "Bedroom", "entity_id": "light.bedroom"}],
+                "failed": [{"name": "Hall", "id": "light.hall"}],
+            },
+        },
+    })
+
+    assert snapshot == {
+        "response_type": "action_done",
+        "success": [{"name": "Bedroom", "id": "light.bedroom"}],
+        "failed": [{"name": "Hall", "id": "light.hall"}],
+    }
