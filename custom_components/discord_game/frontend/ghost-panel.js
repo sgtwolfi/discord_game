@@ -438,14 +438,14 @@ class DiscordGameGhostPanel extends HTMLElement {
     const agentsPanel = this._el("section", null, "panel");
     agentsPanel.append(this._el("h2", "Assigned conversation agents"));
     const agentGrid = this._el("div", null, "fieldgrid");
-    for (const item of [["Conversation", d.conversation_agent], ["Operations", d.operations_agent], ["Memory", d.memory_agent], ["Fallback", d.fallback_agent]]) {
+    for (const item of [["Conversation", d.conversation_agent], ["Operations", d.operations_agent], ["Memory", "Evidence-only (no model)"], ["Fallback", d.fallback_agent]]) {
       const cell = this._el("div", null, "field");
       cell.append(this._el("label", item[0]));
       cell.append(this._el("strong", item[1] || "Not selected"));
       agentGrid.append(cell);
     }
     agentsPanel.append(agentGrid);
-    agentsPanel.append(this._el("p", "Choose the four agents in Settings → Devices & services → Discord Game → Configure. Conversation handles chat and group relevance. Operations performs Home Assistant actions. Fallback handles difficult requests and failed operations. Memory consolidates private friend memories.", "help"));
+    agentsPanel.append(this._el("p", "Choose the Conversation, Operations and Fallback agents in Settings → Devices & services → Discord Game → Configure. Conversation handles chat and group relevance. Operations performs Home Assistant actions and live-state queries. Fallback recovers from primary model failures. Memory is handled locally by a conservative evidence-only extractor; it does not need a model.", "help"));
     agentsPanel.append(this._el("p", "Selecting an operations agent does not automatically give it access to devices or scripts. Use the capability manager below to expose the exact Home Assistant entities it needs to Assist.", "help"));
     shell.append(agentsPanel);
 
@@ -488,8 +488,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     const prompts = [
       ["conversation_system_prompt","Conversation agent",6000],
       ["operations_system_prompt","Operations agent",6000],
-      ["advanced_system_prompt","Advanced fallback agent",6000],
-      ["memory_system_prompt","Memory manager",4000]
+      ["advanced_system_prompt","Advanced reasoning instructions",6000]
     ];
     for (const p of prompts) {
       const row = this._el("div", null, "prompthead");
@@ -652,7 +651,6 @@ class DiscordGameGhostPanel extends HTMLElement {
       data.conversation_system_prompt = settings.conversation_system_prompt || "";
       data.operations_system_prompt = settings.operations_system_prompt || "";
       data.advanced_system_prompt = settings.advanced_system_prompt || "";
-      data.memory_system_prompt = settings.memory_system_prompt || "";
       await this._service("update_settings", data, true);
     }, true));
     shell.append(groupsPanel);
@@ -661,7 +659,7 @@ class DiscordGameGhostPanel extends HTMLElement {
   _renderMemories(shell, d) {
     const panel = this._el("section", null, "panel");
     panel.append(this._el("h2", "Private friend memories"));
-    panel.append(this._el("p", "GHOST consolidates each approved person's own messages after the configured idle period. Group channels have no shared long-term memory; approved friends' own contributions can inform their individual private memories.", "muted"));
+    panel.append(this._el("p", "GHOST stores only explicit remember statements, clear first-person preferences/favourites/work facts, and structured Home Assistant action outcomes. Assistant replies, jokes, guesses and unverified device claims are ignored. Group channels have no shared long-term memory; approved friends' own contributions can inform their individual private memories.", "muted"));
     const contacts = d.contacts || [];
     const pendingTotal = Object.values(d.friend_memory || {}).reduce((total, item) => total + (item.pending_messages || 0), 0);
     panel.append(this._el("p", "Pending messages awaiting consolidation: " + pendingTotal + (d.last_memory_consolidation ? " · Last consolidation: " + new Date(d.last_memory_consolidation).toLocaleString() : " · No consolidation has completed yet."), "help"));
