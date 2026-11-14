@@ -306,7 +306,15 @@ class DiscordAssistant:
         if entry is None:
             raise ValueError("Transcript entry was not found or has no user messages")
         messages = entry["user_messages"]
-        if len(self.queue) + len(messages) > self.max_queue:
+        records = entry.get("messages") or [
+            {
+                "sender": entry.get("sender") or "Replay",
+                "sender_id": (entry.get("sender_ids") or ["replay"])[0],
+                "content": content,
+            }
+            for content in messages
+        ]
+        if len(self.queue) + len(records) > self.max_queue:
             raise RuntimeError("Assistant queue is full")
         is_dm = bool(entry.get("is_dm"))
         sender_ids = entry.get("sender_ids") or []
@@ -322,17 +330,15 @@ class DiscordAssistant:
                 raise ValueError("This server channel is not enabled for GHOST")
             channel = self.bot.get_channel(int(entry["channel_id"])) or await self.bot.fetch_channel(int(entry["channel_id"]))
         now = datetime.now(UTC)
-        sender_name = entry.get("sender") or "Replay"
-        sender_id = str(sender_ids[0]) if sender_ids else "replay"
-        for index, content in enumerate(messages):
+        for index, record in enumerate(records):
             queued_at = now.timestamp() + index / 1000
             self.queue.append({
                 "key": str(conversation),
                 "message_id": f"replay-{now.timestamp()}-{index}",
                 "is_dm": is_dm,
-                "sender_id": sender_id,
-                "sender_name": sender_name,
-                "content": str(content),
+                "sender_id": str(record.get("sender_id") or "replay"),
+                "sender_name": str(record.get("sender") or "Replay"),
+                "content": str(record.get("content") or ""),
                 "timestamp": now.isoformat(),
                 "sort": queued_at,
                 "channel_id": str(channel.id),
@@ -563,7 +569,9 @@ class DiscordAssistant:
             self.last_activity,self.error,self._state=now,None,"ready"
             self.transcript.append({"timestamp":now,"conversation":item["key"],"sender":", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
-              "user_messages":[x["content"] for x in batch],"assistant":answer,"model":model,"role":role,
+              "user_messages":[x["content"] for x in batch],
+              "messages":[{"sender":x["sender_name"],"sender_id":x["sender_id"],"content":x["content"]} for x in batch],
+              "assistant":answer,"model":model,"role":role,
               "estimated_input_tokens":len(prompt)//4,"estimated_output_tokens":len(answer)//4,"context_snapshot":prompt,
               "action_result": action_result,
               "fallback_used":model==self.agents["fallback_agent"] and bool(self.agents["fallback_agent"])})
@@ -583,7 +591,9 @@ class DiscordAssistant:
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
-              "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
+              "user_messages":[x["content"] for x in batch],
+              "messages":[{"sender":x["sender_name"],"sender_id":x["sender_id"],"content":x["content"]} for x in batch],
+              "assistant":None,"error":self.error,"model":model,
               "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt,
               "action_result": action_result})
             self.transcript=self.transcript[-100:]
