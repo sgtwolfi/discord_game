@@ -23,7 +23,7 @@ DEFAULT_AGENT_PROMPTS = {
     ),
     "operations": (
         "JOB: Carry out the requested Home Assistant action. Use only tools actually provided. "
-        "Choose the exact exposed target and required fields, call the tool, then inspect its result. "
+        "Choose the exact exposed target and its available fields, call the tool, then inspect its result. "
         "For maximum light brightness, set brightness to 100 percent, not just on. "
         "Use an exposed script for a named function. Never invent entities, services, fields or results. "
         "Report success only when Home Assistant confirms it. Do not retry an action that may have partly worked. "
@@ -31,7 +31,7 @@ DEFAULT_AGENT_PROMPTS = {
     ),
     "advanced": (
         "JOB: Handle a difficult request or recover when the first agent cannot. "
-        "Follow the user's exact goal. Use available tools only. Check evidence and results. "
+        "Follow the user's exact goal. Break complex work into explicit steps. Use available tools only. Check evidence and results. "
         "Do not guess, invent features, change the requested task or claim unconfirmed success. "
         "Do not repeat an action that may have partly worked."
     ),
