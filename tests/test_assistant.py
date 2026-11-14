@@ -22,12 +22,19 @@ helpers = types.ModuleType("homeassistant.helpers")
 helpers.__path__ = []
 storage_module = types.ModuleType("homeassistant.helpers.storage")
 storage_module.Store = type("Store", (), {})
+util_module = types.ModuleType("homeassistant.util")
+util_module.__path__ = []
+dt_module = types.ModuleType("homeassistant.util.dt")
+dt_module.now = lambda: datetime.now(UTC)
+util_module.dt = dt_module
 sys.modules.update({
     "homeassistant": ha,
     "homeassistant.components": components,
     "homeassistant.components.sensor": sensor_module,
     "homeassistant.helpers": helpers,
     "homeassistant.helpers.storage": storage_module,
+    "homeassistant.util": util_module,
+    "homeassistant.util.dt": dt_module,
 })
 
 repo_root = Path(__file__).resolve().parents[1]
