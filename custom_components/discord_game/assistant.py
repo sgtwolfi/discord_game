@@ -2268,7 +2268,13 @@ class DiscordAssistant:
             self.context_notes.pop(key, None)
             self.transcript = [
                 entry for entry in self.transcript
-                if not (entry.get("is_dm") and user_id in {str(value) for value in entry.get("sender_ids", [])})
+                if not (
+                    entry.get("is_dm")
+                    and (
+                        entry.get("conversation") == key
+                        or user_id in {str(value) for value in entry.get("sender_ids", [])}
+                    )
+                )
             ]
         if scope == "all":
             self.friends.pop(user_id, None)
