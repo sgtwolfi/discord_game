@@ -75,6 +75,8 @@ class DiscordGameGhostPanel extends HTMLElement {
     try {
       await this._hass.callService("discord_game", name, data);
       this._notice = "Command sent.";
+      this._diagnosticsLoaded = false;
+      await this._loadDiagnostics();
     } catch (err) {
       this._notice = "Couldn't run " + name + ": " + (err?.message || String(err));
     } finally {
