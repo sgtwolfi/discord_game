@@ -396,3 +396,66 @@ def test_admin_memory_correction_has_a_size_limit():
     assistant.friends = {}
     with pytest.raises(ValueError, match="4000 characters"):
         asyncio.run(assistant.set_friend_memory("123", "x" * 4001))
+
+
+
+def test_memory_compression_keeps_more_raw_history_when_no_memory_agent():
+    import asyncio
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {"123": {
+        "summary": "",
+        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+    }}
+    assistant.limit = 3
+    assistant.history_limit = 6
+    assistant.agents = {"memory_agent": ""}
+    asyncio.run(assistant._compress("123"))
+
+    assert [item["content"] for item in assistant.friends["123"]["messages"]] == ["2", "3", "4", "5", "6", "7"]
+
+
+def test_memory_compression_keeps_raw_history_when_memory_agent_fails():
+    import asyncio
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {"123": {
+        "summary": "existing",
+        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+    }}
+    assistant.limit = 3
+    assistant.history_limit = 6
+    assistant.agents = {"memory_agent": "conversation.memory"}
+    assistant.budget = 1000
+
+    async def failed_call(agent, prompt):
+        raise RuntimeError("model unavailable")
+
+    assistant._call = failed_call
+    asyncio.run(assistant._compress("123"))
+
+    assert len(assistant.friends["123"]["messages"]) == 6
+    assert assistant.friends["123"]["summary"] == "existing"
+
+
+def test_memory_compression_trims_to_short_history_after_success():
+    import asyncio
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {"123": {
+        "summary": "",
+        "messages": [{"role": "user", "content": str(i)} for i in range(8)],
+    }}
+    assistant.limit = 3
+    assistant.history_limit = 6
+    assistant.agents = {"memory_agent": "conversation.memory"}
+    assistant.budget = 1000
+
+    async def successful_call(agent, prompt):
+        return "durable summary"
+
+    assistant._call = successful_call
+    asyncio.run(assistant._compress("123"))
+
+    assert len(assistant.friends["123"]["messages"]) == 3
+    assert assistant.friends["123"]["summary"] == "durable summary"
