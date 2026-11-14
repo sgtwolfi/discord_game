@@ -89,6 +89,17 @@ class DiscordAssistant:
         return {"enabled":self.enabled,"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
+          "pending_messages":[
+              {
+                  "conversation":item["key"],
+                  "sender":item["sender_name"],
+                  "sender_id":item["sender_id"],
+                  "channel_id":item["channel_id"],
+                  "timestamp":item["timestamp"],
+                  "message":item["content"][:1000],
+              }
+              for item in self.queue[:20]
+          ],
           "transcript":self.transcript[-20:],
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
