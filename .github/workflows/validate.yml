@@ -18,6 +18,7 @@ jobs:
         run: python -m compileall -q custom_components/discord_game tests
       - name: Install integration test dependencies
         run: |
+          pip install --only-binary=:all: PyYAML==6.0.2
           pip install homeassistant nextcord==3.1.1 addict aiohttp validators pytest
       - name: Run assistant unit tests
         run: pytest -q tests
