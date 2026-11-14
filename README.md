@@ -6,7 +6,7 @@ This branch adds an optional token-conscious assistant runtime while retaining t
 
 The assistant is disabled by default to prevent duplicate replies from existing automations. Open Settings → Devices & services → Discord Game → Configure.
 
-Select Home Assistant conversation agent entity IDs:
+Choose the agents from Home Assistant's conversation-agent dropdowns:
 - Conversation agent: local Ollama agent for ordinary chat.
 - Operations agent: local agent configured with only the Home Assistant tools/scripts it is allowed to use.
 - Memory agent: optional local agent for periodic private-memory compression.
