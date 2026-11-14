@@ -1,9 +1,14 @@
 """Focused tests for GHOST context and response handling without a live HA instance."""
 
+import asyncio
 import importlib
 import sys
 import types
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 # The tested helpers do not need Home Assistant at runtime. Stub only the two HA
 # base classes imported by assistant.py so these tests stay quick and isolated.
@@ -93,9 +98,6 @@ def test_action_result_rejects_empty_success_list():
 
 
 def test_enqueue_rejects_empty_discord_messages():
-    from datetime import datetime, timezone
-    from types import SimpleNamespace
-    import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -110,7 +112,7 @@ def test_enqueue_rejects_empty_discord_messages():
         content="   ",
         guild=None,
         channel=SimpleNamespace(id=123),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
@@ -119,9 +121,6 @@ def test_enqueue_rejects_empty_discord_messages():
 
 
 def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
-    from datetime import datetime, timezone
-    from types import SimpleNamespace
-    import asyncio
 
     fired = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
@@ -140,7 +139,7 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
         content="new message",
         guild=None,
         channel=SimpleNamespace(id=123),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     asyncio.run(assistant.enqueue(message, is_dm=True, sender_id="456", sender_name="Max"))
@@ -169,8 +168,6 @@ def test_action_classifier_does_not_match_ordinary_chat():
 
 
 def test_pause_resume_and_clear_queue_controls():
-    from types import SimpleNamespace
-    import asyncio
 
     events = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
@@ -277,8 +274,6 @@ def test_admin_diagnostics_expose_paused_state_and_active_request():
 
 
 def test_queued_message_can_be_edited_and_cancelled_individually():
-    from types import SimpleNamespace
-    import asyncio
 
     events = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
@@ -310,8 +305,6 @@ def test_queued_message_can_be_edited_and_cancelled_individually():
 
 
 def test_editing_queue_rejects_blank_content():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -323,8 +316,6 @@ def test_editing_queue_rejects_blank_content():
 
 
 def test_transcript_replay_requeues_original_dm_messages():
-    from types import SimpleNamespace
-    import asyncio
 
     channel = SimpleNamespace(id=789)
 
@@ -390,8 +381,6 @@ def test_prompt_changes_instructions_for_operations_and_advanced_roles():
 
 
 def test_admin_can_correct_contact_memory():
-    from types import SimpleNamespace
-    import asyncio
 
     saved = []
     class FakeStore:
@@ -414,8 +403,6 @@ def test_admin_can_correct_contact_memory():
 
 
 def test_admin_memory_correction_has_a_size_limit():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -427,7 +414,6 @@ def test_admin_memory_correction_has_a_size_limit():
 
 
 def test_memory_compression_keeps_more_raw_history_when_no_memory_agent():
-    import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -444,7 +430,6 @@ def test_memory_compression_keeps_more_raw_history_when_no_memory_agent():
 
 
 def test_memory_compression_keeps_raw_history_when_memory_agent_fails():
-    import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -468,7 +453,6 @@ def test_memory_compression_keeps_raw_history_when_memory_agent_fails():
 
 
 def test_memory_compression_trims_to_short_history_after_success():
-    import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -493,8 +477,6 @@ def test_memory_compression_trims_to_short_history_after_success():
 
 
 def test_manual_dm_send_rejects_unapproved_user():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -505,8 +487,6 @@ def test_manual_dm_send_rejects_unapproved_user():
 
 
 def test_manual_channel_send_rejects_unselected_channel():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -536,8 +516,6 @@ def test_context_audit_keeps_ten_newest_prompts_complete():
 
 
 def test_model_call_tracks_per_agent_estimated_usage():
-    from types import SimpleNamespace
-    import asyncio
 
     class FakeServices:
         async def async_call(self, domain, service, data, blocking, return_response):
@@ -562,9 +540,6 @@ def test_model_call_tracks_per_agent_estimated_usage():
 
 
 def test_model_call_counts_provider_errors():
-    from types import SimpleNamespace
-    import asyncio
-    import pytest
 
     class FakeServices:
         async def async_call(self, *args, **kwargs):
@@ -583,8 +558,6 @@ def test_model_call_counts_provider_errors():
 
 
 def test_manual_send_rejects_two_destinations():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -621,8 +594,6 @@ def test_fallback_retry_is_allowed_when_action_has_no_reported_targets():
 
 
 def test_model_call_does_not_retry_completed_action_without_speech():
-    from types import SimpleNamespace
-    import asyncio
 
     class FakeServices:
         async def async_call(self, *args, **kwargs):
@@ -646,8 +617,6 @@ def test_model_call_does_not_retry_completed_action_without_speech():
 
 
 def test_admin_cannot_create_memory_for_unapproved_contact():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -660,8 +629,6 @@ def test_admin_cannot_create_memory_for_unapproved_contact():
 
 
 def test_group_transcript_replay_preserves_each_sender():
-    from types import SimpleNamespace
-    import asyncio
 
     channel = SimpleNamespace(id=789)
 
@@ -719,8 +686,6 @@ def test_group_context_keeps_each_speaker_name():
 
 
 def test_admin_can_inject_temporary_context_for_approved_dm():
-    from types import SimpleNamespace
-    import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -735,8 +700,6 @@ def test_admin_can_inject_temporary_context_for_approved_dm():
 
 
 def test_admin_can_inject_temporary_context_for_selected_group_channel():
-    from types import SimpleNamespace
-    import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
@@ -751,8 +714,6 @@ def test_admin_can_inject_temporary_context_for_selected_group_channel():
 
 
 def test_admin_cannot_inject_context_into_unapproved_conversation():
-    import asyncio
-    import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
