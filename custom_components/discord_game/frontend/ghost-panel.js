@@ -135,7 +135,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       image.alt = String(label || "Discord user") + " profile picture";
       image.loading = "lazy";
       image.referrerPolicy = "no-referrer";
-      image.addEventListener("error", () => image.remove(), { once: true });
+      image.addEventListener("error", () => { node.textContent = fallback; }, { once: true });
       node.replaceChildren(image);
     }
     return node;
@@ -230,7 +230,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       .error{color:var(--error-color)}
       .statrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
       .stat{padding:14px;border:1px solid var(--divider-color);border-radius:12px;background:var(--card-background-color)}
-      .stat b{display:block;font-size:20px;margin-top:4px}
+      .stat b{display:block;font-size:20px;line-height:1.3;margin-top:4px;overflow-wrap:anywhere}
       .list{display:flex;flex-direction:column;gap:8px}
       .activity{padding:12px;border:1px solid var(--divider-color);border-radius:11px}
       .memorybox{padding:12px;border:1px solid var(--divider-color);border-radius:11px;margin:9px 0}
