@@ -6,6 +6,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import DOMAIN, DATA_HASS_CONFIG
 from .services import async_setup_services, async_unload_services
 from .panel import async_register_panel, async_unregister_panel
+from .websocket import async_register_websocket
 
 PLATFORMS = [Platform.SENSOR]
 
@@ -26,6 +27,7 @@ async def async_setup_entry(
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_setup_services(hass)
     await async_register_panel(hass)
+    async_register_websocket(hass)
 
     return True
 
