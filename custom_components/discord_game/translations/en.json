@@ -11,7 +11,7 @@
           "steam_api_key": "Steam API Key (optional, needed for image loading)",
           "entities_disabled_default": "Create sub-entities as disabled (only the main sensor per user will be enabled)"
         },
-        "description": "Enter your Discord bot access token.\nHow to obtain the token is described on https://github.com/LordBoos/discord_game\n\nTo enable Steam game images, enter your Steam API key.\nYou can get one at https://steamcommunity.com/dev/apikey",
+        "description": "Enter your Discord bot access token.\nHow to obtain the token is described on https://github.com/sgtwolfi/discord_game\n\nTo enable Steam game images, enter your Steam API key.\nYou can get one at https://steamcommunity.com/dev/apikey",
         "title": "Authentication"
       },
       "members": {
@@ -28,22 +28,34 @@
   "options": {
     "step": {
       "init": {
-        "title": "Discord Game Options",
-        "description": "Update your Discord bot token, image format, or Steam API key.\nYou can get a Steam API key at https://steamcommunity.com/dev/apikey",
+        "title": "Discord Game and GHOST Assistant Options",
+        "description": "Existing Discord settings are retained. Configure assistant agents only when you are ready to enable the assistant.",
         "data": {
           "access_token": "Discord Bot access token",
           "image_format": "Image format",
-          "steam_api_key": "Steam API Key (optional, needed for image loading)",
-          "entities_disabled_default": "Create sub-entities as disabled (only the main sensor per user will be enabled)"
+          "steam_api_key": "Steam API Key (optional)",
+          "entities_disabled_default": "Create sub-entities as disabled",
+          "assistant_enabled": "Enable Discord AI assistant",
+          "conversation_agent": "Conversation model agent ID",
+          "operations_agent": "Operations model agent ID",
+          "memory_agent": "Memory manager agent ID (optional)",
+          "fallback_agent": "Paid API fallback agent ID (optional)",
+          "fallback_after_failures": "Local attempts before fallback",
+          "queue_debounce_seconds": "Message grouping delay (seconds)",
+          "max_context_messages": "Maximum context messages",
+          "context_budget_chars": "Approximate context budget (characters)",
+          "history_limit": "Messages before memory compression",
+          "typing_enabled": "Show Discord typing indicator",
+          "assistant_group_channels": "Server AI channels (comma-separated channel IDs)"
         }
       },
       "members": {
-        "title": "Select Discord users and channels to track",
-        "description": "Select Discord users and channels to track. Previously selected items are pre-selected.",
+        "title": "Select Discord users and channels",
+        "description": "Previously selected users and channels are pre-selected. Check them before saving.",
         "data": {
-          "members": "Username of the Discord user (required)",
-          "channels": "Name of the Discord channel (optional)",
-          "voice_channels": "Name of the Discord voice channel (optional)"
+          "members": "Discord users",
+          "channels": "Discord channels",
+          "voice_channels": "Discord voice channels"
         }
       }
     },
