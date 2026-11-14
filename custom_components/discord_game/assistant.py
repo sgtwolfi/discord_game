@@ -262,7 +262,7 @@ def deduplicate_memory_lines(lines):
 
 def replaceable_memory_key(fact):
     """Return a stable key only for memory types that are safe to supersede."""
-    value = str(fact or "").strip()
+    value = str(fact or "").strip().lstrip("-• ").strip()
     if value.casefold().startswith("work:"):
         return "work"
     if value.casefold().startswith("favourite:"):
