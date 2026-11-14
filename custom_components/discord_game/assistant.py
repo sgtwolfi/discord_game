@@ -1422,6 +1422,16 @@ class DiscordAssistant:
                 for line in existing.splitlines()
                 if line.strip()
             ]
+            # Legacy releases occasionally saved the model's conversational
+            # performance as memory. Discard obvious persona/filler lines unless
+            # the administrator explicitly authored the current summary.
+            if record.get("summary_source") != "administrator":
+                chatter = re.compile(
+                    r"(what's on your mind|right[, ]+mate|\\binnit\\b|"
+                    r"proper shockin|proper shocking|red-ing|i'm just a ghost)",
+                    re.IGNORECASE,
+                )
+                existing_lines = [line for line in existing_lines if not chatter.search(line)]
             known = {line.lstrip("-• ").casefold() for line in existing_lines}
             for fact in new_facts:
                 if fact.casefold() not in known:
