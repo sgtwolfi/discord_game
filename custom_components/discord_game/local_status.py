@@ -14,7 +14,12 @@ _PERSON_ACTIVITY = re.compile(
 _TIME_QUERY = re.compile(r"\b(?:current time|what time is it|what's the time|whats the time|time right now)\b", re.IGNORECASE)
 _WEATHER_QUERY = re.compile(r"\b(?:weather|forecast|temperature outside|how warm is it outside)\b", re.IGNORECASE)
 _LIGHT_QUERY = re.compile(r"\b(?:light|lights|lamp|lamps)\b", re.IGNORECASE)
-_STATUS_QUERY = re.compile(r"\b(?:what(?:'s| is) (?:your|ghost(?:'s)?|the assistant's) status|ghost status|status report|what are you up to|what are you doing|how are you getting on)\b", re.IGNORECASE)
+_STATUS_QUERY = re.compile(
+    r"\b(?:what(?:'s| is)\s+(?:your|ghost(?:'s)?|the assistant's)\s+(?:current\s+)?status|"
+    r"what(?:'s| is)\s+the\s+(?:current\s+)?status\s+of\s+(?:ghost|the assistant)|"
+    r"ghost status|status report|what are you up to|what are you doing|how are you getting on)\b",
+    re.IGNORECASE,
+)
 
 
 def _name(state) -> str:
