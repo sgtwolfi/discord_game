@@ -1471,8 +1471,12 @@ class DiscordAssistant:
                     )
                     return
 
-            # The relevance gate is authoritative for group participation.
-            group_action_is_addressed = item["is_dm"] or group_gate_passed
+            # Relevance inference can authorise ordinary conversation only.
+            # Device actions and live-state queries still require an explicit
+            # mention or reply, even when mention-only chat mode is disabled.
+            group_action_is_addressed = item["is_dm"] or any(
+                entry.get("directly_addressed") for entry in batch
+            )
             kind = request_kind(request_text)
             local_status_answer = (
                 answer_local_status(self.hass, request_text, dt_util.now())
