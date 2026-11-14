@@ -39,6 +39,37 @@ DiscordAssistant = assistant_module.DiscordAssistant
 speech = assistant_module.speech
 
 
+def test_legacy_sixty_message_threshold_migrates_to_eight_raw_messages(monkeypatch):
+    class FakeStore:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(assistant_module, "Store", FakeStore)
+    assistant = DiscordAssistant(
+        SimpleNamespace(), "entry", {"history_limit": 60}, None
+    )
+
+    assert assistant.history_limit == 8
+    assert assistant.limit == 12
+
+
+def test_custom_legacy_history_limit_is_preserved():
+    class FakeStore:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    original_store = assistant_module.Store
+    assistant_module.Store = FakeStore
+    try:
+        assistant = DiscordAssistant(
+            SimpleNamespace(), "entry", {"history_limit": 35}, None
+        )
+    finally:
+        assistant_module.Store = original_store
+
+    assert assistant.history_limit == 35
+
+
 def test_speech_extracts_home_assistant_plain_response():
     assert speech({"response": {"speech": {"plain": {"speech": "Hello"}}}}) == "Hello"
 
