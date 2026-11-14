@@ -45,10 +45,10 @@ def test_speech_accepts_text_response():
 def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 4
-    assistant.budget = 40
+    assistant.budget = 1000
     batch = [{
         "sender_name": "Max",
-        "content": "x" * 200 + "PLEASE KEEP THIS END",
+        "content": "x" * 2000 + "PLEASE KEEP THIS END",
         "is_dm": True,
     }]
     prompt = assistant._prompt(batch, [], "private contact summary")
