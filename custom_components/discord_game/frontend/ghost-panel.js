@@ -551,6 +551,8 @@ class DiscordGameGhostPanel extends HTMLElement {
     panel.append(this._el("h2", "Private friend memories"));
     panel.append(this._el("p", "GHOST consolidates each approved person's own messages after the configured idle period. Group channels have no shared long-term memory; approved friends' own contributions can inform their individual private memories.", "muted"));
     const contacts = d.contacts || [];
+    const pendingTotal = Object.values(d.friend_memory || {}).reduce((total, item) => total + (item.pending_messages || 0), 0);
+    panel.append(this._el("p", "Pending messages awaiting consolidation: " + pendingTotal + (d.last_memory_consolidation ? " · Last consolidation: " + new Date(d.last_memory_consolidation).toLocaleString() : " · No consolidation has completed yet."), "help"));
     if (!contacts.length) panel.append(this._el("p", "No approved friends yet. Add people in Configuration.", "muted"));
     for (const contact of contacts) {
       const mem = (d.friend_memory || {})[contact.user_id] || {};
@@ -592,6 +594,17 @@ class DiscordGameGhostPanel extends HTMLElement {
     }, true));
     controls.append(buttons);
     shell.append(controls);
+
+    const relevance = this._el("section", null, "panel");
+    relevance.append(this._el("h2", "Group-chat relevance filter"));
+    relevance.append(this._el("p", "Every monitored group message batch is checked by the conversation AI before GHOST is allowed to generate a reply. If the decision is invalid or the model is unavailable, GHOST stays quiet.", "muted"));
+    relevance.append(this._el("p", "Messages deliberately ignored: " + (d.suppressed_group_messages || 0), "help"));
+    if (d.last_group_decision) {
+      relevance.append(this._el("p", "Last decision: " + d.last_group_decision.decision + " · " + (d.last_group_decision.reason || "") + " · " + (d.last_group_decision.timestamp || ""), "muted"));
+    } else {
+      relevance.append(this._el("p", "No group relevance decisions recorded yet.", "muted"));
+    }
+    shell.append(relevance);
 
     const queue = this._el("section", null, "panel");
     queue.append(this._el("h2", "Waiting messages"));
