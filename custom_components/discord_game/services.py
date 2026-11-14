@@ -41,7 +41,7 @@ RESET_PROMPT = vol.Schema({
 SETTINGS = vol.Schema({
     vol.Required("assistant_mode", default="local"): vol.In({"api", "local"}),
     vol.Required("local_reminder_script", default="script.set_timer_alarm_or_reminder"): vol.All(
-        cv.string, vol.Match(r"^script\\.[a-z0-9_]+$")
+        cv.string, vol.Match(r"^script[.][a-z0-9_]+$")
     ),
     vol.Required("fallback_after_failures"): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
     vol.Required("queue_debounce_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
