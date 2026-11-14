@@ -235,7 +235,7 @@ def test_enqueue_deduplicates_message_ids_already_queued_or_processed():
     assistant.wake = asyncio.Event()
     assistant.contact_names = {}
     assistant.conversation_meta = {}
-    assistant.conversation_logs = defaultdict(list)
+    assistant.conversation_logs = {"dm:456": []}
     assistant.conversation_history_limit = 100
     assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
     assistant.sensor = SimpleNamespace(hass=None)
