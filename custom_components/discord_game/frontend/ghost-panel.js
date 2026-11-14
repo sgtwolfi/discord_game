@@ -181,6 +181,13 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (item.assistant) card.append(this._node("p", "GHOST: " + item.assistant));
       if (item.error) card.append(this._node("p", "Error: " + item.error, "error"));
       if (item.action_result) card.append(this._node("pre", JSON.stringify(item.action_result, null, 2)));
+      if ((item.user_messages || []).length && item.timestamp && item.conversation) {
+        card.append(this._button("Replay these messages", () => {
+          if (confirm("Reprocess the original user messages in this conversation?")) {
+            this._service("replay_transcript", { timestamp: item.timestamp, conversation: item.conversation });
+          }
+        }, true));
+      }
       if (item.context_snapshot) {
         const details = document.createElement("details");
         details.append(this._node("summary", "View model context"));
