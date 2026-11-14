@@ -198,13 +198,14 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 self.options_data[CONF_VOICE_CHANNELS] = list(self._get_current(CONF_VOICE_CHANNELS, []))
                 return self.async_create_entry(title="", data=self.options_data)
 
-            try:
-                self.members, self.user_names, self.channels, self.channel_names, \
-                    self.voice_channels, self.voice_channel_names = \
-                    await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
-            except Exception as err:  # noqa: BLE001 - surface Discord/API failures in the form
-                _LOGGER.exception("Unable to validate updated Discord token or load server choices")
-                errors["base"] = "auth" if isinstance(err, ValueError) else "discord_api"
+            if not errors:
+                try:
+                    self.members, self.user_names, self.channels, self.channel_names, \
+                        self.voice_channels, self.voice_channel_names = \
+                        await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
+                except Exception as err:  # noqa: BLE001 - surface Discord/API failures in the form
+                    _LOGGER.exception("Unable to validate updated Discord token or load server choices")
+                    errors["base"] = "auth" if isinstance(err, ValueError) else "discord_api"
 
             if not errors:
                 self.options_data[CONF_MEMBERS] = []
