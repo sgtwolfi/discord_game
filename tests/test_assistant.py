@@ -365,3 +365,34 @@ def test_prompt_changes_instructions_for_operations_and_advanced_roles():
     assert "operations agent" in operations
     assert "advanced reasoning agent" in advanced
     assert "ordinary conversation" in conversation
+
+
+
+def test_admin_can_correct_contact_memory():
+    from types import SimpleNamespace
+    import asyncio
+
+    saved = []
+    class FakeStore:
+        async def async_save(self, data):
+            saved.append(data)
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {"123": {"messages": [{"content": "hello"}], "summary": "old summary"}}
+    assistant.store = FakeStore()
+    assistant.sensor = SimpleNamespace(hass=None)
+
+    asyncio.run(assistant.set_friend_memory("123", "Corrected fact: Max prefers short replies."))
+
+    assert assistant.friends["123"]["summary"] == "Corrected fact: Max prefers short replies."
+    assert saved[0]["friends"]["123"]["summary"] == "Corrected fact: Max prefers short replies."
+
+
+def test_admin_memory_correction_has_a_size_limit():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {}
+    with pytest.raises(ValueError, match="4000 characters"):
+        asyncio.run(assistant.set_friend_memory("123", "x" * 4001))
