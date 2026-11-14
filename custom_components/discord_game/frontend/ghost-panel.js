@@ -182,6 +182,9 @@ class DiscordGameGhostPanel extends HTMLElement {
     contextValue.rows = 4;
     contextValue.dataset.preserve = "context-value";
     contextValue.value = a.context_notes?.[contextKey.value] || "";
+    contextKey.addEventListener("change", () => {
+      contextValue.value = a.context_notes?.[contextKey.value] || "";
+    });
     contextCard.append(contextValue);
     contextCard.append(this._button("Inject or update context", () => {
       const key = contextKey.value.trim();
