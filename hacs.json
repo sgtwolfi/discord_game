@@ -4,6 +4,6 @@
   "domains": [
     "sensor"
   ],
-  "iot_class": "cloud_poll",
+  "iot_class": "cloud_push",
   "homeassistant": "2024.8.0"
 }
