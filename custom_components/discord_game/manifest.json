@@ -4,7 +4,7 @@
   "codeowners": [
     "@sgtwolfi"
   ],
-  "version": "7.0.6",
+  "version": "7.0.7",
   "documentation": "https://github.com/sgtwolfi/discord_game",
   "config_flow": true,
   "iot_class": "cloud_push",
