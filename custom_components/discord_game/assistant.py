@@ -458,7 +458,7 @@ class DiscordAssistant:
             )
 
         previous = [
-            f'{message.get("role", "user")}: {message.get("content", "")}'
+            f'{message.get("sender") or message.get("role", "user")}: {message.get("content", "")}'
             for message in history[-self.limit:]
         ]
         current = [f'{message["sender_name"]}: {message["content"]}' for message in batch]
@@ -561,7 +561,14 @@ class DiscordAssistant:
                     raise RuntimeError("Action not confirmed: " + verification_error)
             await self._send(item["channel"],answer)
             now=datetime.now(UTC).isoformat()
-            for msg in batch:history.append({"role":"user","content":msg["content"],"sender_id":msg["sender_id"],"timestamp":msg["timestamp"]})
+            for msg in batch:
+                history.append({
+                    "role": "user",
+                    "sender": msg["sender_name"],
+                    "content": msg["content"],
+                    "sender_id": msg["sender_id"],
+                    "timestamp": msg["timestamp"],
+                })
             history.append({"role":"assistant","content":answer,"timestamp":now,"model":model})
             if item["is_dm"]:
                 await self._compress(item["sender_id"])
