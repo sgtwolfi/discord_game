@@ -690,21 +690,31 @@ class DiscordAssistant:
                     })
         if self.enabled:
             for user_id in self.approved_users:
+                # Prefer the avatar already maintained by Discord Game's member
+                # sensor; the bot REST profile is a fallback for contacts that
+                # are not part of the tracked-member sensor list.
+                for state in self.hass.states.async_all():
+                    if str(state.attributes.get("userid", "")) == user_id:
+                        avatar_url = state.attributes.get("avatar_url")
+                        if avatar_url:
+                            self.contact_avatars[user_id] = str(avatar_url)
+                        sensor_name = (
+                            state.attributes.get("display_name")
+                            or state.attributes.get("user_name")
+                            or state.attributes.get("friendly_name")
+                        )
+                        if sensor_name:
+                            self.contact_names.setdefault(user_id, str(sensor_name))
+                        break
                 try:
                     user = self.bot.get_user(int(user_id)) or await self.bot.fetch_user(int(user_id))
                     self.contact_names.setdefault(user_id, getattr(user, "global_name", None) or user.name)
-                    avatar = getattr(user, "display_avatar", None)
-                    if avatar is not None:
-                        self.contact_avatars[user_id] = str(avatar.with_size(128))
+                    if user_id not in self.contact_avatars:
+                        avatar = getattr(user, "display_avatar", None)
+                        if avatar is not None:
+                            self.contact_avatars[user_id] = str(avatar.with_size(128))
                 except Exception:  # noqa: BLE001 - Discord profile lookup is best-effort
                     self.contact_names.setdefault(user_id, user_id)
-                    # Discord Game's own user sensors are a fallback source.
-                    for state in self.hass.states.async_all():
-                        if str(state.attributes.get("userid", "")) == user_id:
-                            avatar_url = state.attributes.get("avatar_url")
-                            if avatar_url:
-                                self.contact_avatars[user_id] = str(avatar_url)
-                            break
             for channel_id in self.group_channels:
                 try:
                     channel = self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id))
