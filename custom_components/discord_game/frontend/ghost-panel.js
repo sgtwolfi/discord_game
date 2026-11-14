@@ -58,6 +58,30 @@ class DiscordGameGhostPanel extends HTMLElement {
   _render() {
     if (!this._hass) return;
     const root = this.shadowRoot;
+    const preserved = new Map();
+    for (const field of root.querySelectorAll("[data-preserve]")) {
+      preserved.set(field.dataset.preserve, field.value);
+    }
+    const focusedField = root.activeElement?.dataset?.preserve;
+    const selectionStart = root.activeElement?.selectionStart;
+    const selectionEnd = root.activeElement?.selectionEnd;
+    const restoreFormState = () => {
+      const fields = [...root.querySelectorAll("[data-preserve]")];
+      for (const field of fields) {
+        if (preserved.has(field.dataset.preserve)) {
+          field.value = preserved.get(field.dataset.preserve);
+        }
+      }
+      if (focusedField) {
+        const field = fields.find((item) => item.dataset.preserve === focusedField);
+        if (field) {
+          field.focus();
+          if (typeof field.setSelectionRange === "function" && selectionStart !== undefined) {
+            field.setSelectionRange(selectionStart, selectionEnd);
+          }
+        }
+      }
+    };
     root.replaceChildren();
 
     const style = this._node("style");
@@ -131,6 +155,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       const missing = this._section("Assistant sensor not found", "The integration may still be starting, or the entity may have been renamed. Expected entity: sensor.discord_game_assistant.");
       page.append(missing);
       root.append(page);
+      restoreFormState();
       return;
     }
 
@@ -153,6 +178,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       card.append(this._node("p", item.timestamp, "muted"));
       const edit = this._node("textarea");
       edit.value = item.message || "";
+      edit.dataset.preserve = "queue-" + item.id;
       edit.rows = 3;
       card.append(edit);
       const queueActions = this._node("div", undefined, "actions");
@@ -220,6 +246,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       card.append(this._node("p", (memory.messages || 0) + " retained messages", "muted"));
       const correctedMemory = this._node("textarea");
       correctedMemory.rows = 5;
+      correctedMemory.dataset.preserve = "memory-" + userId;
       correctedMemory.value = memory.summary || "";
       card.append(this._node("label", "Editable durable memory"));
       card.append(correctedMemory);
@@ -240,16 +267,16 @@ class DiscordGameGhostPanel extends HTMLElement {
     const fields = this._node("div", undefined, "formgrid");
     const userWrap = this._node("div");
     userWrap.append(this._node("label", "Discord user ID"));
-    const userInput = this._node("input"); userInput.name = "user_id"; userInput.inputMode = "numeric";
+    const userInput = this._node("input"); userInput.name = "user_id"; userInput.dataset.preserve = "manual-user"; userInput.inputMode = "numeric";
     userWrap.append(userInput);
     const channelWrap = this._node("div");
     channelWrap.append(this._node("label", "Discord channel ID"));
-    const channelInput = this._node("input"); channelInput.name = "channel_id"; channelInput.inputMode = "numeric";
+    const channelInput = this._node("input"); channelInput.name = "channel_id"; channelInput.dataset.preserve = "manual-channel"; channelInput.inputMode = "numeric";
     channelWrap.append(channelInput);
     fields.append(userWrap, channelWrap);
     form.append(fields);
     form.append(this._node("label", "Message"));
-    const message = this._node("textarea"); message.name = "message"; message.required = true;
+    const message = this._node("textarea"); message.name = "message"; message.dataset.preserve = "manual-message"; message.required = true;
     form.append(message);
     const send = this._node("button", "Send as GHOST"); send.type = "submit"; send.disabled = this._busy;
     form.append(send);
@@ -263,6 +290,7 @@ class DiscordGameGhostPanel extends HTMLElement {
         this._render();
         return;
       }
+      message.value = "";
       await this._service("send_message", { message: text, ...(userId ? { user_id: userId } : { channel_id: channelId }) });
     });
     manual.append(form);
@@ -275,6 +303,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     }
 
     root.append(page);
+    restoreFormState();
   }
 }
 
