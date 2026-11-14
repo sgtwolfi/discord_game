@@ -15,7 +15,8 @@ MAX_PENDING_MESSAGES = 200
 ACTION=re.compile(
     r"\b(remind me|reminder|timer|alarm|turn on|turn off|switch on|switch off|"
     r"activate|deactivate|lock|unlock|open|close|set|adjust|increase|decrease|"
-    r"dim|brighten|play|pause|stop|volume|notify|send (?:a )?message|"
+    r"dim|brighten|cooler|warmer|schedule|cancel|delete|add|remove|toggle|"
+    r"enable|disable|play|pause|stop|start|volume|notify|send (?:a )?message|"
     r"run (?:the )?.{0,60}\b(?:script|automation|scene))\b",
     re.IGNORECASE,
 )
