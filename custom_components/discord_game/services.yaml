@@ -1,0 +1,21 @@
+send_message:
+  name: Send message as GHOST
+  fields:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    user_id:
+      selector:
+        text:
+    channel_id:
+      selector:
+        text:
+clear_friend_memory:
+  name: Clear friend memory
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
