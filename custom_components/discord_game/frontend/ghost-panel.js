@@ -11,6 +11,10 @@ class DiscordGameGhostPanel extends HTMLElement {
     this._diagnosticsLoading = false;
     this._chatLoading = false;
     this._filter = "";
+    this._capabilities = null;
+    this._capabilitiesLoading = false;
+    this._capabilitiesFilter = "";
+    this._capabilityDomain = "all";
   }
 
   set hass(hass) {
@@ -193,7 +197,14 @@ class DiscordGameGhostPanel extends HTMLElement {
       label{display:block;color:var(--secondary-text-color);font-size:12px;margin:10px 0 5px}
       .help{font-size:11px;color:var(--secondary-text-color);margin-top:4px}
       .field{min-width:0}
-      .prompt{min-height:130px}
+      .prompt{min-height:150px;width:100%}
+      .prompthead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+      .prompthead label{margin:0}
+      .defaultbadge{display:inline-block;border:1px solid var(--divider-color);border-radius:20px;padding:3px 8px;font-size:10px;color:var(--secondary-text-color);letter-spacing:.04em}
+      .caprow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--divider-color)}
+      .caprow:last-child{border:0}
+      .caprow label{display:flex;align-items:center;gap:7px;white-space:nowrap}
+      .caprow input[type=checkbox]{width:18px;height:18px;accent-color:var(--primary-color)}
       .contactrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--divider-color)}
       .contactrow:last-child{border-bottom:0}
       .notice{padding:10px 13px;background:var(--secondary-background-color);border-radius:10px;font-size:12px;margin:0 0 12px}
@@ -235,7 +246,11 @@ class DiscordGameGhostPanel extends HTMLElement {
     const views = [["chats","Messages"],["memories","Memories"],["settings","Configuration"],["activity","Activity"]];
     for (const item of views) {
       const b = this._el("button", item[1], this._view === item[0] ? "active" : "");
-      b.addEventListener("click", () => { this._view = item[0]; this._render(); });
+      b.addEventListener("click", () => {
+        this._view = item[0];
+        this._render();
+        if (item[0] === "settings" && !this._capabilities && !this._capabilitiesLoading) this._loadCapabilities();
+      });
       nav.append(b);
     }
     shell.append(nav);
@@ -384,8 +399,42 @@ class DiscordGameGhostPanel extends HTMLElement {
     if (d.last_error) shell.append(this._el("p", "Latest assistant error: " + d.last_error, "muted error"));
   }
 
+  async _loadCapabilities() {
+    if (!this._hass || this._capabilitiesLoading) return;
+    this._capabilitiesLoading = true;
+    try {
+      const raw = await this._hass.connection.sendMessagePromise({ type: "discord_game/assistant/capabilities" });
+      this._capabilities = raw && raw.result ? raw.result : raw;
+    } catch (err) {
+      this._capabilities = { available: false, error: err && err.message ? err.message : String(err), entities: [] };
+    } finally {
+      this._capabilitiesLoading = false;
+      if (this._view === "settings") this._render();
+    }
+  }
+
+  async _setCapability(entity, exposed) {
+    if (!this._hass || this._busy) return;
+    this._busy = true;
+    this._notice = (exposed ? "Exposing " : "Removing access to ") + entity.name + "…";
+    this._render();
+    try {
+      await this._hass.connection.sendMessagePromise({ type: "discord_game/assistant/capability/set", entity_id: entity.entity_id, exposed });
+      entity.exposed = exposed;
+      this._notice = entity.name + (exposed ? " is now available to Assist." : " is no longer exposed to Assist.");
+      this._capabilities.exposed_count = (this._capabilities.entities || []).filter(x => x.exposed).length;
+    } catch (err) {
+      this._notice = "Could not change access: " + (err && err.message ? err.message : String(err));
+    } finally {
+      this._busy = false;
+      this._render();
+    }
+  }
+
   _renderSettings(shell, d) {
     const settings = d.settings || {};
+    const defaults = settings.default_prompts || {};
+    if (!this._capabilities && !this._capabilitiesLoading) this._loadCapabilities();
     const agentsPanel = this._el("section", null, "panel");
     agentsPanel.append(this._el("h2", "Assigned conversation agents"));
     const agentGrid = this._el("div", null, "fieldgrid");
@@ -396,7 +445,8 @@ class DiscordGameGhostPanel extends HTMLElement {
       agentGrid.append(cell);
     }
     agentsPanel.append(agentGrid);
-    agentsPanel.append(this._el("p", "Change these assignments in Settings → Devices & services → Discord Game → Configure. The operations agent needs your Home Assistant tools. The memory agent is required for idle memory consolidation; without it, pending memories are retained but not summarised.", "help"));
+    agentsPanel.append(this._el("p", "Choose the four agents in Settings → Devices & services → Discord Game → Configure. Conversation handles chat and group relevance. Operations performs Home Assistant actions. Fallback handles difficult requests and failed operations. Memory consolidates private friend memories.", "help"));
+    agentsPanel.append(this._el("p", "Selecting an operations agent does not automatically give it access to devices or scripts. Use the capability manager below to expose the exact Home Assistant entities it needs to Assist.", "help"));
     shell.append(agentsPanel);
 
     const panel = this._el("section", null, "panel");
@@ -413,7 +463,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (help) wrap.append(this._el("p", help, "help"));
       grid.append(wrap);
     };
-    number("fallback_after_failures", "Attempts before fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "Number of local model attempts before trying the fallback agent.");
+    number("fallback_after_failures", "Retries after a model call error", settings.fallback_after_failures ?? 2, 1, 5, 1, "This retries a failed model call, not an action. GHOST never blindly repeats an action that may have partially succeeded. Activity records every agent actually attempted.");
     number("queue_debounce_seconds", "Message grouping delay (seconds)", settings.queue_debounce_seconds ?? 2.5, .5, 15, .5, "Briefly groups rapid messages from the same conversation.");
     number("max_context_messages", "Active conversation context messages", settings.max_context_messages ?? 12, 4, 80, 1, "Recent messages from this conversation supplied to the response model.");
     number("memory_idle_seconds", "Idle time before memory consolidation (seconds)", settings.memory_idle_seconds ?? 300, 30, 3600, 30, "GHOST waits this long after the last incoming message and an empty queue before consolidating memories.");
@@ -442,10 +492,18 @@ class DiscordGameGhostPanel extends HTMLElement {
       ["memory_system_prompt","Memory manager",4000]
     ];
     for (const p of prompts) {
-      form.append(this._el("label", p[1] + " instructions"));
-      const area = this._el("textarea"); area.className = "prompt"; area.rows = 5; area.maxLength = p[2];
-      area.name = p[0]; area.value = settings[p[0]] || ""; area.dataset.keep = "cfg-" + p[0];
-      form.append(area);
+      const row = this._el("div", null, "prompthead");
+      row.append(this._el("label", p[1] + " instructions"), this._el("span", settings[p[0]] ? "CUSTOM" : "DEFAULT", "defaultbadge"));
+      const area = this._el("textarea"); area.className = "prompt"; area.rows = 6; area.maxLength = p[2];
+      area.name = p[0]; area.value = settings[p[0]] || defaults[p[0].replace("_system_prompt", "")] || ""; area.dataset.keep = "cfg-" + p[0];
+      const reset = this._button("Reset to Default", async () => {
+        if (!confirm("Discard your custom " + p[1].toLowerCase() + " instructions and restore GHOST's built-in default?")) return;
+        await this._service("reset_prompt", { prompt_key: p[0] }, true);
+      }, true);
+      reset.disabled = this._busy || !settings[p[0]];
+      row.append(reset);
+      form.append(row, area);
+      form.append(this._el("p", settings[p[0]] ? "Custom instructions are active. Reset restores the built-in northern British default." : "Built-in default is active. Edit this text and save to create your own override.", "help"));
     }
     form.append(this._button("Save assistant settings", async () => {
       const data = {};
@@ -456,6 +514,60 @@ class DiscordGameGhostPanel extends HTMLElement {
     }));
     panel.append(form);
     shell.append(panel);
+
+    const capabilitiesPanel = this._el("section", null, "panel");
+    const capHead = this._el("div", null, "panelhead");
+    const capTitle = this._el("div");
+    capTitle.append(this._el("h2", "Home Assistant capabilities"));
+    capTitle.append(this._el("p", "Expose entities and scripts so the selected Home Assistant conversation agent can use them.", "muted"));
+    capHead.append(capTitle, this._button("Refresh", () => { this._capabilities = null; this._loadCapabilities(); }, true));
+    capabilitiesPanel.append(capHead);
+    capabilitiesPanel.append(this._el("p", "This controls Home Assistant's Assist exposure list. It does not grant access to arbitrary services. Scripts are the easiest way to give GHOST a named, reusable function such as setting a reminder.", "help"));
+    capabilitiesPanel.append(this._el("p", "One more required step for Ollama: open Settings → Devices & services → Ollama → Configure and enable the Device control AI tool. This exposure list controls which entities that tool can access. The selected model must support tool calling; very small models can struggle even when everything is configured correctly.", "help"));
+    if (this._capabilitiesLoading) {
+      capabilitiesPanel.append(this._el("p", "Loading your Home Assistant entities…", "muted"));
+    } else if (!this._capabilities || !this._capabilities.available) {
+      capabilitiesPanel.append(this._el("p", (this._capabilities && this._capabilities.error) || "Capability list unavailable. Refresh to try again.", "error"));
+    } else {
+      const entities = this._capabilities.entities || [];
+      const scripts = entities.filter(x => x.domain === "script");
+      capabilitiesPanel.append(this._el("p", entities.filter(x => x.exposed).length + " entities exposed · " + scripts.length + " scripts found · " + scripts.filter(x => x.exposed).length + " scripts exposed", "help"));
+      const search = this._el("input", null, "search");
+      search.placeholder = "Search entities and scripts by name or ID…";
+      search.value = this._capabilitiesFilter; search.dataset.keep = "capability-search";
+      search.addEventListener("input", () => { this._capabilitiesFilter = search.value; this._render(); });
+      capabilitiesPanel.append(search);
+      const filter = this._el("select", null, "search");
+      for (const [value, label] of [["all","All capabilities"],["script","Scripts / functions"],["light","Lights"],["switch","Switches"],["other","Other entities"]]) {
+        const option = this._el("option", label); option.value = value; filter.append(option);
+      }
+      filter.value = this._capabilityDomain; filter.dataset.keep = "capability-domain";
+      filter.addEventListener("change", () => { this._capabilityDomain = filter.value; this._render(); });
+      capabilitiesPanel.append(filter);
+      const query = this._capabilitiesFilter.toLowerCase();
+      const filtered = entities.filter(entity => {
+        const matchesQuery = !query || (entity.name + " " + entity.entity_id).toLowerCase().includes(query);
+        const matchesDomain = this._capabilityDomain === "all" || entity.domain === this._capabilityDomain || (this._capabilityDomain === "other" && !["script","light","switch"].includes(entity.domain));
+        return matchesQuery && matchesDomain;
+      }).slice(0, 250);
+      if (!filtered.length) capabilitiesPanel.append(this._el("p", "No matching entities. Create a Home Assistant script first if you want to add a new function.", "muted"));
+      for (const entity of filtered) {
+        const row = this._el("div", null, "caprow");
+        const details = this._el("div");
+        details.append(this._el("strong", entity.name));
+        details.append(this._el("p", entity.entity_id + " · " + entity.state, "muted"));
+        if (entity.domain === "script") details.append(this._el("span", "SCRIPT / FUNCTION", "defaultbadge"));
+        const control = this._el("label", entity.exposed ? "Available to Assist" : "Not exposed");
+        const toggle = this._el("input"); toggle.type = "checkbox"; toggle.checked = !!entity.exposed; toggle.disabled = this._busy;
+        toggle.addEventListener("change", () => this._setCapability(entity, toggle.checked));
+        control.prepend(toggle);
+        row.append(details, control);
+        capabilitiesPanel.append(row);
+      }
+      if (entities.length > filtered.length) capabilitiesPanel.append(this._el("p", "Showing " + filtered.length + " matching entities. Narrow the search to find more.", "muted"));
+    }
+    capabilitiesPanel.append(this._el("p", "To add a new function: create a Script in Settings → Automations & Scenes → Scripts, give it a clear name, save it, then find it here and switch on Available to Assist. To remove a capability, switch it off. You can expose lights, switches and scripts separately.", "help"));
+    shell.append(capabilitiesPanel);
 
     const contactsPanel = this._el("section", null, "panel");
     contactsPanel.append(this._el("h2", "GHOST friend access"));
@@ -633,6 +745,8 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (item.assistant) card.append(this._el("p", "GHOST: " + item.assistant));
       if (item.suppressed) card.append(this._el("p", "GHOST stayed quiet: " + (item.suppression_reason || "Not relevant enough to interrupt."), "muted"));
       if (item.error) card.append(this._el("p", item.error, "error"));
+      if (item.models_attempted && item.models_attempted.length) card.append(this._el("p", "Agents attempted: " + item.models_attempted.join(" → "), "muted"));
+      if (item.fallback_used) card.append(this._el("p", "Fallback agent was used.", "muted"));
       if (item.action_result) {
         const details = document.createElement("details");
         details.append(this._el("summary", "View Home Assistant action result"));

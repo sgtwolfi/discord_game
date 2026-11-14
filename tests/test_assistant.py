@@ -98,6 +98,41 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assert "Do not use phonetic dialect" in prompt
 
 
+def test_default_agent_prompts_are_northern_british_and_role_specific():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.limit = 8
+    assistant.budget = 10000
+    assistant.config = {}
+    batch = [{"sender_name": "Max", "content": "Set the lights to full", "is_dm": True}]
+
+    conversation = assistant._prompt(batch, [], "", role="conversation")
+    operations = assistant._prompt(batch, [], "", role="operations")
+    fallback = assistant._prompt(batch, [], "", role="advanced")
+
+    assert "heavy dry sarcasm" in conversation
+    assert "northern British" in conversation
+    assert "must never impersonate them" in conversation
+    assert "100 percent" in operations
+    assert "available fields" in operations
+    assert "do not retry an action" in operations.lower()
+    assert "Break complex work into explicit steps" in fallback
+
+
+def test_custom_agent_prompt_overrides_builtin_default():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.limit = 8
+    assistant.budget = 10000
+    assistant.config = {"operations_system_prompt": "My custom operations rules"}
+    batch = [{"sender_name": "Max", "content": "Set the lights to full", "is_dm": True}]
+
+    prompt = assistant._prompt(batch, [], "", role="operations")
+
+    assert "My custom operations rules" in prompt
+    assert "Built-in default instructions for this role" not in prompt
+
+
 def test_prompt_uses_only_supplied_contact_history():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
