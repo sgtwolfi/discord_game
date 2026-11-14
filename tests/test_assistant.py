@@ -1584,46 +1584,38 @@ def test_local_reminder_parser_handles_relative_duration():
 
 
 def test_local_reminder_parser_handles_duration_before_task():
-    from datetime import datetime, timezone
-    from custom_components.discord_game.local_tasks import parse_local_reminder
 
     parsed = parse_local_reminder(
         "Remind me in two hours to call Max",
-        datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert parsed == {"name": "call Max", "duration_seconds": 7200}
 
 
 def test_local_reminder_parser_handles_explicit_date_and_clock_time():
-    from datetime import datetime, timezone
-    from custom_components.discord_game.local_tasks import parse_local_reminder
 
     parsed = parse_local_reminder(
         "Remind me to take the bins out tomorrow at 7pm",
-        datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert parsed == {"name": "take the bins out", "alarm_time": "19:00", "date": "2026-11-15"}
 
 
 def test_local_reminder_parser_asks_instead_of_guessing_ambiguous_time():
-    from datetime import datetime, timezone
-    from custom_components.discord_game.local_tasks import parse_local_reminder
 
     parsed = parse_local_reminder(
         "Remind me to call Max at 7",
-        datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert parsed["needs_clarification"] is True
     assert "AM or PM" in parsed["clarification"]
 
 
 def test_local_reminder_parser_requires_a_time():
-    from datetime import datetime, timezone
-    from custom_components.discord_game.local_tasks import parse_local_reminder
 
     parsed = parse_local_reminder(
         "Remind me to call Max",
-        datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert parsed["needs_clarification"] is True
     assert "When should I remind you" in parsed["clarification"]
@@ -1638,20 +1630,17 @@ def test_local_status_reader_uses_discord_presence_sensor():
     hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
     answer = answer_local_status(
         hass, "What's Harvey doing?",
-        datetime(2026, 11, 14, 9, 0, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
     assert answer == "Harvey is playing Factorio."
 
 
 def test_local_status_reader_reports_missing_weather_without_inventing_it():
-    from datetime import datetime, timezone
-    from types import SimpleNamespace
-    from custom_components.discord_game.local_status import answer_local_status
 
     hass = SimpleNamespace(states=SimpleNamespace(async_all=list))
     answer = answer_local_status(
         hass, "What's the weather and current time?",
-        datetime(2026, 11, 14, 9, 5, tzinfo=timezone.utc),
+        datetime(2026, 11, 14, 9, 5, tzinfo=UTC),
     )
     assert "Saturday 09:05" in answer
     assert "can't see a Home Assistant weather entity" in answer
