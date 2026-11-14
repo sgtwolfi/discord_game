@@ -978,6 +978,7 @@ class DiscordAssistant:
         request_text = " ".join(x["content"] for x in batch)
         model = "unconfigured"
         role = "conversation"
+        kind = "conversation"
         answer = ""
         action_result = None
         is_action = False
@@ -1108,6 +1109,9 @@ class DiscordAssistant:
                 "messages": [x["content"] for x in batch],
                 "model": model,
                 "role": role,
+                "request_kind": kind,
+                "batch_size": len(batch),
+                "models_attempted": models_attempted,
                 "stage": "Generating a response",
                 "started_at": datetime.now(UTC).isoformat(),
                 "context_snapshot": prompt,
@@ -1119,6 +1123,10 @@ class DiscordAssistant:
             for attempt in range(attempts):
                 try:
                     models_attempted.append(agent)
+                    if self.active_request:
+                        self.active_request["stage"] = f"Primary model attempt {attempt + 1}/{attempts}"
+                        self.active_request["models_attempted"] = list(models_attempted)
+                        self._refresh_sensor()
                     answer = await self._call(agent, prompt)
                     break
                 except Exception as err:  # noqa: BLE001
@@ -1141,6 +1149,7 @@ class DiscordAssistant:
                     self.active_request["role"] = role
                     self.active_request["stage"] = "Recovering with fallback agent"
                     self.active_request["context_snapshot"] = prompt
+                    self.active_request["models_attempted"] = list(models_attempted)
                     self._refresh_sensor()
                 models_attempted.append(model)
                 answer = await self._call(model, prompt)
@@ -1192,6 +1201,7 @@ class DiscordAssistant:
                 "assistant": answer,
                 "model": model,
                 "role": role,
+                "request_kind": kind,
                 "estimated_input_tokens": len(prompt) // 4,
                 "estimated_output_tokens": len(answer) // 4,
                 "context_snapshot": prompt,
@@ -1251,6 +1261,7 @@ class DiscordAssistant:
                 "assistant": None,
                 "error": self.error,
                 "model": model,
+                "request_kind": kind,
                 "estimated_input_tokens": len(prompt) // 4,
                 "context_snapshot": prompt,
                 "action_result": action_result,
