@@ -1,10 +1,9 @@
 """Manual Home Assistant controls for the Discord assistant."""
 
+import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
-
-import voluptuous as vol
 
 from .const import DOMAIN
 
