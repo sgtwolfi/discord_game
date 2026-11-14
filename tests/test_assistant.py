@@ -1889,7 +1889,7 @@ def test_memory_deduplication_is_case_and_punctuation_insensitive():
         "- preference: likes sci-fi films!",
         "Work: at a warehouse",
     ])
-    assert result == ["- Preference: likes sci-fi films", "- Work: at a warehouse"]
+    assert result == ["Preference: likes sci-fi films", "Work: at a warehouse"]
 
 
 def test_memory_replaceable_keys_supersede_work_and_same_favourite_category():
