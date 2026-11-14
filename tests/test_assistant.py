@@ -1594,6 +1594,14 @@ def test_local_reminder_parser_handles_duration_before_task():
     assert parsed == {"name": "call Max", "duration_seconds": 7200}
 
 
+def test_local_reminder_parser_handles_spoken_tens():
+    parsed = parse_local_reminder(
+        "Remind me to call Max in twenty minutes",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed == {"name": "call Max", "duration_seconds": 1200}
+
+
 def test_local_reminder_parser_handles_explicit_date_and_clock_time():
 
     parsed = parse_local_reminder(
