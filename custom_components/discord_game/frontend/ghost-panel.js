@@ -463,7 +463,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (help) wrap.append(this._el("p", help, "help"));
       grid.append(wrap);
     };
-    number("fallback_after_failures", "Attempts before fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "Number of local model attempts before trying the fallback agent.");
+    number("fallback_after_failures", "Attempts on the selected agent before fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "GHOST records each attempted agent in Activity so you can see whether fallback actually ran. Actions that may have partially succeeded are never blindly repeated.");
     number("queue_debounce_seconds", "Message grouping delay (seconds)", settings.queue_debounce_seconds ?? 2.5, .5, 15, .5, "Briefly groups rapid messages from the same conversation.");
     number("max_context_messages", "Active conversation context messages", settings.max_context_messages ?? 12, 4, 80, 1, "Recent messages from this conversation supplied to the response model.");
     number("memory_idle_seconds", "Idle time before memory consolidation (seconds)", settings.memory_idle_seconds ?? 300, 30, 3600, 30, "GHOST waits this long after the last incoming message and an empty queue before consolidating memories.");
@@ -493,7 +493,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     ];
     for (const p of prompts) {
       const row = this._el("div", null, "prompthead");
-      row.append(this._el("label", p[1] + " instructions"), this._el("span", "DEFAULT", "defaultbadge"));
+      row.append(this._el("label", p[1] + " instructions"), this._el("span", settings[p[0]] ? "CUSTOM" : "DEFAULT", "defaultbadge"));
       const area = this._el("textarea"); area.className = "prompt"; area.rows = 6; area.maxLength = p[2];
       area.name = p[0]; area.value = settings[p[0]] || defaults[p[0].replace("_system_prompt", "")] || ""; area.dataset.keep = "cfg-" + p[0];
       const reset = this._button("Reset to Default", async () => {
@@ -744,6 +744,8 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (item.assistant) card.append(this._el("p", "GHOST: " + item.assistant));
       if (item.suppressed) card.append(this._el("p", "GHOST stayed quiet: " + (item.suppression_reason || "Not relevant enough to interrupt."), "muted"));
       if (item.error) card.append(this._el("p", item.error, "error"));
+      if (item.models_attempted && item.models_attempted.length) card.append(this._el("p", "Agents attempted: " + item.models_attempted.join(" → "), "muted"));
+      if (item.fallback_used) card.append(this._el("p", "Fallback agent was used.", "muted"));
       if (item.action_result) {
         const details = document.createElement("details");
         details.append(this._el("summary", "View Home Assistant action result"));
