@@ -589,9 +589,8 @@ async def async_setup_entry(
         )
         if message.guild is None:
             # Existing event contract is preserved for current automations.
-            if sender_id not in watchers:
-                return
-            hass.bus.async_fire(
+            if sender_id in watchers:
+                hass.bus.async_fire(
                 "discord_game_message_received",
                 {
                     "sender": sender_name,
@@ -602,7 +601,8 @@ async def async_setup_entry(
                     "channel_id": str(message.channel.id),
                 },
             )
-            await assistant.enqueue(message, is_dm=True, sender_id=sender_id, sender_name=sender_name)
+            if sender_id in assistant.approved_users:
+                await assistant.enqueue(message, is_dm=True, sender_id=sender_id, sender_name=sender_name)
             return
         if assistant.enabled and str(message.channel.id) in assistant.group_channels:
             hass.bus.async_fire("discord_game_server_message_received", {
