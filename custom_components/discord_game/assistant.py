@@ -552,6 +552,16 @@ class DiscordAssistant:
         self.transcript=self.transcript[-100:];await self._save()
         self.hass.bus.async_fire("discord_game_assistant_manual_message",{"conversation":key,"message":message})
         self._refresh_sensor()
+    async def set_friend_memory(self, user_id, summary):
+        """Replace one approved contact's durable memory with an admin correction."""
+        summary = str(summary).strip()
+        if len(summary) > 4000:
+            raise ValueError("Memory summary must be 4000 characters or fewer")
+        record = self.friends.setdefault(str(user_id), {"messages": [], "summary": ""})
+        record["summary"] = summary
+        await self._save()
+        self._refresh_sensor()
+
     async def clear_history(self,user_id):
         self.friends.pop(str(user_id),None)
         await self._save()
