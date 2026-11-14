@@ -429,7 +429,7 @@ class DiscordAssistant:
             allowance = max(1, self.budget - fixed_length)
             combined_current = "\n".join(current)
             if allowance > 80:
-                marker = "\\n[Middle of oversized request omitted]\\n"
+                marker = "\n[Middle of oversized request omitted]\n"
                 content_allowance = max(2, allowance - len(marker))
                 head_length = (content_allowance + 1) // 2
                 tail_length = content_allowance - head_length
