@@ -1715,6 +1715,7 @@ def test_local_status_reader_recovers_a_minor_contact_name_typo():
     assert answer == "Harvey is playing Factorio."
 
 
-def test_local_status_intent_recognises_time_and_weather_fallback():
+def test_local_status_intent_recognises_time_weather_and_informal_presence_questions():
     assert assistant_module.request_kind("What's the current time and weather?") == "query"
+    assert assistant_module.request_kind("Can you tell me what ahrveys doing?") == "query"
     assert assistant_module.request_kind("The weather is rubbish today") == "conversation"
