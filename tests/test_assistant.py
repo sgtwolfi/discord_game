@@ -1094,11 +1094,12 @@ def test_newly_approved_friend_can_open_an_empty_conversation():
 
 
 
-def test_memory_default_is_neutral_and_forbids_storytelling():
-    prompt = assistant_module.DEFAULT_AGENT_PROMPTS["memory"].lower()
-    assert "plain-text facts only" in prompt
-    assert "no ghost personality" in prompt
-    assert "never turn a guess" in prompt
+def test_memory_pipeline_uses_deterministic_evidence_instead_of_a_model_prompt():
+    assert "memory" not in assistant_module.DEFAULT_AGENT_PROMPTS
+    assert assistant_module.extract_durable_memory_facts([
+        {"role": "assistant", "content": "The lights are red, mate."},
+        {"role": "user", "content": "The lights are red."},
+    ]) == []
 
 
 def test_action_outcome_memory_records_unconfirmed_not_success():
