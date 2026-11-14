@@ -291,6 +291,26 @@ class DiscordGameGhostPanel extends HTMLElement {
     stat.append(queued, status, friends, groups);
     shell.append(stat);
 
+    if (d.active_request) {
+      const active = d.active_request;
+      const card = this._el("section", null, "panel");
+      card.append(this._el("h2", "Currently processing"));
+      card.append(this._el("p", [
+        active.sender || "Discord contact",
+        active.role || "agent",
+        active.request_kind || "",
+        active.model || "Model not selected",
+        active.stage || "Working"
+      ].filter(Boolean).join(" · "), "help"));
+      if (active.messages && active.messages.length) {
+        card.append(this._el("p", active.messages.join(" | "), "muted"));
+      }
+      if (active.models_attempted && active.models_attempted.length) {
+        card.append(this._el("p", "Models attempted: " + active.models_attempted.join(" → "), "muted"));
+      }
+      shell.append(card);
+    }
+
     const workspace = this._el("div", null, "workspace");
     const side = this._el("aside", null, "sidebar");
     const sidehead = this._el("div", null, "sidehead");
@@ -743,6 +763,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (item.assistant) card.append(this._el("p", "GHOST: " + item.assistant));
       if (item.suppressed) card.append(this._el("p", "GHOST stayed quiet: " + (item.suppression_reason || "Not relevant enough to interrupt."), "muted"));
       if (item.error) card.append(this._el("p", item.error, "error"));
+      if (item.request_kind) card.append(this._el("p", "Request type: " + item.request_kind, "muted"));
       if (item.models_attempted && item.models_attempted.length) card.append(this._el("p", "Agents attempted: " + item.models_attempted.join(" → "), "muted"));
       if (item.fallback_used) card.append(this._el("p", "Fallback agent was used.", "muted"));
       if (item.action_result) {
