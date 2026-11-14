@@ -21,6 +21,7 @@ from nextcord.abc import GuildChannel
 from nextcord.ext import tasks
 
 from .const import DOMAIN, CONF_MEMBERS, CONF_CHANNELS, CONF_VOICE_CHANNELS, CONF_IMAGE_FORMAT, CONF_STEAM_API_KEY, CONF_ENTITIES_DISABLED_DEFAULT
+from .assistant import DiscordAssistant
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -78,12 +79,15 @@ async def async_setup_entry(
 
     bot._dc_game_connected = False
     bot_shutting_down = False
+    assistant = None
     disconnect_grace_task: Union[asyncio.Task, None] = None
 
     # noinspection PyUnusedLocal
     async def async_stop_server(event):
         nonlocal bot_shutting_down
         bot_shutting_down = True
+        if assistant is not None:
+            await assistant.async_stop()
         await bot.close()
 
     def _update_all_entity_states():
@@ -560,38 +564,48 @@ async def async_setup_entry(
                     DiscordAsyncMemberState(hass, bot, user.name, user.global_name, user.id, entities_disabled_default)
                 watchers[str(user.id)] = watcher
 
+    assistant = DiscordAssistant(hass, config_entry.entry_id, config, bot)
+    await assistant.async_start()
+    hass.data[DOMAIN][config_entry.entry_id]["assistant"] = assistant
+
     @bot.event
     async def on_message(message):
-        """Forward incoming direct messages from configured members to Home Assistant."""
-        if message.author.bot or message.guild is not None:
+        """Forward approved DMs and explicitly selected server-channel messages."""
+        if message.author.bot:
             return
-
         sender_id = str(message.author.id)
-        if sender_id not in watchers:
-            return
-
         content = (message.content or "").strip()
         if not content:
             return
-
         sender_name = (
             getattr(message.author, "global_name", None)
             or getattr(message.author, "display_name", None)
             or message.author.name
         )
-
-        hass.bus.async_fire(
-            "discord_game_message_received",
-            {
-                "sender": sender_name,
-                "sender_id": sender_id,
-                "message": content,
-                "timestamp": message.created_at.isoformat(),
-                "message_id": str(message.id),
-                "channel_id": str(message.channel.id),
-            },
-        )
-        _LOGGER.debug("Forwarded Discord DM from %s (%s) to Home Assistant", sender_name, sender_id)
+        if message.guild is None:
+            # Existing event contract is preserved for current automations.
+            if sender_id not in watchers:
+                return
+            hass.bus.async_fire(
+                "discord_game_message_received",
+                {
+                    "sender": sender_name,
+                    "sender_id": sender_id,
+                    "message": content,
+                    "timestamp": message.created_at.isoformat(),
+                    "message_id": str(message.id),
+                    "channel_id": str(message.channel.id),
+                },
+            )
+            await assistant.enqueue(message, is_dm=True, sender_id=sender_id, sender_name=sender_name)
+            return
+        if assistant.enabled and str(message.channel.id) in assistant.group_channels:
+            hass.bus.async_fire("discord_game_server_message_received", {
+                "sender": sender_name, "sender_id": sender_id, "message": content,
+                "timestamp": message.created_at.isoformat(), "message_id": str(message.id),
+                "channel_id": str(message.channel.id), "guild_id": str(message.guild.id),
+            })
+            await assistant.enqueue(message, is_dm=False, sender_id=sender_id, sender_name=sender_name)
 
     channels = {}
     for channel in config.get(CONF_CHANNELS):
@@ -661,6 +675,8 @@ async def async_setup_entry(
         for vch in voice_channels.values():
             async_add_entities(vch.sensors.values())
         hass.bus.async_fire("discord_game_setup_finished")
+
+    async_add_entities([assistant.sensor])
 
 
 class DiscordAsyncMemberState(SensorEntity):
