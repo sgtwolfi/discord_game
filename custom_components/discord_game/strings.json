@@ -39,7 +39,14 @@
           "assistant_enabled": "Enable Discord AI assistant",
           "conversation_agent": "Conversation model agent ID",
           "operations_agent": "Operations model agent ID",
-          "fallback_agent": "API fallback agent ID"
+          "fallback_agent": "Local fallback agent ID",
+          "api_fallback_agent": "API fallback model agent ID",
+          "spam_local_agent": "Local spam-deferral agent ID",
+          "spam_policy": "Spam protection action",
+          "spam_message_limit": "Messages before spam action",
+          "spam_window_seconds": "Spam detection window (seconds)",
+          "spam_defer_minutes": "Local deferral duration (minutes)",
+          "spam_timeout_minutes": "Discord timeout duration (minutes)"
         }
       },
       "members": {

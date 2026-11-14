@@ -4,8 +4,8 @@ import json
 import logging
 import re
 import time
-from collections import defaultdict
-from datetime import UTC, datetime
+from collections import defaultdict, deque
+from datetime import UTC, datetime, timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.storage import Store
@@ -91,6 +91,11 @@ ACTION_REQUEST = re.compile(
     r"on|off|volume|temperature|percent)\b",
     re.IGNORECASE,
 )
+
+def is_text_addressed(content):
+    """Recognise an explicit natural-language address to GHOST without matching words like ghosted."""
+    return bool(re.search(r"\bghost\b", str(content or ""), re.IGNORECASE))
+
 
 def speech(data):
     """Extract user-facing speech from a Home Assistant conversation result."""
@@ -406,10 +411,19 @@ class DiscordAssistant:
         self.agents={k:str(config.get(k,"")).strip() for k in ("conversation_agent","operations_agent","fallback_agent")}
         # API Mode delegates model-facing work to one HA conversation agent.
         # GHOST continues to own memory, queueing, privacy and verification.
+        self.api_fallback_agent = str(config.get("api_fallback_agent", "")).strip()
+        self.spam_local_agent = str(config.get("spam_local_agent", "")).strip()
+        self.spam_policy = str(config.get("spam_policy", "defer_local")).strip().lower()
+        if self.spam_policy not in {"defer_local", "timeout", "ignore"}:
+            self.spam_policy = "defer_local"
+        self.spam_message_limit = max(3, min(30, int(config.get("spam_message_limit", 8))))
+        self.spam_window_seconds = max(5, min(300, int(config.get("spam_window_seconds", 30))))
+        self.spam_defer_minutes = max(1, min(1440, int(config.get("spam_defer_minutes", 10))))
+        self.spam_timeout_minutes = max(1, min(60, int(config.get("spam_timeout_minutes", 5))))
         if self.mode == "api":
             primary = self.agents["conversation_agent"]
             self.agents["operations_agent"] = primary
-            self.agents["fallback_agent"] = ""
+            self.agents["fallback_agent"] = self.api_fallback_agent
         self.retries=max(1,min(5,int(config.get("fallback_after_failures",2))))
         self.delay=max(.5,min(15,float(config.get("queue_debounce_seconds",2.5))))
         self.limit=max(4,min(80,int(config.get("max_context_messages",12))))
@@ -435,6 +449,8 @@ class DiscordAssistant:
         self.groups=defaultdict(list)
         self.context_notes = {}
         self.queue=[]
+        self.sender_activity = defaultdict(deque)
+        self.spam_penalties = {}
         self.max_queue = MAX_PENDING_MESSAGES
         self.wake=asyncio.Event()
         self.worker=None
@@ -673,6 +689,13 @@ class DiscordAssistant:
               "conversation_system_prompt": getattr(self, "config", {}).get("conversation_system_prompt", ""),
               "operations_system_prompt": getattr(self, "config", {}).get("operations_system_prompt", ""),
               "advanced_system_prompt": getattr(self, "config", {}).get("advanced_system_prompt", ""),
+              "api_fallback_agent": getattr(self, "api_fallback_agent", ""),
+              "spam_local_agent": getattr(self, "spam_local_agent", ""),
+              "spam_policy": getattr(self, "spam_policy", "defer_local"),
+              "spam_message_limit": getattr(self, "spam_message_limit", 8),
+              "spam_window_seconds": getattr(self, "spam_window_seconds", 30),
+              "spam_defer_minutes": getattr(self, "spam_defer_minutes", 10),
+              "spam_timeout_minutes": getattr(self, "spam_timeout_minutes", 5),
               "default_prompts": DEFAULT_AGENT_PROMPTS,
           }}
     def public_attributes(self):
@@ -704,6 +727,56 @@ class DiscordAssistant:
             if isinstance(snapshot, str) and len(snapshot) > 4000:
                 item["context_snapshot"] = snapshot[:4000] + "\n[Older context snapshot truncated]"
 
+    def _record_spam(self, message, sender_id, is_dm):
+        """Apply a per-sender rolling-window limit and return the active routing policy."""
+        now = time.monotonic()
+        sender_id = str(sender_id)
+        penalty = self.spam_penalties.get(sender_id)
+        if penalty and penalty.get("until", 0) > now:
+            active_policy = penalty.get("policy", self.spam_policy)
+            return "defer_local" if active_policy == "defer_local" and self.spam_local_agent else "drop"
+        if penalty:
+            self.spam_penalties.pop(sender_id, None)
+        events = self.sender_activity[sender_id]
+        cutoff = now - self.spam_window_seconds
+        while events and events[0] < cutoff:
+            events.popleft()
+        events.append(now)
+        if len(events) < self.spam_message_limit:
+            return None
+        events.clear()
+        duration = self.spam_defer_minutes * 60 if self.spam_policy == "defer_local" else self.spam_timeout_minutes * 60
+        self.spam_penalties[sender_id] = {"until": now + duration, "policy": self.spam_policy}
+        self.hass.bus.async_fire("discord_game_assistant_spam_detected", {
+            "sender_id": sender_id, "policy": self.spam_policy,
+            "window_seconds": self.spam_window_seconds,
+            "message_limit": self.spam_message_limit, "duration_seconds": duration,
+        })
+        if self.spam_policy == "timeout":
+            if not is_dm:
+                async def apply_timeout():
+                    try:
+                        guild = getattr(message, "guild", None)
+                        member = guild.get_member(int(sender_id)) if guild else None
+                        if member is None and guild:
+                            member = await guild.fetch_member(int(sender_id))
+                        if member is None:
+                            raise RuntimeError("Discord member could not be resolved for timeout")
+                        await member.timeout(
+                            until=datetime.now(UTC) + timedelta(minutes=self.spam_timeout_minutes),
+                            reason="GHOST anti-spam protection",
+                        )
+                    except Exception:
+                        _LOGGER.warning("GHOST could not apply Discord spam timeout to %s", sender_id, exc_info=True)
+                self.hass.async_create_task(apply_timeout())
+            return "drop"
+        if self.spam_policy == "ignore":
+            return "drop"
+        if not self.spam_local_agent:
+            _LOGGER.warning("GHOST spam protection triggered but no local spam agent is configured")
+            return "drop"
+        return "defer_local"
+
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
         if not self.enabled or self.stopped:
             return
@@ -725,6 +798,10 @@ class DiscordAssistant:
             return
         content = (message.content or "").strip()
         if not content:
+            return
+        spam_route = self._record_spam(message, sender_id, is_dm)
+        if spam_route == "drop":
+            self._refresh_sensor()
             return
         if len(self.queue) >= self.max_queue:
             self.error = "Assistant queue is full; the newest message was not accepted."
@@ -760,6 +837,7 @@ class DiscordAssistant:
             str(getattr(user, "id", "")) == bot_user_id
             for user in getattr(message, "mentions", [])
         ) if bot_user_id else False
+        text_addressed = is_text_addressed(content)
         reference = getattr(message, "reference", None)
         resolved_reference = getattr(reference, "resolved", None) if reference else None
         replied_to_bot = bool(
@@ -767,11 +845,12 @@ class DiscordAssistant:
             and str(getattr(getattr(resolved_reference, "author", None), "id", "")) == bot_user_id
             and bot_user_id
         )
-        directly_addressed = bool(is_dm or mentioned_bot or replied_to_bot)
+        directly_addressed = bool(is_dm or mentioned_bot or replied_to_bot or text_addressed)
         self.queue.append({"key":key,"message_id":message_id,"is_dm":is_dm,"sender_id":sender_id,"sender_name":sender_name,
           "content":content,"timestamp":message.created_at.isoformat(),
           "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel,
-          "directly_addressed":directly_addressed})
+          "directly_addressed":directly_addressed,
+          "forced_agent": self.spam_local_agent if spam_route == "defer_local" else ""})
         self.queue.sort(key=lambda x:x["sort"])
         self.wake.set()
         self.hass.bus.async_fire("discord_game_assistant_queued",{"sender_id":sender_id,"channel_id":channel_id,"is_dm":is_dm})
@@ -1395,11 +1474,13 @@ class DiscordAssistant:
             local_status_answer = (
                 answer_local_status(self.hass, request_text, dt_util.now())
                 if self.mode == "local" and kind == "query"
+                and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             local_reminder = (
                 parse_local_reminder(request_text, dt_util.now())
                 if self.mode == "local" and item["is_dm"]
+                and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             if (
@@ -1472,7 +1553,14 @@ class DiscordAssistant:
                     self._capture_action_outcome_for_memory(
                         item, request_text, action_result, None, event_key
                     )
+            elif any(entry.get("forced_agent") for entry in batch) and kind in {"action", "query"}:
+                # Spam deferral is deliberately conversation-only. Never let a
+                # secondary local model execute HA actions or invent live state.
+                role = "spam_guard"
+                model = next(str(entry.get("forced_agent") or "").strip() for entry in batch if entry.get("forced_agent"))
+                answer = "You have hit GHOST’s spam cooldown. I can still chat locally, but Home Assistant controls and live-state lookups are paused until it expires."
             else:
+                forced_agent = next((str(entry.get("forced_agent") or "").strip() for entry in batch if entry.get("forced_agent")), "")
                 is_operation = bool(
                     self.agents["operations_agent"]
                     and kind in {"action", "query"}
@@ -1482,7 +1570,12 @@ class DiscordAssistant:
                 is_complex = bool(
                     COMPLEX_REQUEST.search(request_text) or len(request_text) > 1200
                 )
-                if is_operation:
+                if forced_agent:
+                    role = "fallback"
+                    agent = forced_agent
+                    is_operation = False
+                    is_action = False
+                elif is_operation:
                     role = "operations"
                     agent = self.agents["operations_agent"]
                 elif is_complex:

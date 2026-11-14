@@ -213,6 +213,14 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     assistant.group_channels = set()
     assistant.transcript = []
     assistant.queue = [{"content": "earlier message"}]
+    assistant.sender_activity = assistant_module.defaultdict(assistant_module.deque)
+    assistant.spam_penalties = {}
+    assistant.spam_window_seconds = 30
+    assistant.spam_message_limit = 8
+    assistant.spam_defer_minutes = 10
+    assistant.spam_timeout_minutes = 5
+    assistant.spam_policy = "defer_local"
+    assistant.spam_local_agent = ""
     assistant.max_queue = 1
     assistant.wake = asyncio.Event()
     assistant.error = None
@@ -246,6 +254,14 @@ def test_enqueue_deduplicates_message_ids_already_queued_or_processed():
     assistant.group_channels = set()
     assistant.transcript = []
     assistant.queue = []
+    assistant.sender_activity = assistant_module.defaultdict(assistant_module.deque)
+    assistant.spam_penalties = {}
+    assistant.spam_window_seconds = 30
+    assistant.spam_message_limit = 8
+    assistant.spam_defer_minutes = 10
+    assistant.spam_timeout_minutes = 5
+    assistant.spam_policy = "defer_local"
+    assistant.spam_local_agent = ""
     assistant.max_queue = 10
     assistant.wake = asyncio.Event()
     assistant.contact_names = {}
@@ -1736,3 +1752,76 @@ def test_api_mode_requires_direct_address_before_group_messages_reach_tool_enabl
 
     assert ignored[0] is False
     assert allowed[0] is True
+
+def test_api_mode_uses_separate_api_fallback_agent(monkeypatch):
+    class FakeStore:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(assistant_module, "Store", FakeStore)
+    assistant = DiscordAssistant(
+        SimpleNamespace(),
+        "entry",
+        {
+            "assistant_mode": "api",
+            "conversation_agent": "conversation.openai_primary",
+            "api_fallback_agent": "conversation.openai_fallback",
+            "fallback_agent": "conversation.old_local_fallback",
+        },
+        None,
+    )
+
+    assert assistant.agents["conversation_agent"] == "conversation.openai_primary"
+    assert assistant.agents["operations_agent"] == "conversation.openai_primary"
+    assert assistant.agents["fallback_agent"] == "conversation.openai_fallback"
+
+
+def test_natural_language_ghost_address_is_case_insensitive_and_word_bounded():
+    assert assistant_module.is_text_addressed("ah, my bad ghost, forgot about that")
+    assert assistant_module.is_text_addressed("GHOST can you help?")
+    assert assistant_module.is_text_addressed("hey, Ghost!")
+    assert not assistant_module.is_text_addressed("that was ghosted")
+    assert not assistant_module.is_text_addressed("ghostly behaviour")
+
+
+def test_spam_protection_defers_sender_to_configured_local_agent():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.sender_activity = assistant_module.defaultdict(assistant_module.deque)
+    assistant.spam_penalties = {}
+    assistant.spam_window_seconds = 30
+    assistant.spam_message_limit = 3
+    assistant.spam_defer_minutes = 10
+    assistant.spam_timeout_minutes = 5
+    assistant.spam_policy = "defer_local"
+    assistant.spam_local_agent = "conversation.local_guard"
+    assistant.hass = SimpleNamespace(
+        bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None)
+    )
+    message = SimpleNamespace(guild=None)
+
+    assert assistant._record_spam(message, "123", True) is None
+    assert assistant._record_spam(message, "123", True) is None
+    assert assistant._record_spam(message, "123", True) == "defer_local"
+    assert assistant._record_spam(message, "123", True) == "defer_local"
+
+
+def test_spam_timeout_policy_drops_messages_during_cooldown():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.sender_activity = assistant_module.defaultdict(assistant_module.deque)
+    assistant.spam_penalties = {}
+    assistant.spam_window_seconds = 30
+    assistant.spam_message_limit = 3
+    assistant.spam_defer_minutes = 10
+    assistant.spam_timeout_minutes = 5
+    assistant.spam_policy = "timeout"
+    assistant.spam_local_agent = "conversation.local_guard"
+    assistant.hass = SimpleNamespace(
+        bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None)
+    )
+    message = SimpleNamespace(guild=None)
+
+    assistant._record_spam(message, "123", True)
+    assistant._record_spam(message, "123", True)
+    assert assistant._record_spam(message, "123", True) == "drop"
+    assert assistant._record_spam(message, "123", True) == "drop"
+
