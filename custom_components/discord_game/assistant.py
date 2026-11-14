@@ -172,6 +172,30 @@ class DiscordAssistant:
         self.model_usage_data = saved.get("model_usage", {})
         self.conversation_logs = defaultdict(list, saved.get("conversation_logs", {}))
         self.conversation_meta = saved.get("conversation_meta", {})
+        if not self.conversation_logs:
+            # Migrate the earlier audit transcript into the new chat-history store.
+            for entry in self.transcript:
+                key = str(entry.get("conversation") or "")
+                if not key:
+                    continue
+                for message in entry.get("messages", []):
+                    self.conversation_logs[key].append({
+                        "role": "user", "sender": message.get("sender") or "Discord user",
+                        "sender_id": str(message.get("sender_id") or ""),
+                        "content": message.get("content") or "",
+                        "timestamp": entry.get("timestamp"),
+                    })
+                if entry.get("assistant"):
+                    self.conversation_logs[key].append({
+                        "role": "assistant", "sender": "GHOST",
+                        "content": entry["assistant"], "timestamp": entry.get("timestamp"),
+                        "model": entry.get("model"),
+                    })
+                self.conversation_meta.setdefault(key, {
+                    "label": entry.get("sender") or key,
+                    "channel_id": str(entry.get("channel_id") or ""),
+                    "kind": "friend" if entry.get("is_dm") else "group",
+                })
         if self.enabled:
             for user_id in self.approved_users:
                 if user_id not in self.contact_names:
@@ -291,7 +315,7 @@ class DiscordAssistant:
           "active_request": self.active_request,
           "context_notes": dict(self.context_notes),
           "model_usage": self.model_usage(),
-          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()},
+          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "recent_messages": v.get("messages", [])[-self.history_limit:]} for k,v in self.friends.items()},
           "contacts": contacts,
           "conversations": conversations,
           "groups": groups,
