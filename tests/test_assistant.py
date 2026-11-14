@@ -57,6 +57,8 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assert len(prompt) <= assistant.budget
     assert "private contact summary" in prompt
     assert "You are GHOST" in prompt
+    assert "under 30 words" in prompt
+    assert "Do not use phonetic dialect" in prompt
 
 
 def test_prompt_uses_only_supplied_contact_history():
