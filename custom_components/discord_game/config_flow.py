@@ -178,6 +178,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "max_context_messages": 20,
                 "context_budget_chars": 10000,
                 "history_limit": 60,
+                "conversation_history_limit": 500,
                 "typing_enabled": True,
                 "assistant_group_channels": "",
                 "conversation_system_prompt": "",
