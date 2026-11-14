@@ -56,6 +56,32 @@ def action_result_error(data):
         return "Home Assistant did not report any successfully completed targets."
     return None
 
+def action_result_snapshot(data):
+    """Keep a small, safe audit summary of Home Assistant's action result."""
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict):
+        return None
+    result_data = response.get("data") or {}
+    if not isinstance(result_data, dict):
+        result_data = {}
+
+    def targets(items):
+        return [
+            {
+                "name": item.get("name"),
+                "id": item.get("id") or item.get("entity_id"),
+            }
+            for item in items or []
+            if isinstance(item, dict)
+        ]
+
+    return {
+        "response_type": response.get("response_type"),
+        "success": targets(result_data.get("success")),
+        "failed": targets(result_data.get("failed")),
+    }
+
+
 class AssistantSensor(SensorEntity):
     _attr_has_entity_name=True
     _attr_name="Assistant"
@@ -338,6 +364,7 @@ class DiscordAssistant:
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
               "user_messages":[x["content"] for x in batch],"assistant":answer,"model":model,"role":role,
               "estimated_input_tokens":len(prompt)//4,"estimated_output_tokens":len(answer)//4,"context_snapshot":prompt[:4000],
+              "action_result": action_result_snapshot(getattr(self, "_last_call_result", None)) if role == "operations" else None,
               "fallback_used":model==self.agents["fallback_agent"] and bool(self.agents["fallback_agent"])})
             self.transcript=self.transcript[-100:];await self._save()
             self.hass.bus.async_fire("discord_game_assistant_response_sent",{"conversation":item["key"],"model":model,"message":answer})
@@ -351,7 +378,8 @@ class DiscordAssistant:
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
-              "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt[:4000]})
+              "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt[:4000],
+              "action_result": action_result_snapshot(getattr(self, "_last_call_result", None)) if role == "operations" else None})
             self.transcript=self.transcript[-100:];await self._save()
             self.hass.bus.async_fire("discord_game_assistant_error",{"conversation":item["key"],"error":self.error,"model":model})
         finally:
