@@ -255,8 +255,44 @@ def action_result_error(data):
     return None
 
 def action_result_retryable(data):
-    """Legacy compatibility helper: action outcomes are never safe to replay."""
-    return False
+    """Allow one retry only for explicit, structured failures with known targets.
+
+    A timeout, exception, missing response, malformed result, or unstructured
+    failure is ambiguous and must never trigger a replay. Successful targets
+    are never included in the retry target list.
+    """
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict) or response.get("response_type") != "action_done":
+        return False
+    result_data = response.get("data")
+    if not isinstance(result_data, dict):
+        return False
+    succeeded = result_data.get("success") or []
+    failed = result_data.get("failed") or []
+    if not isinstance(succeeded, list) or not isinstance(failed, list) or not failed:
+        return False
+    for item in failed:
+        if not isinstance(item, dict):
+            return False
+        target_id = str(item.get("entity_id") or item.get("id") or "").strip()
+        reason = str(item.get("error") or item.get("message") or "").strip()
+        # Only retry an explicitly identified target with an explicit failure.
+        # A display name alone is not precise enough to safely scope a retry.
+        if "." not in target_id or not reason:
+            return False
+    return True
+
+
+def action_retry_targets(data):
+    """Return exact failed entity IDs, never including successful targets."""
+    if not action_result_retryable(data):
+        return []
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    failed = (response.get("data") or {}).get("failed") or []
+    return list(dict.fromkeys(
+        str(item.get("entity_id") or item.get("id")).strip()
+        for item in failed
+    ))
 
 
 def action_result_snapshot(data):
@@ -1261,6 +1297,59 @@ class DiscordAssistant:
                 action_result = action_result_snapshot(operation_result) if is_action else None
                 if is_action:
                     verification_error = action_result_error(operation_result)
+                    if verification_error and action_result_retryable(operation_result):
+                        retry_targets = action_retry_targets(operation_result)
+                        retry_response = operation_result.get("response", operation_result)
+                        retry_data = retry_response.get("data") or {}
+                        first_success = list(retry_data.get("success") or [])
+                        first_failed = list(retry_data.get("failed") or [])
+                        retry_prompt = (
+                            prompt
+                            + "\\n\\nCONTROLLED ACTION RETRY — ONE ATTEMPT ONLY.\\n"
+                            + "Your previous Home Assistant response explicitly reported these targets as failed: "
+                            + ", ".join(retry_targets)
+                            + ". The successful targets from the first attempt have already completed and MUST NOT "
+                            + "be called again. Retry only the exact failed entity IDs listed above, using the "
+                            + "original requested settings. Do not broaden the target, do not repeat successful "
+                            + "targets, and do not claim success unless the new Home Assistant response confirms it. "
+                            + "If you cannot safely address only those failed entities, do not execute another action; "
+                            + "explain the limitation."
+                        )
+                        if self.active_request:
+                            self.active_request["stage"] = "Retrying explicitly failed targets (one retry maximum)"
+                            self.active_request["retry_targets"] = retry_targets
+                            self.active_request["models_attempted"] = list(models_attempted + [agent])
+                            self._refresh_sensor()
+                        models_attempted.append(agent)
+                        retry_answer = await self._call(agent, retry_prompt)
+                        retry_result = getattr(self, "_last_call_result", None)
+                        retry_snapshot = action_result_snapshot(retry_result)
+                        if retry_snapshot:
+                            action_result = {
+                                "response_type": retry_snapshot.get("response_type"),
+                                "success": first_success + retry_snapshot.get("success", []),
+                                "failed": retry_snapshot.get("failed", []),
+                            }
+                            # Keep the merged result in the same shape consumed by
+                            # action verification and durable memory.
+                            merged_result = {
+                                "response": {
+                                    "response_type": "action_done",
+                                    "data": {
+                                        "success": action_result["success"],
+                                        "failed": action_result["failed"],
+                                    },
+                                },
+                            }
+                            operation_result = merged_result
+                            verification_error = action_result_error(operation_result)
+                        else:
+                            verification_error = (
+                                "The controlled retry did not return a structured Home Assistant action result. "
+                                "The original failed targets remain unconfirmed."
+                            )
+                        if not verification_error:
+                            answer = retry_answer or answer
                     if verification_error:
                         raise RuntimeError("Action not confirmed: " + verification_error)
                     event_key = "|".join((
