@@ -105,7 +105,7 @@ FOLLOWUP_TEXT = re.compile(
 
 def is_contextual_followup(text):
     """Recognise short replies that depend on GHOST's immediately previous turn."""
-    value = re.sub(r"^[\s\\W]+|[\s\\W]+$", "", str(text or "")).strip()
+    value = re.sub(r"^[\s\W]+|[\s\W]+$", "", str(text or "")).strip()
     if not value or len(value) > 240:
         return False
     if FOLLOWUP_TEXT.search(value):
