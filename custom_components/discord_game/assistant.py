@@ -291,12 +291,14 @@ class DiscordAssistant:
         groups = []
         for channel_id in sorted(self.group_channels):
             channel = bot.get_channel(int(channel_id)) if bot else None
-            guild_id = str(getattr(getattr(channel, "guild", None), "id", ""))
-            key = f"guild:{guild_id}:{channel_id}" if guild_id else None
+            saved_key = next((key for key, value in meta_map.items() if str(value.get("channel_id", "")) == channel_id), None)
+            saved_meta = meta_map.get(saved_key or "", {})
+            guild_id = str(getattr(getattr(channel, "guild", None), "id", "") or saved_meta.get("guild_id", ""))
+            key = saved_key or (f"guild:{guild_id}:{channel_id}" if guild_id else None)
             groups.append({
                 "channel_id": channel_id,
                 "guild_id": guild_id,
-                "name": getattr(channel, "name", None) or meta_map.get(key or "", {}).get("channel_name") or channel_id,
+                "name": getattr(channel, "name", None) or saved_meta.get("channel_name") or saved_meta.get("label") or channel_id,
                 "conversation": key,
             })
         return {"enabled":self.enabled,"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
