@@ -825,7 +825,8 @@ class DiscordAssistant:
                     content_allowance = allowance - len(marker)
                     head_length = (content_allowance + 1) // 2
                     tail_length = content_allowance - head_length
-                    candidate = combined_current[:head_length] + marker + combined_current[-tail_length:]
+                    tail = combined_current[-tail_length:] if tail_length else ""
+                    candidate = combined_current[:head_length] + marker + tail
                 else:
                     candidate = combined_current[:allowance]
                 current = [candidate]
