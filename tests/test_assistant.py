@@ -44,6 +44,7 @@ def test_speech_accepts_text_response():
 
 def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.limit = 4
     assistant.budget = 2000
     batch = [{
@@ -63,6 +64,7 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
 
 def test_prompt_uses_only_supplied_contact_history():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.limit = 10
     assistant.budget = 2000
     batch = [{"sender_name": "Ryan", "content": "Hello", "is_dm": True}]
@@ -96,6 +98,7 @@ def test_enqueue_rejects_empty_discord_messages():
     import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.stopped = False
     assistant.queue = []
@@ -122,6 +125,7 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
 
     fired = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.stopped = False
     assistant.queue = [{"content": "earlier message"}]
@@ -170,6 +174,7 @@ def test_pause_resume_and_clear_queue_controls():
 
     events = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.paused = False
     assistant.queue = [{"content": "one"}, {"content": "two"}]
     assistant.error = "old error"
@@ -206,6 +211,7 @@ def test_complex_request_classifier_ignores_simple_chat():
 
 def test_model_usage_returns_persisted_per_agent_totals():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.model_usage_data = {
         "conversation.local": {
             "requests": 2, "input_tokens": 150, "output_tokens": 30, "errors": 0
@@ -247,6 +253,7 @@ def test_action_result_snapshot_keeps_success_and_failure_targets():
 
 def test_admin_diagnostics_expose_paused_state_and_active_request():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.paused = True
     assistant.approved_users = {"123"}
@@ -275,6 +282,7 @@ def test_queued_message_can_be_edited_and_cancelled_individually():
 
     events = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.queue = [{
         "message_id": "111",
         "key": "dm:123",
@@ -306,6 +314,7 @@ def test_editing_queue_rejects_blank_content():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.queue = [{"message_id": "111", "content": "original"}]
 
     with pytest.raises(ValueError, match="cannot be empty"):
@@ -330,6 +339,7 @@ def test_transcript_replay_requeues_original_dm_messages():
 
     events = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.transcript = [{
         "timestamp": "2026-11-14T00:00:00+00:00",
         "conversation": "dm:123",
@@ -364,6 +374,7 @@ def test_transcript_replay_requeues_original_dm_messages():
 
 def test_prompt_changes_instructions_for_operations_and_advanced_roles():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.limit = 10
     assistant.budget = 2000
     batch = [{"sender_name": "Max", "content": "Turn on the bedroom light", "is_dm": True}]
@@ -388,6 +399,7 @@ def test_admin_can_correct_contact_memory():
             saved.append(data)
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {"123": {"messages": [{"content": "hello"}], "summary": "old summary"}}
     assistant.approved_users = {"123"}
     assistant.store = FakeStore()
@@ -404,6 +416,7 @@ def test_admin_memory_correction_has_a_size_limit():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {}
     assistant.approved_users = {"123"}
     with pytest.raises(ValueError, match="4000 characters"):
@@ -415,6 +428,7 @@ def test_memory_compression_keeps_more_raw_history_when_no_memory_agent():
     import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
         "summary": "",
         "messages": [{"role": "user", "content": str(i)} for i in range(8)],
@@ -431,6 +445,7 @@ def test_memory_compression_keeps_raw_history_when_memory_agent_fails():
     import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
         "summary": "existing",
         "messages": [{"role": "user", "content": str(i)} for i in range(8)],
@@ -454,6 +469,7 @@ def test_memory_compression_trims_to_short_history_after_success():
     import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
         "summary": "",
         "messages": [{"role": "user", "content": str(i)} for i in range(8)],
@@ -479,6 +495,7 @@ def test_manual_dm_send_rejects_unapproved_user():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.approved_users = {"123"}
 
     with pytest.raises(ValueError, match="not on the approved"):
@@ -490,6 +507,7 @@ def test_manual_channel_send_rejects_unselected_channel():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.approved_users = {"123"}
     assistant.group_channels = {"789"}
 
@@ -500,6 +518,7 @@ def test_manual_channel_send_rejects_unselected_channel():
 
 def test_context_audit_keeps_ten_newest_prompts_complete():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.transcript = [
         {"context_snapshot": "x" * 5000}
         for _ in range(12)
@@ -528,6 +547,7 @@ def test_model_call_tracks_per_agent_estimated_usage():
             return {"response": {"speech": {"plain": {"speech": "Hello"}}}}
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.hass = SimpleNamespace(services=FakeServices())
     assistant.model_usage_data = {}
 
@@ -549,6 +569,7 @@ def test_model_call_counts_provider_errors():
             raise RuntimeError("provider unavailable")
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.hass = SimpleNamespace(services=FakeServices())
     assistant.model_usage_data = {}
 
@@ -564,6 +585,7 @@ def test_manual_send_rejects_two_destinations():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     with pytest.raises(ValueError, match="not both"):
         asyncio.run(assistant.send_manual(
             message="Hello", user_id="123", channel_id="789"
@@ -610,6 +632,7 @@ def test_model_call_does_not_retry_completed_action_without_speech():
             }
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.hass = SimpleNamespace(services=FakeServices())
     assistant.model_usage_data = {}
 
@@ -625,6 +648,7 @@ def test_admin_cannot_create_memory_for_unapproved_contact():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {}
     assistant.approved_users = {"123"}
 
@@ -645,6 +669,7 @@ def test_group_transcript_replay_preserves_each_sender():
             return channel
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.transcript = [{
         "timestamp": "2026-11-14T00:00:00+00:00",
         "conversation": "guild:555:789",
@@ -678,6 +703,7 @@ def test_group_transcript_replay_preserves_each_sender():
 
 def test_group_context_keeps_each_speaker_name():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.limit = 10
     assistant.budget = 2000
     batch = [{"sender_name": "Ryan", "content": "Current message", "is_dm": False}]
@@ -695,6 +721,7 @@ def test_admin_can_inject_temporary_context_for_approved_dm():
     import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.approved_users = {"123"}
     assistant.group_channels = {"789"}
     assistant.context_notes = {}
@@ -710,6 +737,7 @@ def test_admin_can_inject_temporary_context_for_selected_group_channel():
     import asyncio
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.approved_users = {"123"}
     assistant.group_channels = {"789"}
     assistant.context_notes = {}
@@ -725,6 +753,7 @@ def test_admin_cannot_inject_context_into_unapproved_conversation():
     import pytest
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.approved_users = {"123"}
     assistant.group_channels = {"789"}
     assistant.context_notes = {}
@@ -735,6 +764,7 @@ def test_admin_cannot_inject_context_into_unapproved_conversation():
 
 def test_temporary_context_is_included_in_model_prompt():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.limit = 10
     assistant.budget = 3000
     batch = [{"sender_name": "Max", "content": "Hello", "is_dm": True}]
@@ -748,6 +778,7 @@ def test_temporary_context_is_included_in_model_prompt():
 
 def test_prompt_budget_includes_injected_context_and_durable_memory():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.limit = 10
     assistant.budget = 2000
     batch = [{
@@ -773,6 +804,7 @@ def test_prompt_budget_includes_injected_context_and_durable_memory():
 
 def test_public_sensor_attributes_do_not_expose_private_memory_or_transcript():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.paused = False
     assistant.diagnostics_revision = 1
