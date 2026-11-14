@@ -18,6 +18,10 @@ EDIT_QUEUE = vol.Schema({
     vol.Required("message"): cv.string,
 })
 CANCEL_QUEUE = vol.Schema({vol.Required("message_id"): cv.string})
+REPLAY = vol.Schema({
+    vol.Required("timestamp"): cv.string,
+    vol.Required("conversation"): cv.string,
+})
 
 
 def assistants(hass: HomeAssistant):
@@ -49,6 +53,14 @@ async def async_setup_services(hass: HomeAssistant):
         if not items:
             raise HomeAssistantError("Discord assistant is not loaded")
         await items[0].clear_history(call.data["user_id"])
+
+    async def replay(call: ServiceCall):
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].replay_transcript(
+            call.data["timestamp"], call.data["conversation"]
+        )
 
     async def pause(call: ServiceCall):
         items = assistants(hass)
@@ -89,6 +101,7 @@ async def async_setup_services(hass: HomeAssistant):
     hass.services.async_register(DOMAIN, "clear_queue", clear_queue)
     hass.services.async_register(DOMAIN, "edit_queued_message", edit_queue, schema=EDIT_QUEUE)
     hass.services.async_register(DOMAIN, "cancel_queued_message", cancel_queued, schema=CANCEL_QUEUE)
+    hass.services.async_register(DOMAIN, "replay_transcript", replay, schema=REPLAY)
     hass.data[DOMAIN]["_assistant_services"] = True
 
 
@@ -96,7 +109,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message"):
+    for name in ("send_message", "clear_friend_memory", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)
