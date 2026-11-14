@@ -488,3 +488,19 @@ def test_manual_channel_send_rejects_unselected_channel():
 
     with pytest.raises(ValueError, match="not enabled for GHOST"):
         asyncio.run(assistant.send_manual(message="Hello", channel_id="456"))
+
+
+
+def test_context_audit_keeps_ten_newest_prompts_complete():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.transcript = [
+        {"context_snapshot": "x" * 5000}
+        for _ in range(12)
+    ]
+
+    assistant._trim_context_snapshots()
+
+    assert len(assistant.transcript[0]["context_snapshot"]) < 5000
+    assert len(assistant.transcript[1]["context_snapshot"]) < 5000
+    assert len(assistant.transcript[2]["context_snapshot"]) == 5000
+    assert len(assistant.transcript[-1]["context_snapshot"]) == 5000
