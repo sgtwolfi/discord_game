@@ -888,28 +888,119 @@ def test_manual_send_rejects_two_destinations():
 
 
 
-def test_action_outcomes_are_never_automatically_retried():
+def test_action_retry_requires_explicit_structured_failed_entity():
+    result = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{
+                    "entity_id": "light.hall",
+                    "error": "Service rejected the target",
+                }],
+            },
+        },
+    }
+
+    assert assistant_module.action_result_retryable(result)
+    assert assistant_module.action_retry_targets(result) == ["light.hall"]
+
+
+def test_action_retry_scopes_partial_failure_to_failed_targets_only():
+    result = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.bedroom"}],
+                "failed": [{
+                    "entity_id": "light.hall",
+                    "error": "Target rejected",
+                }],
+            },
+        },
+    }
+
+    assert assistant_module.action_result_retryable(result)
+    assert assistant_module.action_retry_targets(result) == ["light.hall"]
+    assert "light.bedroom" not in assistant_module.action_retry_targets(result)
+
+
+def test_action_retry_is_blocked_for_ambiguous_or_unscoped_failures():
+    assert not assistant_module.action_result_retryable(RuntimeError("timeout"))
     assert not assistant_module.action_result_retryable({
         "response": {"response_type": "success", "speech": {"plain": {"speech": "Done"}}}
     })
-
-
-def test_partial_action_failure_is_not_retryable():
+    assert not assistant_module.action_result_retryable({
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": []},
+        },
+    })
     assert not assistant_module.action_result_retryable({
         "response": {
             "response_type": "action_done",
             "data": {
-                "success": [{"id": "light.bedroom"}],
-                "failed": [{"id": "light.hall"}],
+                "success": [],
+                "failed": [{"name": "Hall", "error": "Target rejected"}],
+            },
+        },
+    })
+    assert not assistant_module.action_result_retryable({
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall"}],
             },
         },
     })
 
 
-def test_empty_action_result_is_not_retryable():
-    assert not assistant_module.action_result_retryable({
-        "response": {"response_type": "action_done", "data": {"success": [], "failed": []}}
-    })
+def test_action_retry_merge_preserves_first_success_and_uses_retry_outcome():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.bedroom"}],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+    retry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"entity_id": "light.hall"}],
+                "failed": [],
+            },
+        },
+    }
+
+    merged = assistant_module.merge_action_retry_results(first, retry)
+
+    assert merged["response"]["data"]["success"] == [
+        {"entity_id": "light.bedroom"},
+        {"entity_id": "light.hall"},
+    ]
+    assert merged["response"]["data"]["failed"] == []
+    assert assistant_module.action_result_error(merged) is None
+
+
+def test_action_retry_merge_rejects_unstructured_retry_response():
+    first = {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [],
+                "failed": [{"entity_id": "light.hall", "error": "Rejected"}],
+            },
+        },
+    }
+
+    assert assistant_module.merge_action_retry_results(first, {"response": {
+        "response_type": "success",
+        "speech": {"plain": {"speech": "Done"}},
+    }}) is None
 
 
 def test_model_call_does_not_retry_completed_action_without_speech():
