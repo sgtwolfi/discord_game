@@ -561,3 +561,28 @@ def test_manual_send_rejects_two_destinations():
         asyncio.run(assistant.send_manual(
             message="Hello", user_id="123", channel_id="789"
         ))
+
+
+
+def test_fallback_retry_is_allowed_for_missing_action_result():
+    assert assistant_module.action_result_retryable({
+        "response": {"response_type": "success", "speech": {"plain": {"speech": "Done"}}}
+    })
+
+
+def test_fallback_retry_is_blocked_for_partial_action_failure():
+    assert not assistant_module.action_result_retryable({
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"id": "light.bedroom"}],
+                "failed": [{"id": "light.hall"}],
+            },
+        },
+    })
+
+
+def test_fallback_retry_is_allowed_when_action_has_no_reported_targets():
+    assert assistant_module.action_result_retryable({
+        "response": {"response_type": "action_done", "data": {"success": [], "failed": []}}
+    })
