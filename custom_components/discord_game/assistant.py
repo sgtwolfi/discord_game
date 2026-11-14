@@ -728,7 +728,8 @@ class DiscordAssistant:
         sender_id = str(sender_id)
         penalty = self.spam_penalties.get(sender_id)
         if penalty and penalty.get("until", 0) > now:
-            return penalty.get("policy", self.spam_policy)
+            active_policy = penalty.get("policy", self.spam_policy)
+            return "defer_local" if active_policy == "defer_local" and self.spam_local_agent else "drop"
         if penalty:
             self.spam_penalties.pop(sender_id, None)
         events = self.sender_activity[sender_id]
@@ -831,7 +832,7 @@ class DiscordAssistant:
             str(getattr(user, "id", "")) == bot_user_id
             for user in getattr(message, "mentions", [])
         ) if bot_user_id else False
-        text_addressed = bool(re.search(r"(?<![\\w])ghost(?![\\w])", content, re.IGNORECASE))
+        text_addressed = bool(re.search(r"(?<![\w])ghost(?![\w])", content, re.IGNORECASE))
         reference = getattr(message, "reference", None)
         resolved_reference = getattr(reference, "resolved", None) if reference else None
         replied_to_bot = bool(
@@ -1546,7 +1547,7 @@ class DiscordAssistant:
                         item, request_text, action_result, None, event_key
                     )
             else:
-                forced_agent = str(item.get("forced_agent") or "").strip()
+                forced_agent = next((str(entry.get("forced_agent") or "").strip() for entry in batch if entry.get("forced_agent")), "")
                 is_operation = bool(
                     self.agents["operations_agent"]
                     and kind in {"action", "query"}
