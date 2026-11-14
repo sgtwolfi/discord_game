@@ -411,6 +411,7 @@ class DiscordAssistant:
             agent = self.agents["conversation_agent"]
         model=agent or "unconfigured"
         answer=""
+        action_result = None
         failures=[]
         try:
             history,summary=self._history(item)
@@ -435,6 +436,7 @@ class DiscordAssistant:
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
             if role == "operations":
                 verification_error = action_result_error(getattr(self, "_last_call_result", None))
+                action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
                 # A syntactically valid answer is not enough for an operation.
                 # Give the configured paid agent one chance to recover from a
                 # malformed/incomplete local action result, but apply the same
@@ -444,6 +446,7 @@ class DiscordAssistant:
                     model = self.agents["fallback_agent"]
                     answer = await self._call(model, prompt)
                     verification_error = action_result_error(getattr(self, "_last_call_result", None))
+                    action_result = action_result_snapshot(getattr(self, "_last_call_result", None))
                 if verification_error:
                     raise RuntimeError("Action not confirmed: " + verification_error)
             await self._send(item["channel"],answer)
@@ -458,7 +461,7 @@ class DiscordAssistant:
               "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
               "user_messages":[x["content"] for x in batch],"assistant":answer,"model":model,"role":role,
               "estimated_input_tokens":len(prompt)//4,"estimated_output_tokens":len(answer)//4,"context_snapshot":prompt[:4000],
-              "action_result": action_result_snapshot(getattr(self, "_last_call_result", None)) if role == "operations" else None,
+              "action_result": action_result,
               "fallback_used":model==self.agents["fallback_agent"] and bool(self.agents["fallback_agent"])})
             self.transcript=self.transcript[-100:];await self._save()
             self.hass.bus.async_fire("discord_game_assistant_response_sent",{"conversation":item["key"],"model":model,"message":answer})
@@ -473,7 +476,7 @@ class DiscordAssistant:
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
               "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt[:4000],
-              "action_result": action_result_snapshot(getattr(self, "_last_call_result", None)) if role == "operations" else None})
+              "action_result": action_result})
             self.transcript=self.transcript[-100:];await self._save()
             self.hass.bus.async_fire("discord_game_assistant_error",{"conversation":item["key"],"error":self.error,"model":model})
         finally:
