@@ -88,3 +88,72 @@ set_context_note:
       selector:
         text:
           multiline: true
+
+update_settings:
+  name: Save GHOST assistant configuration
+  description: Save advanced assistant tuning and custom role prompts from the GHOST sidebar panel.
+  fields:
+    fallback_after_failures:
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    queue_debounce_seconds:
+      required: true
+      selector:
+        number:
+          min: 0.5
+          max: 15
+          step: 0.5
+          mode: box
+    max_context_messages:
+      required: true
+      selector:
+        number:
+          min: 4
+          max: 80
+          mode: box
+    context_budget_chars:
+      required: true
+      selector:
+        number:
+          min: 2000
+          max: 50000
+          mode: box
+    history_limit:
+      required: true
+      selector:
+        number:
+          min: 10
+          max: 200
+          mode: box
+    typing_enabled:
+      required: true
+      selector:
+        boolean:
+    assistant_group_channels:
+      required: true
+      selector:
+        text:
+    conversation_system_prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
+    operations_system_prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
+    advanced_system_prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
+    memory_system_prompt:
+      required: true
+      selector:
+        text:
+          multiline: true
