@@ -155,6 +155,8 @@ def test_action_classifier_does_not_match_ordinary_chat():
     action = assistant_module.ACTION
     assert not action.search("What do you think of the new film?")
     assert not action.search("Tell me a joke")
+    assert not action.search("Help me debug this automation")
+    assert action.search("Run the bedroom lighting script")
 
 
 
