@@ -396,7 +396,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       agentGrid.append(cell);
     }
     agentsPanel.append(agentGrid);
-    agentsPanel.append(this._el("p", "Change these assignments in Settings → Devices & services → Discord Game → Configure. The operations agent must have access to the Home Assistant actions you want GHOST to perform.", "help"));
+    agentsPanel.append(this._el("p", "Change these assignments in Settings → Devices & services → Discord Game → Configure. The operations agent needs your Home Assistant tools. The memory agent is required for idle memory consolidation; without it, pending memories are retained but not summarised.", "help"));
     shell.append(agentsPanel);
 
     const panel = this._el("section", null, "panel");
@@ -418,7 +418,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     number("max_context_messages", "Active conversation context messages", settings.max_context_messages ?? 12, 4, 80, 1, "Recent messages from this conversation supplied to the response model.");
     number("memory_idle_seconds", "Idle time before memory consolidation (seconds)", settings.memory_idle_seconds ?? 300, 30, 3600, 30, "GHOST waits this long after the last incoming message and an empty queue before consolidating memories.");
     number("memory_batch_messages", "Messages per person to consolidate", settings.memory_batch_messages ?? 20, 1, 100, 1, "For each approved person who spoke during the active period, use their most recent N messages.");
-    number("history_limit", "Raw messages retained after consolidation", settings.history_limit ?? 8, 0, 200, 1, "Keeps this many recent raw messages available alongside the durable summary.");
+    number("history_limit", "Raw messages retained after consolidation", settings.history_limit ?? 8, 1, 200, 1, "Keeps this many recent raw messages available alongside the durable summary.");
     number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to friend DMs and server-group transcripts in the panel.");
     number("context_budget_chars", "Maximum prompt size (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500, "Hard limit for the complete prompt sent to an agent.");
     form.append(grid);
@@ -513,7 +513,7 @@ class DiscordGameGhostPanel extends HTMLElement {
 
     const groupsPanel = this._el("section", null, "panel");
     groupsPanel.append(this._el("h2", "Server group chats"));
-    groupsPanel.append(this._el("p", "Only these channel IDs receive GHOST replies. Separate IDs with commas. Group messages are retained for chat history, not used as durable stranger memory.", "muted"));
+    groupsPanel.append(this._el("p", "Only these channel IDs are monitored for GHOST replies. Separate IDs with commas. GHOST's relevance gate decides whether to speak; approved friends' own messages can later inform their individual private memories.", "muted"));
     for (const group of d.groups || []) groupsPanel.append(this._el("p", (group.name || "Server channel") + " · " + group.channel_id, "help"));
     const channels = this._el("input");
     channels.value = settings.assistant_group_channels || "";
