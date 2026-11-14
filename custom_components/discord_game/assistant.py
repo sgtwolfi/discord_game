@@ -12,8 +12,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_MEMBERS, DOMAIN
-from .local_tasks import parse_local_reminder
 from .local_status import answer_local_status
+from .local_tasks import parse_local_reminder
 
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
