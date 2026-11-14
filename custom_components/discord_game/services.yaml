@@ -19,3 +19,13 @@ clear_friend_memory:
       required: true
       selector:
         text:
+
+pause:
+  name: Pause GHOST
+  description: Stop starting new replies while allowing the current reply to finish.
+resume:
+  name: Resume GHOST
+  description: Resume processing queued Discord messages.
+clear_queue:
+  name: Clear pending messages
+  description: Discard queued messages without interrupting the active reply.
