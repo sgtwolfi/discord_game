@@ -483,11 +483,18 @@ def test_memory_consolidates_without_a_configured_memory_model():
     saved = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.diagnostics_revision = 0
-    assistant.friends = {"123": {
-        "summary": "",
-        "messages": [{"role": "user", "content": "hello"}],
-        "pending_messages": [{"role": "user", "content": "hello"}],
-    }}
+    assistant.friends = {
+        "123": {
+            "summary": "",
+            "messages": [{"role": "user", "content": "hello"}],
+            "pending_messages": [{"role": "user", "content": "hello"}],
+        },
+        "456": {
+            "summary": "Preference: likes tea",
+            "messages": [],
+            "pending_messages": [{"role": "user", "content": "I love tea"}],
+        },
+    }
     assistant.agents = {"memory_agent": ""}
     assistant.memory_batch_messages = 5
     assistant.history_limit = 2
@@ -505,6 +512,7 @@ def test_memory_consolidates_without_a_configured_memory_model():
     assert result is True
     assert assistant.friends["123"]["pending_messages"] == []
     assert assistant.friends["123"]["summary"] == ""
+    assert assistant.friends["456"]["pending_messages"][0]["content"] == "I love tea"
     assert saved
 
 
