@@ -189,6 +189,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "spam_defer_minutes": self._get_current("spam_defer_minutes", 10),
                 "spam_timeout_minutes": self._get_current("spam_timeout_minutes", 5),
                 "local_reminder_script": self._get_current("local_reminder_script", "script.set_timer_alarm_or_reminder"),
+                "ghost_status_entity": self._get_current("ghost_status_entity", "input_text.ghost_status"),
                 "fallback_after_failures": 1,
                 "queue_debounce_seconds": 2.5,
                 "max_context_messages": 12,
