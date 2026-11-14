@@ -1373,8 +1373,14 @@ class DiscordAssistant:
         entity_id = getattr(self, "status_entity", "input_text.ghost_status")
         value = self._ghost_status_value()
         if value is None:
-            return f"Live GHOST status from {entity_id}: unavailable. Do not guess it."
-        return f"Live GHOST status from {entity_id} (trusted current Home Assistant state): {value}"
+            return (
+                f"AUTHORITATIVE LIVE GHOST STATUS from {entity_id}: unavailable. "
+                "If asked what GHOST is doing or for its status, say this value is unavailable; never guess."
+            )
+        return (
+            f"AUTHORITATIVE LIVE GHOST STATUS from {entity_id}: {value}. "
+            "If asked what GHOST is doing or for its status, answer from this exact current value; do not guess."
+        )
 
     def _prompt(self, batch, history, summary, role="conversation", context_note=""):
         """Build a bounded prompt while preserving the live request and core rules."""
