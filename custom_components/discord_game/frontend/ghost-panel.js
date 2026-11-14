@@ -310,7 +310,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     const stat = this._el("div", null, "statrow");
     const queued = this._el("div", null, "stat"); queued.append(this._el("span", "Queued messages", "muted"), this._el("b", d.queue_length || 0));
     const status = this._el("div", null, "stat"); status.append(this._el("span", "Assistant", "muted"), this._el("b", d.processing ? "Working" : d.paused ? "Paused" : d.last_error ? "Needs attention" : d.enabled ? "Ready" : "Disabled"));
-    const liveStatus = this._el("div", null, "stat"); liveStatus.append(this._el("span", "Live GHOST status", "muted"), this._el("b", d.ghost_status_value || "Unavailable"));
+    const liveStatus = this._el("div", null, "stat"); liveStatus.append(this._el("span", (d.owner_name || "Harvey") + " live status", "muted"), this._el("b", d.owner_status_value || "Unavailable"));
     const friends = this._el("div", null, "stat"); friends.append(this._el("span", "Approved friends", "muted"), this._el("b", (d.contacts || []).length));
     const groups = this._el("div", null, "stat"); groups.append(this._el("span", "Server chats", "muted"), this._el("b", (d.groups || []).length));
     stat.append(queued, status, liveStatus, friends, groups);
@@ -559,15 +559,25 @@ class DiscordGameGhostPanel extends HTMLElement {
       reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear private-DM reminders, so a tiny model does not have to discover or invoke a tool. It should accept name plus either duration_seconds or alarm_time (and optional date), and return success: true. GHOST does not send announce_message or text fields unless a future explicit option is added.", "help"));
     }
     form.append(reminderWrap);
+    const ownerWrap = this._el("div", null, "field");
+    ownerWrap.append(this._el("label", "Your name (for personal activity questions)"));
+    const ownerName = this._el("input");
+    ownerName.name = "owner_name";
+    ownerName.value = settings.owner_name || "Harvey";
+    ownerName.placeholder = "Harvey";
+    ownerName.dataset.keep = "cfg-owner_name";
+    ownerWrap.append(ownerName);
+    ownerWrap.append(this._el("p", "Questions such as “what's Harvey doing?” read the personal status helper below, not a Discord friend profile.", "help"));
+    form.append(ownerWrap);
     const statusWrap = this._el("div", null, "field");
-    statusWrap.append(this._el("label", "GHOST live status helper"));
+    statusWrap.append(this._el("label", "Personal live status helper"));
     const statusEntity = this._el("input");
     statusEntity.name = "ghost_status_entity";
     statusEntity.value = settings.ghost_status_entity || "input_text.ghost_status";
     statusEntity.placeholder = "input_text.ghost_status";
     statusEntity.dataset.keep = "cfg-ghost_status_entity";
     statusWrap.append(statusEntity);
-    statusWrap.append(this._el("p", "GHOST reads this entity directly from Home Assistant and includes its current value in every model context. It does not need to be exposed to Assist or enabled as an AI tool.", "help"));
+    statusWrap.append(this._el("p", "GHOST reads this entity directly from Home Assistant as your current activity/status. It is also answered deterministically, so it does not need to be exposed to Assist or enabled as an AI tool.", "help"));
     form.append(statusWrap);
 
     const grid = this._el("div", null, "fieldgrid");
