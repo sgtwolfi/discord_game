@@ -207,7 +207,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Required("fallback_after_failures", default=self._get_current("fallback_after_failures", 2)): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
                 vol.Required("queue_debounce_seconds", default=self._get_current("queue_debounce_seconds", 2.5)): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
                 vol.Required("max_context_messages", default=self._get_current("max_context_messages", 20)): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
-                vol.Required("context_budget_chars", default=self._get_current("context_budget_chars", 10000)): vol.All(vol.Coerce(int), vol.Range(min=1000, max=50000)),
+                vol.Required("context_budget_chars", default=self._get_current("context_budget_chars", 10000)): vol.All(vol.Coerce(int), vol.Range(min=1500, max=50000)),
                 vol.Required("history_limit", default=self._get_current("history_limit", 60)): vol.All(vol.Coerce(int), vol.Range(min=10, max=200)),
                 vol.Required("typing_enabled", default=self._get_current("typing_enabled", True)): selector.BooleanSelector(),
                 vol.Optional("assistant_group_channels", default=self._get_current("assistant_group_channels", "")): cv.string,
