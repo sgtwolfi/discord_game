@@ -19,6 +19,11 @@ ACTION=re.compile(
     r"scene|script|automation|play|pause|stop|volume|notify|send (?:a )?message)\b",
     re.IGNORECASE,
 )
+COMPLEX_REQUEST = re.compile(
+    r"\b(research|compare|analyse|analyze|debug|troubleshoot|architect|"
+    r"investigate|evaluate|multi[- ]step|complex|design a system|write a report)\b",
+    re.IGNORECASE,
+)
 
 def speech(data):
     response=data.get("response",data) if isinstance(data,dict) else {}
@@ -256,8 +261,18 @@ class DiscordAssistant:
         typing=asyncio.create_task(self._typing(item["channel"])) if self.typing else None
         history = []
         prompt = ""
-        role="operations" if self.agents["operations_agent"] and ACTION.search(" ".join(x["content"] for x in batch)) else "conversation"
-        agent=self.agents["operations_agent" if role=="operations" else "conversation_agent"]
+        request_text = " ".join(x["content"] for x in batch)
+        is_operation = bool(self.agents["operations_agent"] and ACTION.search(request_text))
+        is_complex = bool(self.agents["fallback_agent"] and COMPLEX_REQUEST.search(request_text))
+        if is_operation:
+            role = "operations"
+            agent = self.agents["operations_agent"]
+        elif is_complex:
+            role = "advanced"
+            agent = self.agents["fallback_agent"]
+        else:
+            role = "conversation"
+            agent = self.agents["conversation_agent"]
         model=agent or "unconfigured"
         answer=""
         failures=[]
