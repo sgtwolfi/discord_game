@@ -290,7 +290,7 @@ class DiscordAssistant:
         } for user_id in sorted(self.approved_users)]
         groups = []
         for channel_id in sorted(self.group_channels):
-            channel = self.bot.get_channel(int(channel_id))
+            channel = bot.get_channel(int(channel_id)) if bot else None
             guild_id = str(getattr(getattr(channel, "guild", None), "id", ""))
             key = f"guild:{guild_id}:{channel_id}" if guild_id else None
             groups.append({
