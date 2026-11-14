@@ -432,9 +432,23 @@ class DiscordAssistant:
             "message_id": str(message.id),
         })
         self._last_message_monotonic = time.monotonic()
+        bot_user_id = str(getattr(getattr(self.bot, "user", None), "id", ""))
+        mentioned_bot = any(
+            str(getattr(user, "id", "")) == bot_user_id
+            for user in getattr(message, "mentions", [])
+        ) if bot_user_id else False
+        reference = getattr(message, "reference", None)
+        resolved_reference = getattr(reference, "resolved", None) if reference else None
+        replied_to_bot = bool(
+            resolved_reference
+            and str(getattr(getattr(resolved_reference, "author", None), "id", "")) == bot_user_id
+            and bot_user_id
+        )
+        directly_addressed = bool(is_dm or mentioned_bot or replied_to_bot)
         self.queue.append({"key":key,"message_id":str(message.id),"is_dm":is_dm,"sender_id":str(sender_id),"sender_name":sender_name,
           "content":content,"timestamp":message.created_at.isoformat(),
-          "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel})
+          "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel,
+          "directly_addressed":directly_addressed})
         self.queue.sort(key=lambda x:x["sort"])
         self.wake.set()
         self.hass.bus.async_fire("discord_game_assistant_queued",{"sender_id":str(sender_id),"channel_id":str(message.channel.id),"is_dm":is_dm})
@@ -842,8 +856,13 @@ class DiscordAssistant:
                 if self.typing:
                     typing = asyncio.create_task(self._typing(item["channel"]))
 
+            group_action_is_addressed = item["is_dm"] or any(
+                entry.get("directly_addressed") for entry in batch
+            )
             is_operation = bool(
-                self.agents["operations_agent"] and ACTION.search(request_text)
+                self.agents["operations_agent"]
+                and ACTION.search(request_text)
+                and group_action_is_addressed
             )
             is_complex = bool(
                 self.agents["fallback_agent"]
@@ -1037,8 +1056,9 @@ class DiscordAssistant:
             "You are deciding whether GHOST should speak in a Discord group conversation.",
             "You are NOT writing a reply. You are only deciding whether a reply is useful and relevant.",
             "Read the recent conversation and current messages in context.",
-            "RESPOND only when GHOST is directly addressed, asked a question, asked for help,",
+            "RESPOND when GHOST is directly addressed, asked a question, asked for help,",
             "or has genuinely useful information that advances the conversation.",
+            "A direct mention or reply to GHOST is a strong signal, but still judge whether a reply is useful.",
             "DO NOT respond to ordinary conversation between other people, casual banter,",
             "rhetorical remarks, reactions, repeated information, messages already answered,",
             "or anything where silence is more natural.",
@@ -1053,7 +1073,15 @@ class DiscordAssistant:
             f'{entry.get("sender") or "User"}: {entry.get("content", "")}'
             for entry in history[-self.limit:]
         ]
-        current = [f'{entry["sender_name"]}: {entry["content"]}' for entry in batch]
+        current = [
+            f'{entry["sender_name"]}: {entry["content"]}'
+            + (" [directly addressed GHOST]" if entry.get("directly_addressed") else "")
+            for entry in batch
+        ]
+        prompt.append(
+            "GHOST was directly addressed in this batch: "
+            + ("yes" if any(entry.get("directly_addressed") for entry in batch) else "no")
+        )
         prompt.append("Recent conversation, oldest first:\n" + "\n".join(previous + current))
         try:
             result = await self._call(agent, "\n\n".join(prompt))
