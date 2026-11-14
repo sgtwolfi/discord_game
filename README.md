@@ -1,6 +1,6 @@
-# Discord Game + GHOST Assistant (v8.1 development)
+# Discord Game + GHOST Assistant (v8.1.0)
 
-This branch adds an optional token-conscious assistant runtime while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
+This release adds API and Local assistant runtime modes while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
 ## Setup
 
