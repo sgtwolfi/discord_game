@@ -14,10 +14,9 @@ _TIME_QUERY = re.compile(r"\b(?:current time|what time is it|what's the time|wha
 _WEATHER_QUERY = re.compile(r"\b(?:weather|forecast|temperature outside|how warm is it outside)\b", re.IGNORECASE)
 _LIGHT_QUERY = re.compile(r"\b(?:light|lights|lamp|lamps)\b", re.IGNORECASE)
 _STATUS_QUERY = re.compile(
-    r"\b(?:what(?:'s| is)\s+(?:your|ghost(?:'s)?|the assistant's)\s+(?:current\s+)?status|"
-    r"what(?:'s| is)\s+the\s+(?:current\s+)?status\s+of\s+(?:ghost|the assistant)|"
-    r"ghost status|status report|what are you up to|what are you doing|"
-    r"what(?:'s| is)\s+(?:ghost|the assistant)\s+(?:doing|up to)|how are you getting on)\b",
+    r"\b(?:what(?:'s|s| is)\s+my\s+(?:current\s+)?status|"
+    r"what am i\s+(?:currently\s+)?(?:doing|up to)|"
+    r"how am i getting on|my status|my current activity)\b",
     re.IGNORECASE,
 )
 
@@ -122,15 +121,47 @@ def _lights(hass, query: str) -> str:
     return "; ".join(readings) + "." + extra
 
 
-def answer_local_status(hass, query: str, now: datetime, status_entity: str = "input_text.ghost_status") -> str | None:
+def _is_owner_activity_query(query: str, owner_name: str) -> bool:
+    """Match the configured owner's name, including possessive phrasing."""
+    name = re.escape(str(owner_name or "Harvey").strip() or "Harvey")
+    return bool(re.search(
+        rf"\bwhat(?:'s|s| is)\s+(?:{name}|the owner)(?:['’]s)?\s+"
+        r"(?:currently\s+)?(?:doing|up to|current status|status)\b",
+        query,
+        re.IGNORECASE,
+    ))
+
+
+def _owner_status(hass, status_entity: str, owner_name: str) -> str:
+    """Read the configured owner's live status directly from Home Assistant."""
+    states = getattr(hass, "states", None)
+    state = states.get(status_entity) if states is not None and hasattr(states, "get") else None
+    name = str(owner_name or "Harvey").strip() or "Harvey"
+    if state is None or str(state.state).strip().lower() in {"", "unknown", "unavailable", "none"}:
+        return f"I can't read {name}'s current status because {status_entity} is unavailable."
+    return f"{name} is currently: {str(state.state).strip()[:1000]}"
+
+
+def answer_local_status(
+    hass,
+    query: str,
+    now: datetime,
+    status_entity: str = "input_text.ghost_status",
+    owner_name: str = "Harvey",
+) -> str | None:
     """Answer simple live-state questions from HA state, without an LLM tool call."""
     value = str(query or "").strip()
-    if _STATUS_QUERY.search(value):
-        state = hass.states.get(status_entity) if hasattr(hass.states, "get") else None
-        if state is None or str(state.state).strip().lower() in {"", "unknown", "unavailable", "none"}:
-            return f"I can't read my current status because {status_entity} is unavailable."
-        return "My current status is: " + str(state.state).strip()[:1000]
+    owner = str(owner_name or "Harvey").strip() or "Harvey"
     person = _PERSON_ACTIVITY.search(value)
+    if _STATUS_QUERY.search(value) or _is_owner_activity_query(value, owner):
+        return _owner_status(hass, status_entity, owner)
+    if person:
+        requested = re.sub(r"['’]s$", "", person.group(1).strip()).casefold()
+        if (
+            requested in {owner.casefold(), "the owner", "me", "myself", "i"}
+            or difflib.SequenceMatcher(None, requested, owner.casefold()).ratio() >= 0.82
+        ):
+            return _owner_status(hass, status_entity, owner)
     parts = []
     if person:
         person_answer = _person_activity(hass, person.group(1))

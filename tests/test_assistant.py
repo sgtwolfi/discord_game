@@ -1738,14 +1738,14 @@ def test_local_status_reader_uses_discord_presence_sensor():
     state = SimpleNamespace(
         entity_id="sensor.discord_user_123",
         state="online",
-        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+        attributes={"friendly_name": "Max", "display_name": "Max", "game": "Factorio"},
     )
     hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
     answer = answer_local_status(
-        hass, "What's Harvey doing?",
+        hass, "What's Max doing?",
         datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
-    assert answer == "Harvey is playing Factorio."
+    assert answer == "Max is playing Factorio."
 
 
 def test_local_status_reader_reports_missing_weather_without_inventing_it():
@@ -1807,14 +1807,14 @@ def test_local_status_reader_recovers_a_minor_contact_name_typo():
     state = SimpleNamespace(
         entity_id="sensor.discord_user_123",
         state="online",
-        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+        attributes={"friendly_name": "Max", "display_name": "Max", "game": "Factorio"},
     )
     hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
     answer = answer_local_status(
-        hass, "What's ahrveys doing?",
+        hass, "What's maxx doing?",
         datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
-    assert answer == "Harvey is playing Factorio."
+    assert answer == "Max is playing Factorio."
 
 
 def test_local_status_intent_recognises_time_weather_and_informal_presence_questions():
@@ -2204,23 +2204,52 @@ def test_function_configuration_errors_are_non_retryable_and_detected_for_fallba
     )
 
 
-def test_local_status_reader_reads_ghost_status_helper_without_assist_exposure():
+def test_local_status_reader_reads_owner_status_helper_without_assist_exposure():
     status = SimpleNamespace(state="Optimising the downstairs server")
     hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: status if entity_id == "input_text.ghost_status" else None))
     answer = answer_local_status(
-        hass, "What's your status?",
+        hass, "What's my current status?",
         datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
-    assert answer == "My current status is: Optimising the downstairs server"
+    assert answer == "Harvey is currently: Optimising the downstairs server"
 
 
-def test_local_status_reader_reports_missing_ghost_status_helper():
+def test_local_status_reader_reports_missing_owner_status_helper():
     hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: None))
     answer = answer_local_status(
-        hass, "What's GHOST's status?",
+        hass, "What's my status?",
         datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
     )
-    assert answer == "I can't read my current status because input_text.ghost_status is unavailable."
+    assert answer == "I can't read Harvey's current status because input_text.ghost_status is unavailable."
+
+
+def test_harvey_activity_question_uses_owner_helper_before_discord_friend_sensor():
+    owner = SimpleNamespace(state="At the downstairs PC")
+    friend = SimpleNamespace(
+        entity_id="sensor.discord_user_123",
+        state="online",
+        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+    )
+    hass = SimpleNamespace(
+        states=SimpleNamespace(
+            get=lambda entity_id: owner if entity_id == "input_text.ghost_status" else None,
+            async_all=lambda: [friend],
+        )
+    )
+    for question in ("whats harvey doing?", "What's Harvey doing?", "What's Harvey's status?"):
+        assert answer_local_status(
+            hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
+        ) == "Harvey is currently: At the downstairs PC"
+
+
+def test_owner_activity_name_is_configurable():
+    status = SimpleNamespace(state="Working")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: status if entity_id == "input_text.ghost_status" else None))
+    assert answer_local_status(
+        hass, "What's Alex doing?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+        owner_name="Alex",
+    ) == "Alex is currently: Working"
 
 
 def test_ghost_status_is_injected_into_api_and_local_model_context():
@@ -2239,11 +2268,51 @@ def test_ghost_status_is_injected_into_api_and_local_model_context():
         prompt = assistant._prompt(batch, [], "")
         assert "Checking the network" in prompt
         assert "input_text.ghost_status" in prompt
+        assert "AUTHORITATIVE LIVE OWNER STATUS" in prompt
+
+
+def test_owner_status_is_not_injected_into_unaddressed_group_context():
+    state = SimpleNamespace(state="At the downstairs PC")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = hass
+    assistant.diagnostics_revision = 0
+    assistant.limit = 8
+    assistant.budget = 10000
+    assistant.config = {}
+    group_batch = [{"sender_name": "Max", "content": "Hello", "is_dm": False}]
+    prompt = assistant._prompt(group_batch, [], "")
+    assert "At the downstairs PC" not in prompt
+    assert "private and is not included" in prompt
+
+
+def test_owner_status_can_be_included_for_directly_addressed_group_request():
+    state = SimpleNamespace(state="At the downstairs PC")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = hass
+    assistant.diagnostics_revision = 0
+    assistant.limit = 8
+    assistant.budget = 10000
+    assistant.config = {}
+    group_batch = [{
+        "sender_name": "Max", "content": "What's Harvey doing?",
+        "is_dm": False, "directly_addressed": True,
+    }]
+    prompt = assistant._prompt(group_batch, [], "")
+    assert "At the downstairs PC" in prompt
 
 
 def test_ghost_status_question_is_classified_as_live_query():
-    assert assistant_module.request_kind("What's your status?") == "query"
-    assert assistant_module.request_kind("What are you doing?") == "query"
+    assert assistant_module.request_kind("What's my status?") == "query"
+    assert assistant_module.request_kind("What am I doing?") == "query"
+    assert assistant_module.request_kind("whats Harvey doing?") == "query"
 
 
 def test_local_reminder_parser_handles_half_hour_and_compact_units():
@@ -2292,19 +2361,10 @@ def test_ghost_status_snapshot_reports_unavailable_helper_safely():
     assert "unavailable" in assistant._ghost_status_context()
 
 
-def test_local_status_reader_accepts_current_and_third_person_phrasings():
+def test_local_status_reader_accepts_first_person_owner_phrasings():
     state = SimpleNamespace(state="Running a maintenance check")
     hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
-    for question in ("What's your current status?", "What's the current status of GHOST?"):
+    for question in ("What's my current status?", "What am I doing?", "What am I up to?"):
         assert answer_local_status(
             hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
-        ) == "My current status is: Running a maintenance check"
-
-
-def test_ghost_activity_question_uses_ghost_status_not_discord_friend_lookup():
-    state = SimpleNamespace(state="Waiting for the next command")
-    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
-    assert answer_local_status(
-        hass, "What's GHOST doing?",
-        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
-    ) == "My current status is: Waiting for the next command"
+        ) == "Harvey is currently: Running a maintenance check"
