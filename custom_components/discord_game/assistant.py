@@ -426,12 +426,13 @@ class DiscordAssistant:
                 "context_snapshot": prompt[:4000],
             }
             self._refresh_sensor()
-            for attempt in range(self.retries):
+            attempts = 1 if role == "advanced" else self.retries
+            for attempt in range(attempts):
                 try:answer=await self._call(agent,prompt);break
                 except Exception as err:  # noqa: BLE001 - retry any conversation service failure
                     failures.append(str(err));_LOGGER.warning("Local assistant attempt %s failed: %s",attempt+1,err)
                     await asyncio.sleep(min(attempt+1,4))
-            if not answer and self.agents["fallback_agent"]:
+            if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
                 model=self.agents["fallback_agent"];answer=await self._call(model,prompt)
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
             if role == "operations":
