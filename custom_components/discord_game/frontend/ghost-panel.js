@@ -8,12 +8,48 @@ class DiscordGameGhostPanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    const state = hass.states["sensor.discord_game_assistant"];
+    const signature = state ? state.state + "|" + state.last_updated : "missing";
+    if (signature !== this._lastSignature) {
+      this._lastSignature = signature;
+      this._diagnosticsLoaded = false;
+      this._loadDiagnostics();
+    } else if (!this._diagnosticsLoaded && !this._diagnosticsLoading) {
+      this._loadDiagnostics();
+    }
   }
 
   set narrow(value) {
     this._narrow = value;
     this._render();
+  }
+
+  async _loadDiagnostics() {
+    if (!this._hass?.connection?.sendMessagePromise || this._diagnosticsLoading) return;
+    const requestedSignature = this._lastSignature;
+    this._diagnosticsLoading = true;
+    try {
+      const response = await this._hass.connection.sendMessagePromise({
+        type: "discord_game/assistant/diagnostics",
+      });
+      const payload = response?.result ?? response;
+      this._diagnostics = payload?.diagnostics || null;
+      this._diagnosticsError = payload?.available === false
+        ? "The assistant is not loaded."
+        : "";
+    } catch (err) {
+      this._diagnostics = null;
+      this._diagnosticsError = err?.message || String(err);
+    } finally {
+      this._diagnosticsLoading = false;
+      if (requestedSignature !== this._lastSignature) {
+        this._diagnosticsLoaded = false;
+        this._loadDiagnostics();
+      } else {
+        this._diagnosticsLoaded = true;
+        this._render();
+      }
+    }
   }
 
   _node(tag, text, className) {
@@ -116,7 +152,7 @@ class DiscordGameGhostPanel extends HTMLElement {
 
     const page = this._node("main", undefined, "page");
     const state = this._hass.states["sensor.discord_game_assistant"];
-    const a = state?.attributes || {};
+    const a = this._diagnostics || state?.attributes || {};
     const header = this._node("header");
     const titleWrap = this._node("div");
     titleWrap.append(this._node("h1", "GHOST control room"));
@@ -126,6 +162,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     page.append(header);
 
     if (this._notice) page.append(this._node("p", this._notice, "notice"));
+    if (this._diagnosticsError) page.append(this._node("p", "Private diagnostics unavailable: " + this._diagnosticsError, "error"));
 
     const controls = this._node("div", undefined, "actions");
     if (a.paused) controls.append(this._button("Resume", () => this._service("resume")));
