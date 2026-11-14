@@ -700,6 +700,66 @@ def test_memory_consolidation_does_not_need_a_memory_model():
     assert saved
 
 
+
+
+def test_api_group_relevance_uses_separate_local_model_without_mention():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = False
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api", "fallback_agent": "conversation.api_fallback"}
+    assistant.limit = 8
+    calls = []
+
+    async def classify(agent, prompt):
+        calls.append(agent)
+        assert "not required unless mention-only mode is enabled" in prompt
+        return '{"respond": true, "reason": "The question invites GHOST to help"}'
+
+    assistant._call = classify
+    batch = [{"sender_name": "Ryan", "content": "Anyone know what time the heating turns off?", "directly_addressed": False}]
+    should_respond, reason = asyncio.run(assistant._should_respond_to_group(batch, []))
+    assert should_respond is True
+    assert "invites GHOST" in reason
+    assert calls == ["conversation.local_relevance"]
+
+
+def test_group_mention_only_toggle_suppresses_unaddressed_without_model_call():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected_call(*args):
+        raise AssertionError("Mention-only mode must bypass relevance inference")
+
+    assistant._call = unexpected_call
+    batch = [{"sender_name": "Ryan", "content": "Anyone know what time it is?", "directly_addressed": False}]
+    should_respond, reason = asyncio.run(assistant._should_respond_to_group(batch, []))
+    assert should_respond is False
+    assert "mention-only" in reason
+
+
+def test_group_mention_only_toggle_allows_explicit_address_without_model_call():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected_call(*args):
+        raise AssertionError("Mention-only mode must bypass relevance inference")
+
+    assistant._call = unexpected_call
+    batch = [{"sender_name": "Ryan", "content": "Ghost, can you help?", "directly_addressed": True}]
+    should_respond, reason = asyncio.run(assistant._should_respond_to_group(batch, []))
+    assert should_respond is True
+    assert "directly addressed" in reason
+
+
 def test_group_relevance_gate_uses_ai_decision_before_reply():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.agents = {"conversation_agent": "conversation.local"}
