@@ -138,6 +138,7 @@ def is_function_configuration_error(value):
         "verify functions are valid in a yaml format",
         "failed to load function definitions",
         "invalid function yaml",
+        "could not load its configured functions",
     )
     return any(marker in text for marker in markers)
 
@@ -165,6 +166,76 @@ def request_kind(text):
     if ACTION_REQUEST.search(value):
         return "action"
     return "conversation"
+
+
+def resolve_reminder_confirmation(batch, history, now):
+    """Resolve an explicit yes/no to GHOST's immediately preceding reminder offer.
+
+    Only acts when GHOST itself asked for confirmation and the proposal contains
+    an unambiguous duration and task. This prevents a chat model from claiming
+    that an unexecuted reminder was created.
+    """
+    current = " ".join(str(entry.get("content") or "") for entry in batch).strip()
+    affirmative = re.match(
+        r"^(?:yes|yeah|yep|yup|sure|okay|ok|go ahead|do it|please|absolutely|aye)\\b",
+        current,
+        re.IGNORECASE,
+    )
+    negative = re.match(
+        r"^(?:no|nah|nope|not now|cancel|don't|do not)\\b",
+        current,
+        re.IGNORECASE,
+    )
+    if not affirmative and not negative:
+        return None
+
+    previous_assistant = next(
+        (entry for entry in reversed(history) if entry.get("role") == "assistant"),
+        None,
+    )
+    if not previous_assistant:
+        return None
+    proposal = str(previous_assistant.get("content") or "")
+    asks_confirmation = re.search(
+        r"\\b(?:confirm|do you want me to|would you like me to|shall i|should i)\\b"
+        r".{0,160}\\b(?:set|schedule|create)\\b",
+        proposal,
+        re.IGNORECASE,
+    )
+    if not asks_confirmation or not re.search(r"\\b(?:timer|reminder)\\b", proposal, re.IGNORECASE):
+        return None
+    if negative:
+        return {"declined": True}
+
+    # Accept clear natural-language proposals such as:
+    # "a reminder in two minutes to text Ryan, right?"
+    timing = re.search(
+        r"\\b(?:a|the)\\s+(?:timer|reminder)\\s+in\\s+"
+        r"(?P<amount>\\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+        r"nineteen|twenty|thirty|forty|fifty|sixty|ninety)\\s*"
+        r"(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\\s+to\\s+"
+        r"(?P<task>.+?)(?=,?\\s*(?:right|correct)\\b|[?.!]|$)",
+        proposal,
+        re.IGNORECASE,
+    )
+    if not timing:
+        return {
+            "needs_clarification": True,
+            "clarification": "I can't safely recover the reminder details from that offer. Tell me the task and timing again.",
+        }
+    task = timing.group("task").strip(" ,.!?;:")
+    candidate = (
+        f"Remind me to {task} in {timing.group('amount')} "
+        f"{timing.group('unit')}"
+    )
+    parsed = parse_local_reminder(candidate, now)
+    if not parsed or parsed.get("needs_clarification"):
+        return {
+            "needs_clarification": True,
+            "clarification": "I couldn't verify the reminder details. Tell me the task and timing again.",
+        }
+    return parsed
 
 
 
@@ -498,7 +569,9 @@ class DiscordAssistant:
             primary = self.agents["conversation_agent"]
             self.agents["operations_agent"] = primary
             self.agents["fallback_agent"] = self.api_fallback_agent
-        self.retries=max(1,min(5,int(config.get("fallback_after_failures",2))))
+        # One primary attempt, then one configured fallback. Repeating the same
+        # failing model burns tokens without changing its configuration.
+        self.retries = 1
         self.delay=max(.5,min(15,float(config.get("queue_debounce_seconds",2.5))))
         self.limit=max(4,min(80,int(config.get("max_context_messages",12))))
         self.budget=max(2000,min(50000,int(config.get("context_budget_chars",10000))))
@@ -1568,11 +1641,18 @@ class DiscordAssistant:
                 and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
-            local_reminder = (
-                parse_local_reminder(request_text, dt_util.now())
-                if self.mode == "local" and item["is_dm"]
-                and not any(entry.get("forced_agent") for entry in batch)
+            local_reminder_confirmation = (
+                resolve_reminder_confirmation(batch, prior_history, dt_util.now())
+                if item["is_dm"] and not any(entry.get("forced_agent") for entry in batch)
                 else None
+            )
+            local_reminder = (
+                local_reminder_confirmation
+                or (
+                    parse_local_reminder(request_text, dt_util.now())
+                    if item["is_dm"] and not any(entry.get("forced_agent") for entry in batch)
+                    else None
+                )
             )
             if (
                 kind in {"action", "query"}
@@ -1604,6 +1684,10 @@ class DiscordAssistant:
                 }
                 self._refresh_sensor()
                 answer = local_status_answer
+            elif local_reminder is not None and local_reminder.get("declined"):
+                role = "local_reminder_confirmation"
+                model = "GHOST confirmation handler"
+                answer = "No worries. I haven't set that reminder."
             elif local_reminder is not None:
                 role = "local_reminder"
                 model = "local-script:" + self.local_reminder_script
@@ -1642,7 +1726,8 @@ class DiscordAssistant:
                         request_text[:300],
                     ))
                     self._capture_action_outcome_for_memory(
-                        item, request_text, action_result, None, event_key
+                        item, "Confirmed reminder: " + str(local_reminder["name"]),
+                        action_result, None, event_key
                     )
             elif any(entry.get("forced_agent") for entry in batch) and kind in {"action", "query"}:
                 # Spam deferral is deliberately conversation-only. Never let a
@@ -1693,31 +1778,36 @@ class DiscordAssistant:
                     "context_snapshot": prompt,
                 }
                 self._refresh_sensor()
-                # Never replay a side-effecting request automatically: even a timeout
-                # can occur after Home Assistant has executed the action.
-                attempts = 1 if is_action else self.retries
-                for attempt in range(attempts):
-                    try:
-                        models_attempted.append(agent)
-                        if self.active_request:
-                            self.active_request["stage"] = f"Primary model attempt {attempt + 1}/{attempts}"
-                            self.active_request["models_attempted"] = list(models_attempted)
-                            self._refresh_sensor()
-                        answer = await self._call(agent, prompt)
-                        break
-                    except Exception as err:  # noqa: BLE001
-                        failures.append(str(err))
-                        _LOGGER.warning(
-                            "Local assistant attempt %s failed: %s", attempt + 1, err
-                        )
-                        await asyncio.sleep(min(attempt + 1, 4))
-                if not answer and is_action:
-                    raise RuntimeError(
-                        "Home Assistant did not return a usable result. The action was not retried because "
-                        "it may have partially executed."
-                    )
-                if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
-                    model = self.agents["fallback_agent"]
+                # Never repeat the same model call. A fallback is a different
+                # configured agent, not a second paid attempt at an unchanged prompt.
+                primary_error = None
+                try:
+                    models_attempted.append(agent)
+                    if self.active_request:
+                        self.active_request["stage"] = "Primary model attempt 1/1"
+                        self.active_request["models_attempted"] = list(models_attempted)
+                        self._refresh_sensor()
+                    answer = await self._call(agent, prompt)
+                except Exception as err:  # noqa: BLE001
+                    primary_error = err
+                    failures.append(str(err))
+                    _LOGGER.warning("Primary assistant agent failed: %s", err)
+
+                fallback_agent = self.agents.get("fallback_agent", "")
+                # Actions may only move to the fallback when the primary failed
+                # with a recognised function/YAML configuration error. A timeout
+                # or generic exception could have happened after an action ran.
+                safe_action_fallback = bool(
+                    is_action and primary_error
+                    and is_function_configuration_error(str(primary_error))
+                )
+                allow_fallback = bool(
+                    not answer and fallback_agent and model != fallback_agent
+                    and (not is_action or safe_action_fallback)
+                )
+                if allow_fallback:
+                    model = fallback_agent
+                    agent = fallback_agent
                     role = "fallback"
                     prompt = self._prompt(batch, prior_history, summary, role, context_note)
                     if self.active_request:
@@ -1729,9 +1819,18 @@ class DiscordAssistant:
                         self._refresh_sensor()
                     models_attempted.append(model)
                     answer = await self._call(model, prompt)
+
+                if not answer and is_action:
+                    reason = str(primary_error or "The primary agent returned no usable result.")
+                    raise RuntimeError(
+                        "Home Assistant action was not confirmed. "
+                        + reason
+                        + (" The fallback agent was unavailable." if not fallback_agent else
+                           " The fallback was not used because the primary failure could have occurred after execution.")
+                    )
                 if not answer:
                     raise RuntimeError("; ".join(failures) or "All models failed")
-                if role == "operations":
+                if role in {"operations", "fallback"} and is_action:
                     operation_result = getattr(self, "_last_call_result", None)
                     action_result = action_result_snapshot(operation_result) if is_action else None
                     if is_action:
