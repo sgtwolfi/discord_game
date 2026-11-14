@@ -544,9 +544,11 @@ class DiscordAssistant:
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
               "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
-              "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt[:4000],
+              "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt,
               "action_result": action_result})
-            self.transcript=self.transcript[-100:];await self._save()
+            self.transcript=self.transcript[-100:]
+            self._trim_context_snapshots()
+            await self._save()
             self.hass.bus.async_fire("discord_game_assistant_error",{"conversation":item["key"],"error":self.error,"model":model})
         finally:
             if typing:
