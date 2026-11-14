@@ -1096,3 +1096,18 @@ def test_backfill_recovers_old_unconfirmed_action_from_transcript_once():
     assert len(record["pending_messages"]) == 1
     assert '"status":"NOT CONFIRMED:' in record["pending_messages"][0]["content"]
     assert len(record["action_event_keys"]) == 1
+
+
+
+def test_action_classifier_routes_colour_changes_to_operations():
+    action = assistant_module.ACTION
+    assert action.search("could you change the lights?")
+    assert action.search("i want them red")
+    assert action.search("set the rooms brightness to 50%")
+
+
+def test_live_state_classifier_routes_presence_questions_to_operations():
+    query = assistant_module.LIVE_STATE_QUERY
+    assert query.search("whats Harvey doing right now?")
+    assert query.search("what is the current status of the bedroom?")
+    assert query.search("is Harvey home?")
