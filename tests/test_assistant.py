@@ -112,7 +112,7 @@ def test_default_agent_prompts_are_northern_british_and_role_specific():
 
     assert "heavy dry sarcasm" in conversation
     assert "northern British" in conversation
-    assert "Do not impersonate" in conversation
+    assert "Never impersonate the owner" in conversation
     assert "100 percent" in operations
     assert "available fields" in operations
     assert "do not retry an action" in operations.lower()
