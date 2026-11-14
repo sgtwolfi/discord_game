@@ -197,6 +197,9 @@ def test_enqueue_applies_backpressure_instead_of_dropping_oldest_message():
     assistant.diagnostics_revision = 0
     assistant.enabled = True
     assistant.stopped = False
+    assistant.approved_users = {"456"}
+    assistant.group_channels = set()
+    assistant.transcript = []
     assistant.queue = [{"content": "earlier message"}]
     assistant.max_queue = 1
     assistant.wake = asyncio.Event()
