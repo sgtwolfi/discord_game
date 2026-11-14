@@ -835,3 +835,15 @@ def test_diagnostics_use_friendly_names_and_include_empty_friend_threads():
     assert result["contacts"][0]["name"] == "Max"
     assert result["conversations"][0]["label"] == "Max"
     assert result["conversations"][0]["message_count"] == 0
+
+
+def test_newly_approved_friend_can_open_an_empty_conversation():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.group_channels = set()
+    assistant.conversation_history_limit = 100
+    assistant.conversation_logs = {}
+    assistant.conversation_meta = {}
+
+    result = assistant.conversation_messages("dm:123")
+    assert result["messages"] == []
