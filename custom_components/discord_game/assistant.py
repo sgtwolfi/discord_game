@@ -49,10 +49,14 @@ def action_result_error(data):
     failed = result_data.get("failed") or []
     succeeded = result_data.get("success") or []
     if failed:
-        return "Home Assistant reported failed targets: " + ", ".join(
-            str(item.get("name") or item.get("id") or "unknown target")
-            for item in failed if isinstance(item, dict)
-        )
+        details = []
+        for item in failed:
+            if not isinstance(item, dict):
+                continue
+            target = str(item.get("name") or item.get("id") or item.get("entity_id") or "unknown target")
+            reason = item.get("error") or item.get("message")
+            details.append(target + (": " + str(reason) if reason else ""))
+        return "Home Assistant reported failed targets: " + ", ".join(details)
     if not succeeded:
         return "Home Assistant did not report any successfully completed targets."
     return None
@@ -81,14 +85,19 @@ def action_result_snapshot(data):
         result_data = {}
 
     def targets(items):
-        return [
-            {
+        result = []
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            target = {
                 "name": item.get("name"),
                 "id": item.get("id") or item.get("entity_id"),
             }
-            for item in items or []
-            if isinstance(item, dict)
-        ]
+            reason = item.get("error") or item.get("message")
+            if reason:
+                target["error"] = str(reason)[:500]
+            result.append(target)
+        return result
 
     return {
         "response_type": response.get("response_type"),
