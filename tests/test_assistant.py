@@ -479,19 +479,33 @@ def test_admin_memory_correction_has_a_size_limit():
 
 
 
-def test_memory_without_agent_retains_pending_messages():
+def test_memory_consolidates_without_a_configured_memory_model():
+    saved = []
     assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
     assistant.friends = {"123": {
         "summary": "",
         "messages": [{"role": "user", "content": "hello"}],
         "pending_messages": [{"role": "user", "content": "hello"}],
     }}
     assistant.agents = {"memory_agent": ""}
+    assistant.memory_batch_messages = 5
+    assistant.history_limit = 2
+    assistant.contact_names = {"123": "Max"}
+    assistant.last_memory_consolidation = None
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=lambda *args, **kwargs: None))
 
+    async def save():
+        saved.append(True)
+
+    assistant._save = save
     result = asyncio.run(assistant._compress("123"))
 
-    assert result is False
-    assert len(assistant.friends["123"]["pending_messages"]) == 1
+    assert result is True
+    assert assistant.friends["123"]["pending_messages"] == []
+    assert assistant.friends["123"]["summary"] == ""
+    assert saved
 
 
 def test_memory_consolidation_uses_only_explicit_facts_and_keeps_unprocessed_evidence():
