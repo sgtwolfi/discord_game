@@ -3,10 +3,7 @@
 import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.homeassistant.const import DATA_EXPOSED_ENTITIES
-from homeassistant.components.homeassistant.exposed_entities import (
-    async_expose_entity,
-    async_should_expose,
-)
+from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -92,7 +89,11 @@ async def websocket_get_capabilities(
             "name": str(name),
             "domain": entity_id.split(".", 1)[0],
             "state": state.state,
-            "exposed": async_should_expose(hass, "conversation", entity_id),
+            # Read the configured/default exposure without persisting defaults
+            # for every entity merely because the admin opened this panel.
+            "exposed": hass.data[DATA_EXPOSED_ENTITIES].async_get_should_expose(
+                "conversation", entity_id
+            ),
         })
     entities.sort(key=lambda item: (item["domain"] != "script", item["domain"], item["name"].casefold()))
     connection.send_result(
