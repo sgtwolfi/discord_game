@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import CONF_MEMBERS, DOMAIN
 from .local_tasks import parse_local_reminder
+from .local_status import answer_local_status
 
 _LOGGER = logging.getLogger(__name__)
 MAX_PENDING_MESSAGES = 200
@@ -54,6 +55,7 @@ ACTION=re.compile(
 LIVE_STATE_QUERY = re.compile(
     r"\b(what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
     r"what(?:'s| is) the (?:current )?(?:status|state)|current status|"
+    r"what time is it|current time|what's the time|whats the time|time right now|weather|forecast|temperature outside|"
     r"is .{0,40} (?:home|away|online|offline|on|off)|"
     r"are .{0,40} (?:on|off|set to)|what(?:'s| is) happening right now|"
     r"check (?:the )?(?:status|state|lights|temperature|presence)|"
