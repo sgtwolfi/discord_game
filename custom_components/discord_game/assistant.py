@@ -543,6 +543,7 @@ class DiscordAssistant:
                 await self._send(item["channel"], notice)
             except Exception:_LOGGER.exception("Could not send failure notice")
             self.transcript.append({"timestamp":datetime.now(UTC).isoformat(),"conversation":item["key"],"sender":item["sender_name"],
+              "sender_ids":list(dict.fromkeys(x["sender_id"] for x in batch)),"channel_id":item["channel_id"],"is_dm":item["is_dm"],
               "user_messages":[x["content"] for x in batch],"assistant":None,"error":self.error,"model":model,
               "estimated_input_tokens":len(prompt)//4,"context_snapshot":prompt,
               "action_result": action_result})
