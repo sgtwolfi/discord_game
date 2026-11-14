@@ -47,7 +47,7 @@ Events:
 
 ## Memory behaviour
 
-Memory is deliberately conservative and does not ask a small language model to invent a summary. It stores explicit “remember this” statements, clear first-person preferences/favourites/work facts, and structured Home Assistant action records. Ordinary banter, assistant replies, guesses, and unverified device claims are not promoted to durable memory. The memory-agent selector and old custom memory prompt remain in configuration for compatibility, but are not used by this evidence-only memory path.
+Memory is deliberately conservative and does not ask a small language model to invent a summary. It stores explicit “remember this” statements, clear first-person preferences/favourites/work facts, and structured Home Assistant action records. Ordinary banter, assistant replies, guesses, and unverified device claims are not promoted to durable memory. The unused generative memory-agent selector and memory prompt have been removed from the configuration interface. Existing saved values are ignored; memory no longer consumes a model call.
 
 
 ## Important limitations
