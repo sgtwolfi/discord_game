@@ -109,7 +109,7 @@ def action_result_error(data):
         return "Home Assistant reported failed targets: " + ", ".join(details)
     if not succeeded:
         return (
-            "Home Assistant returned an action response but no successful or failed targets. "
+            "Home Assistant did not report any successfully completed targets and returned no failed-target details. "
             "The agent may not have issued a supported device-control tool call, or the integration "
             "did not return structured target results."
         )
@@ -738,6 +738,7 @@ class DiscordAssistant:
             return rec.setdefault("messages",[]),rec.get("summary","")
         return self.groups[item["key"]],""
     def _prompt(self, batch, history, summary, role="conversation", context_note=""):
+        """Build a bounded prompt while preserving the live request and core rules."""
         lines = [
             "You are GHOST: Generative Home Optimisation & Synchronisation Technology, the owner's assistant.",
             "You are not the owner and must never impersonate them or write as though you are them.",
@@ -750,16 +751,14 @@ class DiscordAssistant:
         ]
         if role == "operations":
             lines.append(
-                "You are the operations agent. Carry out the requested Home Assistant task using only "
-                "the tools exposed to you. Check relevant state when needed, make the smallest safe change, "
-                "and wait for tool results. Never substitute a promise or instructions for an action the "
-                "user asked you to perform. Report exactly what succeeded and what failed."
+                "You are the operations agent. Execute the requested Home Assistant task using only exposed tools. "
+                "Identify the exact target, call the correct tool, read its result, and report only confirmed successes. "
+                "Never invent entities, scripts, services, fields or results. Never blindly repeat a possibly partial action."
             )
         elif role == "advanced":
             lines.append(
-                "You are the advanced reasoning agent for difficult research, comparisons, debugging and "
-                "multi-step planning. Be thorough, distinguish verified facts from assumptions, and do not "
-                "claim Home Assistant actions were performed unless the operations tool actually did them."
+                "You are GHOST's fallback specialist. Break difficult work into explicit steps, verify facts and tool "
+                "results, preserve the user's intent, and never claim an action succeeded without confirmation."
             )
         else:
             lines.append(
@@ -769,25 +768,18 @@ class DiscordAssistant:
 
         custom_prompt = str(getattr(self, "config", {}).get(f"{role}_system_prompt", "") or "").strip()
         effective_prompt = custom_prompt or DEFAULT_AGENT_PROMPTS.get(role, "")
+        optional_sections = []
         if effective_prompt:
-            lines.append(
-                ("Administrator override instructions for this role. These do not override "
-                 "the safety, privacy, action-verification or identity rules above:\n"
-                 if custom_prompt else "Built-in default instructions for this role:\n")
-                + effective_prompt[:min(6000, self.budget // 3)]
+            optional_sections.append(
+                "Additional administrator instructions for this role:\n" + effective_prompt[:min(6000, self.budget // 3)]
             )
-
         if context_note:
-            lines.append(
-                "Administrator-provided context for this conversation:\n"
-                + str(context_note)[:min(4000, self.budget // 10)]
+            optional_sections.append(
+                "Administrator-provided context for this conversation:\n" + str(context_note)[:min(4000, self.budget // 10)]
             )
-
-        summary_limit = min(2500, max(0, self.budget // 10))
-        if summary and summary_limit:
-            lines.append(
-                "Private memory for this approved DM contact:\n"
-                + str(summary)[:summary_limit]
+        if summary:
+            optional_sections.append(
+                "Private memory for this approved DM contact:\n" + str(summary)[:min(2500, max(0, self.budget // 10))]
             )
 
         previous = [
@@ -798,16 +790,29 @@ class DiscordAssistant:
         header = "Conversation, oldest first:\n"
 
         def build_prompt():
-            return "\n\n".join(lines + [header + "\n".join(previous + current)])
+            return "\n\n".join(lines + optional_sections + [header + "\n".join(previous + current)])
 
-        # Remove the oldest context first, while preserving the live request.
+        # Old conversation history is the first thing discarded.
         while previous and len(build_prompt()) > self.budget:
             previous.pop(0)
 
+        # Then trim optional context, keeping its heading and a useful prefix.
+        # Memory and admin context are retained where the budget permits.
+        for index in range(len(optional_sections) - 1, -1, -1):
+            if len(build_prompt()) <= self.budget:
+                break
+            section = optional_sections[index]
+            heading, separator, content = section.partition("\n")
+            excess = len(build_prompt()) - self.budget
+            minimum_content = min(32, len(content))
+            keep = max(minimum_content, len(content) - excess)
+            optional_sections[index] = heading + separator + content[:keep]
+            if len(build_prompt()) > self.budget and keep <= minimum_content:
+                optional_sections[index] = heading
+
         if len(build_prompt()) > self.budget:
-            fixed_length = len("\n\n".join(lines)) + 2 + len(header)
-            fixed_length += sum(len(line) + 1 for line in previous)
-            allowance = max(1, self.budget - fixed_length)
+            fixed = "\n\n".join(lines + optional_sections + [header])
+            allowance = max(1, self.budget - len(fixed) - sum(len(line) + 1 for line in previous))
             combined_current = "\n".join(current)
             if allowance > 80:
                 marker = "\n[Middle of oversized request omitted]\n"
@@ -818,7 +823,9 @@ class DiscordAssistant:
             else:
                 current = [combined_current[:allowance]]
 
-        return build_prompt()
+        prompt = build_prompt()
+        # The core prompt itself is deliberately kept concise enough for small local models.
+        return prompt[:self.budget]
 
     async def _process(self, batch):
         self.active = True
