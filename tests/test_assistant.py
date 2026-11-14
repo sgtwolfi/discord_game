@@ -829,7 +829,7 @@ def test_group_relevance_gate_uses_fallback_after_malformed_primary_output():
     batch = [{
         "sender_name": "Max",
         "content": "Can you help?",
-        "directly_addressed": True,
+        "directly_addressed": False,
     }]
 
     result = asyncio.run(assistant._should_respond_to_group(batch, []))
@@ -1822,6 +1822,96 @@ def test_local_status_intent_recognises_time_weather_and_informal_presence_quest
     assert assistant_module.request_kind("Can you tell me what ahrveys doing?") == "query"
     assert assistant_module.request_kind("The weather is rubbish today") == "conversation"
 
+
+
+
+def test_followup_classifier_recognises_context_dependent_replies():
+    assert assistant_module.is_contextual_followup("you fixed yourself?")
+    assert assistant_module.is_contextual_followup("what do you mean?")
+    assert assistant_module.is_contextual_followup("and?")
+    assert not assistant_module.is_contextual_followup("Anyone fancy a game tonight?")
+    assert not assistant_module.is_contextual_followup("x" * 300)
+
+
+def test_group_relevance_continues_recent_same_sender_thread_without_model_call():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("Should continue the recent thread without another relevance call")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "so what cunt, you fixed yourself yet?", "timestamp": "2026-11-14T11:44:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "What do you need help with?", "timestamp": "2026-11-14T11:45:00+00:00"},
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:45:10+00:00", "directly_addressed": False}],
+        history,
+    ))
+    assert result[0] is True
+    assert "follow-up" in result[1]
+
+
+def test_group_continuity_does_not_cross_speakers_or_expire():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 60
+    assistant.group_relevance_agent = ""
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def reject(*args):
+        return '{"respond": false, "reason": "unrelated"}'
+
+    assistant._call = reject
+    history = [{"role": "assistant", "sender": "GHOST", "content": "What do you need help with?", "timestamp": "2026-11-14T11:45:00+00:00"}]
+    other = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Max", "sender_id": "456", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:45:10+00:00"}], history))
+    expired = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:50:00+00:00"}], history))
+    assert other[0] is False
+    assert expired[0] is False
+
+
+def test_memory_deduplication_is_case_and_punctuation_insensitive():
+    result = assistant_module.deduplicate_memory_lines([
+        "Preference: likes sci-fi films",
+        "- preference: likes sci-fi films!",
+        "Work: at a warehouse",
+    ])
+    assert result == ["- Preference: likes sci-fi films", "- Work: at a warehouse"]
+
+
+def test_memory_replaceable_keys_supersede_work_and_same_favourite_category():
+    assert assistant_module.replaceable_memory_key("Work: at a warehouse") == "work"
+    assert assistant_module.replaceable_memory_key("Favourite: film — Interstellar") == "favourite:film"
+
+
+def test_memory_purge_scopes_preserve_unselected_data():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {"123": {"summary": "Preference: likes tea", "pending_messages": [{"content": "remember this"}], "messages": [{"content": "hello"}]}}
+    assistant.conversation_logs = {"dm:123": [{"content": "hello"}], "guild:1:2": [{"content": "group"}]}
+    assistant.transcript = [{"is_dm": True, "sender_ids": ["123"]}, {"is_dm": False, "sender_ids": []}]
+    assistant._save = lambda: asyncio.sleep(0)
+    assistant._refresh_sensor = lambda: None
+    asyncio.run(assistant.purge_friend_memory("123", "facts"))
+    assert assistant.friends["123"]["summary"] == ""
+    assert assistant.friends["123"]["pending_messages"]
+    assert assistant.conversation_logs["dm:123"]
+    asyncio.run(assistant.purge_friend_memory("123", "history"))
+    assert assistant.friends["123"]["pending_messages"]
+    assert "dm:123" not in assistant.conversation_logs
+    assert len(assistant.transcript) == 1
+    asyncio.run(assistant.purge_friend_memory("123", "all"))
+    assert "123" not in assistant.friends
 
 
 def test_api_mode_mention_only_setting_prevents_untrusted_group_text_reaching_api_agent():
