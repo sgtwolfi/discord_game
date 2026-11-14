@@ -260,6 +260,58 @@ class DiscordAssistant:
                 return True
         return False
 
+    async def replay_transcript(self, timestamp, conversation):
+        """Requeue the original user messages from one retained transcript entry."""
+        entry = next(
+            (
+                item for item in reversed(self.transcript)
+                if item.get("timestamp") == str(timestamp)
+                and item.get("conversation") == str(conversation)
+                and item.get("user_messages")
+            ),
+            None,
+        )
+        if entry is None:
+            raise ValueError("Transcript entry was not found or has no user messages")
+        messages = entry["user_messages"]
+        if len(self.queue) + len(messages) > self.max_queue:
+            raise RuntimeError("Assistant queue is full")
+        is_dm = bool(entry.get("is_dm"))
+        sender_ids = entry.get("sender_ids") or []
+        if is_dm:
+            if not sender_ids:
+                raise ValueError("Transcript does not contain the Discord user ID")
+            user = await self.bot.fetch_user(int(sender_ids[0]))
+            channel = await user.create_dm()
+        else:
+            channel = self.bot.get_channel(int(entry["channel_id"])) or await self.bot.fetch_channel(int(entry["channel_id"]))
+        now = datetime.now(UTC)
+        sender_name = entry.get("sender") or "Replay"
+        sender_id = str(sender_ids[0]) if sender_ids else "replay"
+        for index, content in enumerate(messages):
+            queued_at = now.timestamp() + index / 1000
+            self.queue.append({
+                "key": str(conversation),
+                "message_id": f"replay-{now.timestamp()}-{index}",
+                "is_dm": is_dm,
+                "sender_id": sender_id,
+                "sender_name": sender_name,
+                "content": str(content),
+                "timestamp": now.isoformat(),
+                "sort": queued_at,
+                "channel_id": str(channel.id),
+                "channel": channel,
+            })
+        self.queue.sort(key=lambda item: item["sort"])
+        self.wake.set()
+        self.hass.bus.async_fire("discord_game_assistant_replayed", {
+            "conversation": str(conversation),
+            "timestamp": str(timestamp),
+            "messages": len(messages),
+        })
+        self._refresh_sensor()
+        return len(messages)
+
     async def pause(self):
         """Stop starting new replies while allowing an active reply to finish."""
         self.paused = True
