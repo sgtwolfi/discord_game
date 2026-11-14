@@ -1446,10 +1446,13 @@ class DiscordAssistant:
                 event_key,
             )
 
-    async def _consolidate_pending_memories(self):
+    async def _consolidate_pending_memories(self, user_ids=None):
         """Persist conservative, evidence-backed memories without model-generated prose."""
         completed = 0
+        selected_users = {str(user_id) for user_id in user_ids} if user_ids is not None else None
         for user_id, record in list(self.friends.items()):
+            if selected_users is not None and str(user_id) not in selected_users:
+                continue
             pending = list(record.get("pending_messages") or [])
             if not pending:
                 continue
@@ -1507,16 +1510,11 @@ class DiscordAssistant:
         return completed
 
     async def _compress(self, user_id):
-        """Compatibility helper: consolidate one contact's pending memory immediately."""
+        """Compatibility helper: consolidate one contact without touching other records."""
         record = self.friends.get(str(user_id))
         if not record or not record.get("pending_messages"):
             return False
-        original = self.friends
-        self.friends = {str(user_id): record}
-        try:
-            return bool(await self._consolidate_pending_memories())
-        finally:
-            self.friends = original
+        return bool(await self._consolidate_pending_memories({str(user_id)}))
 
     async def _send(self,channel,content):
         content=str(content).strip()
