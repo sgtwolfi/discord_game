@@ -1015,3 +1015,55 @@ def test_newly_approved_friend_can_open_an_empty_conversation():
 
     result = assistant.conversation_messages("dm:123")
     assert result["messages"] == []
+
+
+
+def test_memory_default_is_neutral_and_forbids_storytelling():
+    prompt = assistant_module.DEFAULT_AGENT_PROMPTS["memory"].lower()
+    assert "plain-text facts only" in prompt
+    assert "no ghost personality" in prompt
+    assert "never turn a guess" in prompt
+
+
+def test_action_outcome_memory_records_unconfirmed_not_success():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    item = {"is_dm": True, "sender_id": "123"}
+    assistant._capture_action_outcome_for_memory(
+        item,
+        "Set the room lights to maximum brightness",
+        {"response_type": "action_done", "success": [], "failed": []},
+        "No successful targets were reported",
+    )
+    event = assistant.friends["123"]["pending_messages"][0]
+    assert event["role"] == "system_event"
+    assert '"status":"NOT CONFIRMED:' in event["content"]
+    assert '"success":[]' in event["content"]
+    assert "Set the room lights to maximum brightness" in event["content"]
+
+
+def test_action_outcome_memory_records_confirmed_success_only_from_target_list():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant._capture_action_outcome_for_memory(
+        {"is_dm": True, "sender_id": "123"},
+        "Turn on the bedroom light",
+        {"response_type": "action_done", "success": [{"id": "light.bedroom"}], "failed": []},
+    )
+    event = assistant.friends["123"]["pending_messages"][0]
+    assert '"status":"CONFIRMED:' in event["content"]
+
+
+def test_action_outcome_memory_ignores_unapproved_and_group_messages():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant._capture_action_outcome_for_memory(
+        {"is_dm": True, "sender_id": "456"}, "action", None
+    )
+    assistant._capture_action_outcome_for_memory(
+        {"is_dm": False, "sender_id": "123"}, "action", None
+    )
+    assert assistant.friends == {}
