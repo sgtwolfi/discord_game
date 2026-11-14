@@ -3,7 +3,7 @@ import asyncio
 import logging
 import re
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.storage import Store
@@ -11,7 +11,7 @@ from homeassistant.helpers.storage import Store
 from .const import DOMAIN
 
 _LOGGER=logging.getLogger(__name__)
-ACTION=re.compile(r"\b(remind|timer|alarm|turn on|turn off|switch on|switch off|activate|deactivate|lock|unlock|open the|close the)\b",re.I)
+ACTION=re.compile(r"\b(remind|timer|alarm|turn on|turn off|switch on|switch off|activate|deactivate|lock|unlock|open the|close the)\b",re.IGNORECASE)
 
 def speech(data):
     response=data.get("response",data) if isinstance(data,dict) else {}
@@ -173,14 +173,14 @@ class DiscordAssistant:
         try:
             for attempt in range(self.retries):
                 try:answer=await self._call(agent,prompt);break
-                except Exception as err:
+                except Exception as err:  # noqa: BLE001 - retry any conversation service failure
                     failures.append(str(err));_LOGGER.warning("Local assistant attempt %s failed: %s",attempt+1,err)
                     await asyncio.sleep(min(attempt+1,4))
             if not answer and self.agents["fallback_agent"]:
                 model=self.agents["fallback_agent"];answer=await self._call(model,prompt)
             if not answer:raise RuntimeError("; ".join(failures) or "All models failed")
             await self._send(item["channel"],answer)
-            now=datetime.now(timezone.utc).isoformat()
+            now=datetime.now(UTC).isoformat()
             for msg in batch:history.append({"role":"user","content":msg["content"],"sender_id":msg["sender_id"],"timestamp":msg["timestamp"]})
             history.append({"role":"assistant","content":answer,"timestamp":now,"model":model})
             if item["is_dm"]:
