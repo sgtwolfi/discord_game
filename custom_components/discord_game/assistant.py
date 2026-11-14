@@ -205,7 +205,7 @@ def sanitize_legacy_memory_summary(summary):
     for line in str(summary or "").splitlines():
         value = line.strip().lstrip("-• ").strip()
         if value.casefold().startswith(allowed):
-            retained.append("- " + value)
+            retained.append(value)
     return "\n".join(retained).strip()
 
 
