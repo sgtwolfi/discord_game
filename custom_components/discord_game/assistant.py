@@ -197,7 +197,7 @@ class DiscordAssistant:
                   "timestamp":item["timestamp"],
                   "message":item["content"][:1000],
               }
-              for item in self.queue[:20]
+              for item in self.queue
           ],
           "transcript":self.transcript[-20:],
           "active_request": self.active_request,
