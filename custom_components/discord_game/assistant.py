@@ -295,6 +295,36 @@ def action_retry_targets(data):
     ))
 
 
+def merge_action_retry_results(first_result, retry_result):
+    """Merge one retry result without ever re-counting the first attempt's successes."""
+    if not action_result_retryable(first_result):
+        return None
+    retry_response = (
+        retry_result.get("response", retry_result)
+        if isinstance(retry_result, dict) else {}
+    )
+    if not isinstance(retry_response, dict) or retry_response.get("response_type") != "action_done":
+        return None
+    retry_data = retry_response.get("data")
+    if not isinstance(retry_data, dict):
+        return None
+    retry_success = retry_data.get("success") or []
+    retry_failed = retry_data.get("failed") or []
+    if not isinstance(retry_success, list) or not isinstance(retry_failed, list):
+        return None
+    first_response = first_result.get("response", first_result)
+    first_data = first_response.get("data") or {}
+    return {
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": list(first_data.get("success") or []) + retry_success,
+                "failed": retry_failed,
+            },
+        },
+    }
+
+
 def action_result_snapshot(data):
     """Keep a small, safe audit summary of Home Assistant's action result."""
     response = data.get("response", data) if isinstance(data, dict) else {}
@@ -1299,13 +1329,9 @@ class DiscordAssistant:
                     verification_error = action_result_error(operation_result)
                     if verification_error and action_result_retryable(operation_result):
                         retry_targets = action_retry_targets(operation_result)
-                        retry_response = operation_result.get("response", operation_result)
-                        retry_data = retry_response.get("data") or {}
-                        first_success = list(retry_data.get("success") or [])
-                        first_failed = list(retry_data.get("failed") or [])
                         retry_prompt = (
                             prompt
-                            + "\\n\\nCONTROLLED ACTION RETRY — ONE ATTEMPT ONLY.\\n"
+                            + "\n\nCONTROLLED ACTION RETRY — ONE ATTEMPT ONLY.\n"
                             + "Your previous Home Assistant response explicitly reported these targets as failed: "
                             + ", ".join(retry_targets)
                             + ". The successful targets from the first attempt have already completed and MUST NOT "
@@ -1323,33 +1349,18 @@ class DiscordAssistant:
                         models_attempted.append(agent)
                         retry_answer = await self._call(agent, retry_prompt)
                         retry_result = getattr(self, "_last_call_result", None)
-                        retry_snapshot = action_result_snapshot(retry_result)
-                        if retry_snapshot:
-                            action_result = {
-                                "response_type": retry_snapshot.get("response_type"),
-                                "success": first_success + retry_snapshot.get("success", []),
-                                "failed": retry_snapshot.get("failed", []),
-                            }
-                            # Keep the merged result in the same shape consumed by
-                            # action verification and durable memory.
-                            merged_result = {
-                                "response": {
-                                    "response_type": "action_done",
-                                    "data": {
-                                        "success": action_result["success"],
-                                        "failed": action_result["failed"],
-                                    },
-                                },
-                            }
+                        merged_result = merge_action_retry_results(operation_result, retry_result)
+                        if merged_result is not None:
                             operation_result = merged_result
+                            action_result = action_result_snapshot(operation_result)
                             verification_error = action_result_error(operation_result)
+                            if not verification_error:
+                                answer = retry_answer or answer
                         else:
                             verification_error = (
                                 "The controlled retry did not return a structured Home Assistant action result. "
                                 "The original failed targets remain unconfirmed."
                             )
-                        if not verification_error:
-                            answer = retry_answer or answer
                     if verification_error:
                         raise RuntimeError("Action not confirmed: " + verification_error)
                     event_key = "|".join((
