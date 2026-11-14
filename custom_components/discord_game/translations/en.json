@@ -29,7 +29,7 @@
     "step": {
       "init": {
         "title": "Discord Game and GHOST Assistant Options",
-        "description": "Existing Discord settings are retained. Configure assistant agents only when you are ready to enable the assistant.",
+        "description": "Choose the conversation, operations, memory and fallback agents here. Fine-tuning, queue behaviour and editable system prompts are managed in the GHOST sidebar panel.",
         "data": {
           "access_token": "Discord Bot access token",
           "image_format": "Image format",
@@ -56,7 +56,6 @@
       "auth": "Provided Discord Bot access token is not valid.",
       "assistant_agent_required": "Select a conversation agent before enabling the Discord assistant.",
       "discord_api": "Discord could not load the server member/channel list. Check the Home Assistant logs and Discord bot permissions, then try again."
-    },
-    "description": "Model assignments stay here. Advanced tuning and system prompts are managed from the GHOST sidebar panel."
+    }
   }
 }
