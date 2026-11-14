@@ -576,7 +576,7 @@ class DiscordAssistant:
             return
         if any(
             str(message_item.get("message_id") or "") == message_id
-            for transcript_item in self.transcript
+            for transcript_item in getattr(self, "transcript", [])
             for message_item in transcript_item.get("messages", [])
         ):
             return
@@ -1186,7 +1186,7 @@ class DiscordAssistant:
                 "is_dm": item["is_dm"],
                 "user_messages": [x["content"] for x in batch],
                 "messages": [
-                    {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "directly_addressed": x.get("directly_addressed", False)}
+                    {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "message_id": x.get("message_id"), "directly_addressed": x.get("directly_addressed", False)}
                     for x in batch
                 ],
                 "assistant": answer,
