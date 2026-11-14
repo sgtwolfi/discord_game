@@ -512,6 +512,11 @@ class DiscordAssistant:
                 except Exception as err:  # noqa: BLE001 - retry any conversation service failure
                     failures.append(str(err));_LOGGER.warning("Local assistant attempt %s failed: %s",attempt+1,err)
                     await asyncio.sleep(min(attempt+1,4))
+            if not answer and role == "operations" and getattr(self, "_last_call_result", None) is None:
+                raise RuntimeError(
+                    "The operations agent failed before returning a result. I have not retried automatically "
+                    "because the requested action may have partially executed."
+                )
             if not answer and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
                 model=self.agents["fallback_agent"]
                 if self.active_request:
