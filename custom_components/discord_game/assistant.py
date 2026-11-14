@@ -206,7 +206,7 @@ class DiscordAssistant:
                         self.contact_names.setdefault(user_id, user_id)
             for channel_id in self.group_channels:
                 try:
-                    channel = self.bot.get_channel(int(channel_id)) or await self.bot.fetch_channel(int(channel_id))
+                    channel = bot.get_channel(int(channel_id)) if bot else None or await self.bot.fetch_channel(int(channel_id))
                     key = f"guild:{channel.guild.id}:{channel_id}"
                     self.conversation_meta.setdefault(key, {
                         "label": channel.name, "subtitle": channel.guild.name,
@@ -238,7 +238,7 @@ class DiscordAssistant:
             "conversation_meta": self.conversation_meta,
         })
     def _display_name(self, user_id):
-        return self.contact_names.get(str(user_id), str(user_id))
+        return getattr(self, "contact_names", {}).get(str(user_id), str(user_id))
 
     def conversation_messages(self, key):
         """Return a bounded, chronological transcript for one approved conversation."""
@@ -259,7 +259,10 @@ class DiscordAssistant:
 
     def diagnostics(self):
         conversations = []
-        keys = {key for key in set(self.conversation_logs) | set(self.conversation_meta) if not key.startswith("dm:") or key[3:] in self.approved_users}
+        logs = getattr(self, "conversation_logs", {})
+        meta_map = getattr(self, "conversation_meta", {})
+        bot = getattr(self, "bot", None)
+        keys = {key for key in set(logs) | set(meta_map) if not key.startswith("dm:") or key[3:] in self.approved_users}
         keys.update(f"dm:{user_id}" for user_id in self.approved_users)
         for channel_id in self.group_channels:
             channel = self.bot.get_channel(int(channel_id))
@@ -267,8 +270,8 @@ class DiscordAssistant:
             if guild_id:
                 keys.add(f"guild:{guild_id}:{channel_id}")
         for key in keys:
-            meta = self.conversation_meta.get(key, {})
-            messages = self.conversation_logs.get(key, [])
+            meta = meta_map.get(key, {})
+            messages = logs.get(key, [])
             conversations.append({
                 "key": key,
                 "kind": "friend" if key.startswith("dm:") else "group",
