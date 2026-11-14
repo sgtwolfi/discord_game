@@ -564,6 +564,22 @@ class DiscordAssistant:
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
         if not self.enabled or self.stopped:
             return
+        sender_id = str(sender_id)
+        channel_id = str(message.channel.id)
+        if is_dm:
+            if sender_id not in self.approved_users:
+                return
+        elif channel_id not in self.group_channels:
+            return
+        message_id = str(message.id)
+        if any(item.get("message_id") == message_id for item in self.queue):
+            return
+        if any(
+            str(message_item.get("message_id") or "") == message_id
+            for transcript_item in self.transcript
+            for message_item in transcript_item.get("messages", [])
+        ):
+            return
         content = (message.content or "").strip()
         if not content:
             return
@@ -609,13 +625,13 @@ class DiscordAssistant:
             and bot_user_id
         )
         directly_addressed = bool(is_dm or mentioned_bot or replied_to_bot)
-        self.queue.append({"key":key,"message_id":str(message.id),"is_dm":is_dm,"sender_id":str(sender_id),"sender_name":sender_name,
+        self.queue.append({"key":key,"message_id":message_id,"is_dm":is_dm,"sender_id":sender_id,"sender_name":sender_name,
           "content":content,"timestamp":message.created_at.isoformat(),
           "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel,
           "directly_addressed":directly_addressed})
         self.queue.sort(key=lambda x:x["sort"])
         self.wake.set()
-        self.hass.bus.async_fire("discord_game_assistant_queued",{"sender_id":str(sender_id),"channel_id":str(message.channel.id),"is_dm":is_dm})
+        self.hass.bus.async_fire("discord_game_assistant_queued",{"sender_id":sender_id,"channel_id":channel_id,"is_dm":is_dm})
         self._refresh_sensor()
     async def _run(self):
         """Process replies and run memory consolidation after a genuine idle period."""
@@ -1025,7 +1041,7 @@ class DiscordAssistant:
                         "is_dm": False,
                         "user_messages": [x["content"] for x in batch],
                         "messages": [
-                            {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "directly_addressed": x.get("directly_addressed", False)}
+                            {"sender": x["sender_name"], "sender_id": x["sender_id"], "content": x["content"], "message_id": x.get("message_id"), "directly_addressed": x.get("directly_addressed", False)}
                             for x in batch
                         ],
                         "assistant": None,
