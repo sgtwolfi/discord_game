@@ -171,6 +171,24 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
         current_token = self._get_current(CONF_ACCESS_TOKEN)
         if user_input is not None:
             self.options_data = dict(user_input)
+            # Keep advanced panel settings when saving the integration's model selectors.
+            advanced_defaults = {
+                "fallback_after_failures": 2,
+                "queue_debounce_seconds": 2.5,
+                "max_context_messages": 20,
+                "context_budget_chars": 10000,
+                "history_limit": 60,
+                "typing_enabled": True,
+                "assistant_group_channels": "",
+                "conversation_system_prompt": "",
+                "operations_system_prompt": "",
+                "advanced_system_prompt": "",
+                "memory_system_prompt": "",
+            }
+            for key, default in advanced_defaults.items():
+                self.options_data.setdefault(key, self._get_current(key, default))
+            if self.options_data.get("assistant_enabled") and not str(self.options_data.get("conversation_agent", "")).strip():
+                errors["base"] = "assistant_agent_required"
             # Saving assistant settings must not trigger a needless Discord API
             # login/member scan. That scan can fail on privileged intents or
             # transient Discord API errors and used to surface as HA "Unknown error".
