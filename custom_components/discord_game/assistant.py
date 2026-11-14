@@ -39,12 +39,6 @@ DEFAULT_AGENT_PROMPTS = {
         "capabilities actually available to you. Do not claim tools ran unless they did. Never repeat "
         "a side-effecting action that may already have executed."
     ),
-    "memory": (
-        "JOB: Maintain factual notes about this contact. Output short plain-text facts only. "
-        "No GHOST personality, jokes, insults, stories, roleplay, advice or imagined intentions. "
-        "Store only facts supported by the supplied messages or verified system records. "
-        "Never turn a guess, emotion, temporary event or failed action into a permanent trait or instruction."
-    ),
 }
 
 ACTION=re.compile(
@@ -286,7 +280,7 @@ class DiscordAssistant:
     def __init__(self,hass,entry_id,config,bot):
         self.hass,self.entry_id,self.config,self.bot=hass,entry_id,config,bot
         self.enabled=bool(config.get("assistant_enabled",False))
-        self.agents={k:str(config.get(k,"")).strip() for k in ("conversation_agent","operations_agent","memory_agent","fallback_agent")}
+        self.agents={k:str(config.get(k,"")).strip() for k in ("conversation_agent","operations_agent","fallback_agent")}
         self.retries=max(1,min(5,int(config.get("fallback_after_failures",2))))
         self.delay=max(.5,min(15,float(config.get("queue_debounce_seconds",2.5))))
         self.limit=max(4,min(80,int(config.get("max_context_messages",12))))
@@ -537,7 +531,6 @@ class DiscordAssistant:
               "conversation_system_prompt": getattr(self, "config", {}).get("conversation_system_prompt", ""),
               "operations_system_prompt": getattr(self, "config", {}).get("operations_system_prompt", ""),
               "advanced_system_prompt": getattr(self, "config", {}).get("advanced_system_prompt", ""),
-              "memory_system_prompt": getattr(self, "config", {}).get("memory_system_prompt", ""),
               "default_prompts": DEFAULT_AGENT_PROMPTS,
           }}
     def public_attributes(self):
