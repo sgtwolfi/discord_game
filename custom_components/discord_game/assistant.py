@@ -195,7 +195,7 @@ class DiscordAssistant:
                   "sender_id":item["sender_id"],
                   "channel_id":item["channel_id"],
                   "timestamp":item["timestamp"],
-                  "message":item["content"][:1000],
+                  "message":item["content"][:2000],
               }
               for item in self.queue
           ],
