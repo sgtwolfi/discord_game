@@ -591,6 +591,8 @@ class DiscordAssistant:
         for pos in range(0,len(content),1900):await channel.send(content[pos:pos+1900])
     async def send_manual(self,*,message,user_id=None,channel_id=None):
         if not message.strip():raise ValueError("Message cannot be empty")
+        if user_id and channel_id:
+            raise ValueError("Provide either a Discord user ID or channel ID, not both")
         if user_id:
             if str(user_id) not in self.approved_users:
                 raise ValueError("This Discord user is not on the approved GHOST contact list")
