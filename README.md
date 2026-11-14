@@ -33,6 +33,7 @@ A GHOST entry is added to the Home Assistant sidebar. The admin panel shows the 
 Services:
 - `discord_game.send_message`: manually send as the bot; supply `message` and either `user_id` or `channel_id`.
 - `discord_game.clear_friend_memory`: clear one friend's persistent DM memory using their Discord user ID.
+- `discord_game.set_friend_memory`: replace a contact's durable memory with an administrator correction.
 - `discord_game.pause`, `resume`, and `clear_queue`: control pending processing.
 - `discord_game.edit_queued_message` and `cancel_queued_message`: edit or cancel an individual pending message by its Discord message ID.
 - `discord_game.replay_transcript`: reprocess the original user messages from a retained transcript entry.
