@@ -1271,7 +1271,7 @@ class DiscordAssistant:
             'Return one JSON object: {"respond": true or false, "reason": "brief"}',
         ]
         if context_note:
-            prompt.append("Administrator context:\\n" + str(context_note)[:1000])
+            prompt.append("Administrator context:\n" + str(context_note)[:1000])
         previous = [
             f'{entry.get("sender") or "User"}: {entry.get("content", "")}'
             for entry in history[-self.limit:]
@@ -1285,12 +1285,12 @@ class DiscordAssistant:
             "GHOST was directly addressed: "
             + ("yes" if any(entry.get("directly_addressed") for entry in batch) else "no")
         )
-        prompt.append("Recent conversation, oldest first:\\n" + "\\n".join(previous + current))
-        decision_prompt = "\\n\\n".join(prompt)
+        prompt.append("Recent conversation, oldest first:\n" + "\n".join(previous + current))
+        decision_prompt = "\n\n".join(prompt)
 
         async def ask(model, prompt_text):
             result = await self._call(model, prompt_text)
-            match = re.search(r"\\{[\\s\\S]*\\}", result)
+            match = re.search(r"\{[\s\S]*\}", result)
             if not match:
                 raise ValueError("The model did not return the required JSON decision")
             decision = json.loads(match.group(0))
@@ -1313,7 +1313,7 @@ class DiscordAssistant:
                 try:
                     fallback_prompt = (
                         "JOB: Recover a failed group relevance decision. Return only the required JSON "
-                        "decision; never write a conversational reply.\\n\\n" + decision_prompt
+                        "decision; never write a conversational reply.\n\n" + decision_prompt
                     )
                     return await ask(fallback, fallback_prompt)
                 except Exception as fallback_error:  # noqa: BLE001
