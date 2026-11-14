@@ -1,8 +1,37 @@
-"""Focused tests for the GHOST assistant's context and response handling."""
+"""Focused tests for GHOST context and response handling without a live HA instance."""
 
-from types import SimpleNamespace
+import importlib
+import sys
+import types
+from pathlib import Path
 
-from custom_components.discord_game.assistant import DiscordAssistant, speech
+# The tested helpers do not need Home Assistant at runtime. Stub only the two HA
+# base classes imported by assistant.py so these tests stay quick and isolated.
+ha = types.ModuleType("homeassistant")
+ha.__path__ = []
+components = types.ModuleType("homeassistant.components")
+components.__path__ = []
+sensor_module = types.ModuleType("homeassistant.components.sensor")
+sensor_module.SensorEntity = type("SensorEntity", (), {})
+helpers = types.ModuleType("homeassistant.helpers")
+helpers.__path__ = []
+storage_module = types.ModuleType("homeassistant.helpers.storage")
+storage_module.Store = type("Store", (), {})
+sys.modules.update({
+    "homeassistant": ha,
+    "homeassistant.components": components,
+    "homeassistant.components.sensor": sensor_module,
+    "homeassistant.helpers": helpers,
+    "homeassistant.helpers.storage": storage_module,
+})
+
+repo_root = Path(__file__).resolve().parents[1]
+package = types.ModuleType("custom_components.discord_game")
+package.__path__ = [str(repo_root / "custom_components" / "discord_game")]
+sys.modules["custom_components.discord_game"] = package
+assistant_module = importlib.import_module("custom_components.discord_game.assistant")
+DiscordAssistant = assistant_module.DiscordAssistant
+speech = assistant_module.speech
 
 
 def test_speech_extracts_home_assistant_plain_response():
@@ -28,7 +57,7 @@ def test_prompt_keeps_current_request_when_it_exceeds_budget():
     assert "You are GHOST" in prompt
 
 
-def test_prompt_does_not_include_unrelated_contact_history():
+def test_prompt_uses_only_supplied_contact_history():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.limit = 10
     assistant.budget = 1000
