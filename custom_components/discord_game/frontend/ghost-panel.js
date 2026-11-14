@@ -396,7 +396,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       agentGrid.append(cell);
     }
     agentsPanel.append(agentGrid);
-    agentsPanel.append(this._el("p", "Change these assignments in Settings → Devices & services → Discord Game → Configure. The operations agent must have access to the Home Assistant actions you want GHOST to perform.", "help"));
+    agentsPanel.append(this._el("p", "Change these assignments in Settings → Devices & services → Discord Game → Configure. The operations agent needs your Home Assistant tools. The memory agent is required for idle memory consolidation; without it, pending memories are retained but not summarised.", "help"));
     shell.append(agentsPanel);
 
     const panel = this._el("section", null, "panel");
@@ -415,9 +415,11 @@ class DiscordGameGhostPanel extends HTMLElement {
     };
     number("fallback_after_failures", "Attempts before fallback", settings.fallback_after_failures ?? 2, 1, 5, 1, "Number of local model attempts before trying the fallback agent.");
     number("queue_debounce_seconds", "Message grouping delay (seconds)", settings.queue_debounce_seconds ?? 2.5, .5, 15, .5, "Briefly groups rapid messages from the same conversation.");
-    number("max_context_messages", "Friend messages included in each prompt", settings.max_context_messages ?? 20, 4, 80, 1, "Recent messages passed to the model for context.");
-    number("history_limit", "Raw friend messages before memory compression", settings.history_limit ?? 60, 20, 200, 1, "When this limit is reached, older messages are summarised into durable memory.");
-    number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to both friend DMs and server-group transcripts.");
+    number("max_context_messages", "Active conversation context messages", settings.max_context_messages ?? 12, 4, 80, 1, "Recent messages from this conversation supplied to the response model.");
+    number("memory_idle_seconds", "Idle time before memory consolidation (seconds)", settings.memory_idle_seconds ?? 300, 30, 3600, 30, "GHOST waits this long after the last incoming message and an empty queue before consolidating memories.");
+    number("memory_batch_messages", "Messages per person to consolidate", settings.memory_batch_messages ?? 20, 1, 100, 1, "For each approved person who spoke during the active period, use their most recent N messages.");
+    number("history_limit", "Raw messages retained after consolidation", settings.history_limit ?? 8, 1, 200, 1, "Keeps this many recent raw messages available alongside the durable summary.");
+    number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to friend DMs and server-group transcripts in the panel.");
     number("context_budget_chars", "Maximum prompt size (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500, "Hard limit for the complete prompt sent to an agent.");
     form.append(grid);
     const groupChannelsHidden = this._el("input");
@@ -511,7 +513,7 @@ class DiscordGameGhostPanel extends HTMLElement {
 
     const groupsPanel = this._el("section", null, "panel");
     groupsPanel.append(this._el("h2", "Server group chats"));
-    groupsPanel.append(this._el("p", "Only these channel IDs receive GHOST replies. Separate IDs with commas. Group messages are retained for chat history, not used as durable stranger memory.", "muted"));
+    groupsPanel.append(this._el("p", "Only these channel IDs are monitored for GHOST replies. Separate IDs with commas. GHOST's relevance gate decides whether to speak; approved friends' own messages can later inform their individual private memories.", "muted"));
     for (const group of d.groups || []) groupsPanel.append(this._el("p", (group.name || "Server channel") + " · " + group.channel_id, "help"));
     const channels = this._el("input");
     channels.value = settings.assistant_group_channels || "";
@@ -527,8 +529,10 @@ class DiscordGameGhostPanel extends HTMLElement {
       const data = {};
       data.fallback_after_failures = Number(settings.fallback_after_failures ?? 2);
       data.queue_debounce_seconds = Number(settings.queue_debounce_seconds ?? 2.5);
-      data.max_context_messages = Number(settings.max_context_messages ?? 20);
-      data.history_limit = Number(settings.history_limit ?? 60);
+      data.max_context_messages = Number(settings.max_context_messages ?? 12);
+      data.history_limit = Number(settings.history_limit ?? 8);
+      data.memory_idle_seconds = Number(settings.memory_idle_seconds ?? 300);
+      data.memory_batch_messages = Number(settings.memory_batch_messages ?? 20);
       data.conversation_history_limit = Number(settings.conversation_history_limit ?? 500);
       data.context_budget_chars = Number(settings.context_budget_chars ?? 10000);
       data.typing_enabled = settings.typing_enabled !== false;
@@ -545,8 +549,10 @@ class DiscordGameGhostPanel extends HTMLElement {
   _renderMemories(shell, d) {
     const panel = this._el("section", null, "panel");
     panel.append(this._el("h2", "Private friend memories"));
-    panel.append(this._el("p", "Durable summaries are kept separately for each approved friend. The recent message history below is what GHOST can use to maintain continuity. Server-group chats do not get private long-term memories.", "muted"));
+    panel.append(this._el("p", "GHOST consolidates each approved person's own messages after the configured idle period. Group channels have no shared long-term memory; approved friends' own contributions can inform their individual private memories.", "muted"));
     const contacts = d.contacts || [];
+    const pendingTotal = Object.values(d.friend_memory || {}).reduce((total, item) => total + (item.pending_messages || 0), 0);
+    panel.append(this._el("p", "Pending messages awaiting consolidation: " + pendingTotal + (d.last_memory_consolidation ? " · Last consolidation: " + new Date(d.last_memory_consolidation).toLocaleString() : " · No consolidation has completed yet."), "help"));
     if (!contacts.length) panel.append(this._el("p", "No approved friends yet. Add people in Configuration.", "muted"));
     for (const contact of contacts) {
       const mem = (d.friend_memory || {})[contact.user_id] || {};
@@ -554,7 +560,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       const head = this._el("div", null, "panelhead");
       const names = this._el("div");
       names.append(this._el("strong", contact.name || contact.user_id));
-      names.append(this._el("p", (mem.messages ?? contact.memory_messages ?? 0) + " recent memory messages", "muted"));
+      names.append(this._el("p", (mem.messages ?? contact.memory_messages ?? 0) + " recent context messages · " + (mem.pending_messages ?? 0) + " awaiting consolidation" + (mem.last_consolidated ? " · last consolidated " + new Date(mem.last_consolidated).toLocaleString() : ""), "muted"));
       head.append(names);
       box.append(head);
       box.append(this._el("label", "Durable memory summary"));
@@ -589,6 +595,17 @@ class DiscordGameGhostPanel extends HTMLElement {
     controls.append(buttons);
     shell.append(controls);
 
+    const relevance = this._el("section", null, "panel");
+    relevance.append(this._el("h2", "Group-chat relevance filter"));
+    relevance.append(this._el("p", "Every monitored group message batch is checked by the conversation AI before GHOST is allowed to generate a reply. If the decision is invalid or the model is unavailable, GHOST stays quiet.", "muted"));
+    relevance.append(this._el("p", "Messages deliberately ignored: " + (d.suppressed_group_messages || 0), "help"));
+    if (d.last_group_decision) {
+      relevance.append(this._el("p", "Last decision: " + d.last_group_decision.decision + " · " + (d.last_group_decision.reason || "") + " · " + (d.last_group_decision.timestamp || ""), "muted"));
+    } else {
+      relevance.append(this._el("p", "No group relevance decisions recorded yet.", "muted"));
+    }
+    shell.append(relevance);
+
     const queue = this._el("section", null, "panel");
     queue.append(this._el("h2", "Waiting messages"));
     for (const item of d.pending_messages || []) {
@@ -614,6 +631,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       card.append(this._el("p", [item.timestamp, item.model, item.role].filter(Boolean).join(" · "), "muted"));
       for (const message of item.user_messages || []) card.append(this._el("p", "Incoming: " + message));
       if (item.assistant) card.append(this._el("p", "GHOST: " + item.assistant));
+      if (item.suppressed) card.append(this._el("p", "GHOST stayed quiet: " + (item.suppression_reason || "Not relevant enough to interrupt."), "muted"));
       if (item.error) card.append(this._el("p", item.error, "error"));
       if (item.action_result) {
         const details = document.createElement("details");
