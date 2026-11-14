@@ -1345,6 +1345,11 @@ class DiscordAssistant:
                         "JOB: Recover a failed group relevance decision. Return only the required JSON "
                         "decision; never write a conversational reply.\n\n" + decision_prompt
                     )
+                    if self.active_request:
+                        self.active_request["model"] = fallback
+                        self.active_request["stage"] = "Checking group relevance with fallback agent"
+                        self.active_request["fallback_used"] = True
+                        self._refresh_sensor()
                     return await ask(fallback, fallback_prompt)
                 except Exception as fallback_error:  # noqa: BLE001
                     _LOGGER.warning(
