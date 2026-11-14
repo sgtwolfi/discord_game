@@ -866,8 +866,8 @@ class DiscordAssistant:
             )
         elif role == "advanced":
             lines.append(
-                "You are handling a difficult request. Think through the user's goal in simple steps, "
-                "preserve the requested outcome, and verify any factual claims."
+                "You are the advanced reasoning agent. Break complex work into explicit steps, "
+                "preserve the user's exact goal, use available capabilities only, and verify factual claims."
             )
         elif role == "fallback":
             lines.append(
