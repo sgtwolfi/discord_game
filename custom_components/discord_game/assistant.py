@@ -67,12 +67,16 @@ COMPLEX_REQUEST = re.compile(
 )
 
 ACTION_REQUEST = re.compile(
-    r"^\s*(?:please\s+)?(?:turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
+    r"^\s*(?:(?:also|and then|then)\s+)?(?:please\s+)?(?:turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|"
     r"activate|deactivate|lock|unlock|open|close|play|pause|stop|start|run|enable|disable|"
     r"cancel|delete|add|remove|schedule|remind|notify|send)\b|"
     r"\b(?:can|could|would)\s+you\s+(?:please\s+)?(?:turn|switch|set|change|adjust|dim|"
     r"brighten|increase|decrease|toggle|activate|deactivate|lock|unlock|open|close|play|pause|"
     r"stop|start|run|enable|disable|cancel|delete|add|remove|schedule|remind|notify|send)\b|"
+    r"\b(?:i need you to|i'd like you to|i would like you to)\s+(?:please\s+)?"
+    r"(?:turn|switch|set|change|adjust|dim|brighten|increase|decrease|toggle|activate|deactivate|"
+    r"lock|unlock|open|close|play|pause|stop|start|run|enable|disable|cancel|delete|add|remove|"
+    r"schedule|remind|notify|send)\b|"
     r"\b(?:i want|make|put|set them|have them)\b.{0,80}\b"
     r"(?:red|blue|green|white|warm|cool|colour|color|brightness|brighter|dimmer|"
     r"on|off|volume|temperature|percent)\b",
