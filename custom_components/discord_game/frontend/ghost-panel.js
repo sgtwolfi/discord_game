@@ -508,7 +508,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     if (modeSelect.value === "api") reminderScript.type = "hidden";
     reminderWrap.append(reminderScript);
     if (modeSelect.value !== "api") {
-      reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear reminder requests, so a tiny model does not have to discover or invoke a tool. The script must return success: true for GHOST to confirm it was set.", "help"));
+      reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear private-DM reminders, so a tiny model does not have to discover or invoke a tool. It should accept name plus either duration_seconds or alarm_time (and optional date), and return success: true. GHOST does not send announce_message or text fields unless a future explicit option is added.", "help"));
     }
     form.append(reminderWrap);
     const grid = this._el("div", null, "fieldgrid");
@@ -632,7 +632,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       }
       if (entities.length > filtered.length) capabilitiesPanel.append(this._el("p", "Showing " + filtered.length + " matching entities. Narrow the search to find more.", "muted"));
     }
-    capabilitiesPanel.append(this._el("p", "To add a new function: create a Script in Settings → Automations & Scenes → Scripts, give it a clear name, save it, then find it here and switch on Available to Assist. To remove a capability, switch it off. You can expose lights, switches and scripts separately.", "help"));
+    capabilitiesPanel.append(this._el("p", "To add a function for the model: create a Script in Settings → Automations & Scenes → Scripts. Give it a clear name and a useful Description, and describe each input field so Assist knows what arguments it accepts. Then find it here under Scripts / functions and switch on Available to Assist. In Local Mode, also make sure the selected Operations agent has its Home Assistant control tool enabled. In API Mode, enable the equivalent Home Assistant control tool in the selected native conversation agent. You can expose lights, switches and scripts separately; only expose what GHOST should be allowed to use.", "help"));
     shell.append(capabilitiesPanel);
 
     const contactsPanel = this._el("section", null, "panel");
