@@ -565,7 +565,12 @@ async def async_setup_entry(
                 watchers[str(user.id)] = watcher
 
     assistant = DiscordAssistant(hass, config_entry.entry_id, config, bot)
-    await assistant.async_start()
+    try:
+        await assistant.async_start()
+    except Exception as err:  # noqa: BLE001 - keep the legacy Discord integration available
+        assistant.error = (str(err).strip() or err.__class__.__name__)[:500]
+        assistant._state = "error"
+        _LOGGER.exception("GHOST assistant failed during startup; Discord Game sensors will remain available")
     hass.data[DOMAIN][config_entry.entry_id]["assistant"] = assistant
 
     @bot.event
