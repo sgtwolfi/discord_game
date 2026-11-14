@@ -597,6 +597,52 @@ def test_group_relevance_gate_uses_ai_decision_before_reply():
     assert reason == "This is banter between friends"
 
 
+
+def test_group_relevance_gate_uses_fallback_after_malformed_primary_output():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.agents = {
+        "conversation_agent": "conversation.local",
+        "fallback_agent": "conversation.backup",
+    }
+    assistant.limit = 8
+    calls = []
+
+    async def call(agent, prompt):
+        calls.append(agent)
+        if agent == "conversation.local":
+            return "That is not JSON"
+        return '{"respond": true, "reason": "Direct question"}'
+
+    assistant._call = call
+    batch = [{
+        "sender_name": "Max",
+        "content": "Can you help?",
+        "directly_addressed": True,
+    }]
+
+    result = asyncio.run(assistant._should_respond_to_group(batch, []))
+
+    assert result == (True, "Direct question")
+    assert calls == ["conversation.local", "conversation.backup"]
+
+
+def test_partial_action_error_names_successful_and_failed_targets():
+    error = assistant_module.action_result_error({
+        "response": {
+            "response_type": "action_done",
+            "data": {
+                "success": [{"name": "Bedroom", "id": "light.bedroom"}],
+                "failed": [{"name": "Hall", "id": "light.hall"}],
+            },
+        },
+    })
+
+    assert "partially completed" in error
+    assert "Bedroom" in error
+    assert "Hall" in error
+
+
+
 def test_group_relevance_gate_allows_a_relevant_direct_question():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.agents = {"conversation_agent": "conversation.local"}
