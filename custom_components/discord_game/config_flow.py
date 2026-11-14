@@ -192,7 +192,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             # Saving assistant settings must not trigger a needless Discord API
             # login/member scan. That scan can fail on privileged intents or
             # transient Discord API errors and used to surface as HA "Unknown error".
-            if str(user_input.get(CONF_ACCESS_TOKEN, "")).strip() == str(current_token).strip():
+            if not errors and str(user_input.get(CONF_ACCESS_TOKEN, "")).strip() == str(current_token).strip():
                 self.options_data[CONF_MEMBERS] = list(self._get_current(CONF_MEMBERS, []))
                 self.options_data[CONF_CHANNELS] = list(self._get_current(CONF_CHANNELS, []))
                 self.options_data[CONF_VOICE_CHANNELS] = list(self._get_current(CONF_VOICE_CHANNELS, []))
