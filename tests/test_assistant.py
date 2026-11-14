@@ -195,3 +195,22 @@ def test_complex_request_classifier_selects_advanced_model():
 
 def test_complex_request_classifier_ignores_simple_chat():
     assert not assistant_module.COMPLEX_REQUEST.search("What's the weather like?")
+
+
+
+def test_model_usage_aggregates_retained_transcript():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.transcript = [
+        {"model": "conversation.local", "estimated_input_tokens": 100, "estimated_output_tokens": 20},
+        {"model": "conversation.local", "estimated_input_tokens": 50, "estimated_output_tokens": 10},
+        {"model": "conversation.api", "estimated_input_tokens": 200, "estimated_output_tokens": 40, "error": "timeout"},
+    ]
+
+    usage = assistant.model_usage()
+
+    assert usage["conversation.local"] == {
+        "requests": 2, "input_tokens": 150, "output_tokens": 30, "errors": 0
+    }
+    assert usage["conversation.api"] == {
+        "requests": 1, "input_tokens": 200, "output_tokens": 40, "errors": 1
+    }
