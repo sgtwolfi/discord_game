@@ -19,10 +19,10 @@ Use IDs such as `conversation.my_ollama_agent`. This integration does not store 
 - DMs are only processed for users already selected in the existing Discord Game user configuration.
 - Server AI is separately opt-in by comma-separated channel IDs.
 - Approved DM history is persisted per user. Server context is isolated by channel and held in RAM only; strangers are not given persistent memories.
-- Messages are processed in arrival order. Adjacent messages from the same conversation are grouped during the configurable debounce period.
+- Messages are processed in arrival order. Adjacent messages from the same conversation are grouped during the configurable debounce period. The pending queue is capped at 200 messages; when full, new messages are rejected with an error event rather than silently deleting older messages.
 - Discord typing indicators are enabled by default.
 - Context is bounded by a configurable character budget. Token figures are approximate (about four characters per token), not exact provider usage.
-- The API fallback is used after local conversation-service failures, not merely because a response seems poor.
+- The API fallback is used after local conversation-service failures and can retry an operations request when the local agent returns an incomplete or unconfirmed action result. The fallback must still return Home Assistant's structured successful-action result before GHOST reports success.
 
 ## Home Assistant
 
