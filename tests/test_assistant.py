@@ -788,3 +788,6 @@ def test_public_sensor_attributes_do_not_expose_private_memory_or_transcript():
     assert "friend_memory" not in attributes
     assert "transcript" not in attributes
     assert "pending_messages" not in attributes
+    assert "context_notes" not in attributes
+    assert "approved_users" not in attributes
+    assert "group_channels" not in attributes
