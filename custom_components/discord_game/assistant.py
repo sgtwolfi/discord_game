@@ -94,6 +94,7 @@ class DiscordAssistant:
         self.error=None
         self.last_activity=None
         self.transcript=[]
+        self.active_request = None
         self._state="starting" if self.enabled else "disabled"
         self.sensor=AssistantSensor(self)
     @property
@@ -140,7 +141,22 @@ class DiscordAssistant:
               for item in self.queue[:20]
           ],
           "transcript":self.transcript[-20:],
+          "active_request": self.active_request,
+          "model_usage": self.model_usage(),
           "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[]))} for k,v in self.friends.items()}}
+    def model_usage(self):
+        """Aggregate approximate token usage from the retained transcript."""
+        usage = {}
+        for item in self.transcript:
+            model = item.get("model") or "unknown"
+            record = usage.setdefault(model, {"requests": 0, "input_tokens": 0, "output_tokens": 0, "errors": 0})
+            record["requests"] += 1
+            record["input_tokens"] += int(item.get("estimated_input_tokens", 0) or 0)
+            record["output_tokens"] += int(item.get("estimated_output_tokens", 0) or 0)
+            if item.get("error"):
+                record["errors"] += 1
+        return usage
+
     async def enqueue(self,message,*,is_dm,sender_id,sender_name):
         if not self.enabled or self.stopped:
             return
@@ -279,6 +295,16 @@ class DiscordAssistant:
         try:
             history,summary=self._history(item)
             prompt=self._prompt(batch,history,summary)
+            self.active_request = {
+                "conversation": item["key"],
+                "sender": ", ".join(dict.fromkeys(x["sender_name"] for x in batch)),
+                "messages": [x["content"] for x in batch],
+                "model": model,
+                "role": role,
+                "started_at": datetime.now(UTC).isoformat(),
+                "context_snapshot": prompt[:4000],
+            }
+            self._refresh_sensor()
             for attempt in range(self.retries):
                 try:answer=await self._call(agent,prompt);break
                 except Exception as err:  # noqa: BLE001 - retry any conversation service failure
@@ -336,6 +362,7 @@ class DiscordAssistant:
                 except asyncio.CancelledError:
                     pass
             self.active=False
+            self.active_request = None
             self.hass.bus.async_fire("discord_game_assistant_updated",{"status":self.status})
             self._refresh_sensor()
     async def _compress(self,user_id):
