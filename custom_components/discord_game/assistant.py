@@ -262,7 +262,7 @@ class DiscordAssistant:
         logs = getattr(self, "conversation_logs", {})
         meta_map = getattr(self, "conversation_meta", {})
         bot = getattr(self, "bot", None)
-        keys = {key for key in set(logs) | set(meta_map) if not key.startswith("dm:") or key[3:] in self.approved_users}
+        keys = {key for key in set(logs) | set(meta_map) if (key.startswith("dm:") and key[3:] in self.approved_users) or (key.startswith("guild:") and key.rsplit(":", 1)[-1] in self.group_channels)}
         keys.update(f"dm:{user_id}" for user_id in self.approved_users)
         for channel_id in self.group_channels:
             channel = bot.get_channel(int(channel_id)) if bot else None
