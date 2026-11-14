@@ -1698,3 +1698,23 @@ def test_local_reminder_executor_does_not_claim_success_without_success_flag():
         "name": "take bins out", "duration_seconds": 1200
     }))
     assert assistant_module.action_result_error(result) is not None
+
+
+
+def test_local_status_reader_recovers_a_minor_contact_name_typo():
+    state = SimpleNamespace(
+        entity_id="sensor.discord_user_123",
+        state="online",
+        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+    )
+    hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
+    answer = answer_local_status(
+        hass, "What's ahrveys doing?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "Harvey is playing Factorio."
+
+
+def test_local_status_intent_recognises_time_and_weather_fallback():
+    assert assistant_module.request_kind("What's the current time and weather?") == "query"
+    assert assistant_module.request_kind("The weather is rubbish today") == "conversation"
