@@ -198,13 +198,16 @@ def test_complex_request_classifier_ignores_simple_chat():
 
 
 
-def test_model_usage_aggregates_retained_transcript():
+def test_model_usage_returns_persisted_per_agent_totals():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.transcript = [
-        {"model": "conversation.local", "estimated_input_tokens": 100, "estimated_output_tokens": 20},
-        {"model": "conversation.local", "estimated_input_tokens": 50, "estimated_output_tokens": 10},
-        {"model": "conversation.api", "estimated_input_tokens": 200, "estimated_output_tokens": 40, "error": "timeout"},
-    ]
+    assistant.model_usage_data = {
+        "conversation.local": {
+            "requests": 2, "input_tokens": 150, "output_tokens": 30, "errors": 0
+        },
+        "conversation.api": {
+            "requests": 1, "input_tokens": 200, "output_tokens": 40, "errors": 1
+        },
+    }
 
     usage = assistant.model_usage()
 
