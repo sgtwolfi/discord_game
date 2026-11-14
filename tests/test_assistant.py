@@ -403,6 +403,8 @@ def test_admin_can_correct_contact_memory():
     assistant.friends = {"123": {"messages": [{"content": "hello"}], "summary": "old summary"}}
     assistant.approved_users = {"123"}
     assistant.store = FakeStore()
+    assistant.transcript = []
+    assistant.model_usage_data = {}
     assistant.sensor = SimpleNamespace(hass=None)
 
     asyncio.run(assistant.set_friend_memory("123", "Corrected fact: Max prefers short replies."))
