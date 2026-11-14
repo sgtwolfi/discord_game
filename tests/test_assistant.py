@@ -185,3 +185,13 @@ def test_pause_resume_and_clear_queue_controls():
     assert assistant.queue == []
     assert assistant.error is None
     assert events[-1][0][0] == "discord_game_assistant_queue_cleared"
+
+
+
+def test_complex_request_classifier_selects_advanced_model():
+    assert assistant_module.COMPLEX_REQUEST.search("Research and compare three options")
+    assert assistant_module.COMPLEX_REQUEST.search("Help me debug this automation")
+
+
+def test_complex_request_classifier_ignores_simple_chat():
+    assert not assistant_module.COMPLEX_REQUEST.search("What's the weather like?")
