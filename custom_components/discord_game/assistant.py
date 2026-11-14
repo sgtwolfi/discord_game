@@ -177,12 +177,12 @@ def resolve_reminder_confirmation(batch, history, now):
     """
     current = " ".join(str(entry.get("content") or "") for entry in batch).strip()
     affirmative = re.match(
-        r"^(?:yes|yeah|yep|yup|sure|okay|ok|go ahead|do it|please|absolutely|aye)\\b",
+        r"^(?:yes|yeah|yep|yup|sure|okay|ok|go ahead|do it|please|absolutely|aye)\b",
         current,
         re.IGNORECASE,
     )
     negative = re.match(
-        r"^(?:no|nah|nope|not now|cancel|don't|do not)\\b",
+        r"^(?:no|nah|nope|not now|cancel|don't|do not)\b",
         current,
         re.IGNORECASE,
     )
@@ -197,12 +197,12 @@ def resolve_reminder_confirmation(batch, history, now):
         return None
     proposal = str(previous_assistant.get("content") or "")
     asks_confirmation = re.search(
-        r"\\b(?:confirm|do you want me to|would you like me to|shall i|should i)\\b"
-        r".{0,160}\\b(?:set|schedule|create)\\b",
+        r"\b(?:confirm|do you want me to|would you like me to|shall i|should i)\b"
+        r".{0,160}\b(?:set|schedule|create)\b",
         proposal,
         re.IGNORECASE,
     )
-    if not asks_confirmation or not re.search(r"\\b(?:timer|reminder)\\b", proposal, re.IGNORECASE):
+    if not asks_confirmation or not re.search(r"\b(?:timer|reminder)\b", proposal, re.IGNORECASE):
         return None
     if negative:
         return {"declined": True}
@@ -210,12 +210,12 @@ def resolve_reminder_confirmation(batch, history, now):
     # Accept clear natural-language proposals such as:
     # "a reminder in two minutes to text Ryan, right?"
     timing = re.search(
-        r"\\b(?:a|the)\\s+(?:timer|reminder)\\s+in\\s+"
-        r"(?P<amount>\\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"\b(?:a|the)\s+(?:timer|reminder)\s+in\s+"
+        r"(?P<amount>\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
         r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
-        r"nineteen|twenty|thirty|forty|fifty|sixty|ninety)\\s*"
-        r"(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\\s+to\\s+"
-        r"(?P<task>.+?)(?=,?\\s*(?:right|correct)\\b|[?.!]|$)",
+        r"nineteen|twenty|thirty|forty|fifty|sixty|ninety)\s*"
+        r"(?P<unit>seconds?|secs?|minutes?|mins?|hours?|hrs?|days?)\s+to\s+"
+        r"(?P<task>.+?)(?=,?\s*(?:right|correct)\b|[?.!]|$)",
         proposal,
         re.IGNORECASE,
     )
