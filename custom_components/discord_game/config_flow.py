@@ -171,6 +171,10 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
         current_token = self._get_current(CONF_ACCESS_TOKEN)
         if user_input is not None:
             self.options_data = dict(user_input)
+            # The old 60-message setting was a compression threshold. It is
+            # now raw retention, so migrate its untouched default to 8.
+            legacy_memory_settings = "memory_batch_messages" not in self.config_entry.options
+            legacy_history_limit = self._get_current("history_limit", 8)
             # Keep advanced panel settings when saving the integration's model selectors.
             advanced_defaults = {
                 "fallback_after_failures": 2,
@@ -192,6 +196,8 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             }
             for key, default in advanced_defaults.items():
                 self.options_data.setdefault(key, self._get_current(key, default))
+            if legacy_memory_settings and int(legacy_history_limit or 0) == 60:
+                self.options_data["history_limit"] = 8
             if self.options_data.get("assistant_enabled") and not str(self.options_data.get("conversation_agent", "")).strip():
                 errors["base"] = "assistant_agent_required"
             # Saving assistant settings must not trigger a needless Discord API
