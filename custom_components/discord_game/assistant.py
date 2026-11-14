@@ -190,17 +190,18 @@ def extract_durable_memory_facts(messages):
 
 
 def sanitize_legacy_memory_summary(summary):
-    """Remove obvious model-generated persona chatter from pre-v8 summaries."""
-    chatter = re.compile(
-        r"(what's on your mind|right[, ]+mate|\binnit\b|"
-        r"proper shockin|proper shocking|red-ing|i'm just a ghost)",
-        re.IGNORECASE,
+    """Keep only evidence-labelled facts in legacy, non-admin summaries."""
+    allowed = (
+        "explicitly remembered:", "preference:", "favourite:", "work:",
+        "action record (confirmed):", "action record (failed):",
+        "action record (partial):", "action record (not confirmed):",
     )
-    return "\n".join(
-        line.strip()
-        for line in str(summary or "").splitlines()
-        if line.strip() and not chatter.search(line)
-    ).strip()
+    retained = []
+    for line in str(summary or "").splitlines():
+        value = line.strip().lstrip("-• ").strip()
+        if value.casefold().startswith(allowed):
+            retained.append("- " + value)
+    return "\n".join(retained).strip()
 
 
 def take_conversation_batch(queue):
@@ -390,7 +391,16 @@ class DiscordAssistant:
     def __init__(self,hass,entry_id,config,bot):
         self.hass,self.entry_id,self.config,self.bot=hass,entry_id,config,bot
         self.enabled=bool(config.get("assistant_enabled",False))
+        self.mode = str(config.get("assistant_mode", "local")).strip().lower()
+        if self.mode not in {"api", "local"}:
+            self.mode = "local"
         self.agents={k:str(config.get(k,"")).strip() for k in ("conversation_agent","operations_agent","fallback_agent")}
+        # API Mode delegates model-facing work to one HA conversation agent.
+        # GHOST continues to own memory, queueing, privacy and verification.
+        if self.mode == "api":
+            primary = self.agents["conversation_agent"]
+            self.agents["operations_agent"] = primary
+            self.agents["fallback_agent"] = ""
         self.retries=max(1,min(5,int(config.get("fallback_after_failures",2))))
         self.delay=max(.5,min(15,float(config.get("queue_debounce_seconds",2.5))))
         self.limit=max(4,min(80,int(config.get("max_context_messages",12))))
@@ -611,7 +621,7 @@ class DiscordAssistant:
                 "name": getattr(channel, "name", None) or saved_meta.get("channel_name") or saved_meta.get("label") or channel_id,
                 "conversation": key,
             })
-        return {"enabled":self.enabled,"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
+        return {"enabled":self.enabled,"mode":getattr(self, "mode", "local"),"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
           **self.agents,"last_activity":self.last_activity,"last_error":self.error,
           "estimated_pending_tokens":sum(len(x["content"]) for x in self.queue)//4,
           "pending_messages":[
@@ -639,6 +649,7 @@ class DiscordAssistant:
           "conversations": conversations,
           "groups": groups,
           "settings": {
+              "assistant_mode": getattr(self, "mode", "local"),
               "fallback_after_failures": getattr(self, "retries", 2),
               "queue_debounce_seconds": getattr(self, "delay", 2.5),
               "max_context_messages": getattr(self, "limit", 20),
@@ -658,6 +669,7 @@ class DiscordAssistant:
         """Expose only non-private status through the ordinary HA state registry."""
         return {
             "enabled": self.enabled,
+            "mode": getattr(self, "mode", "local"),
             "paused": self.paused,
             "diagnostics_revision": self.diagnostics_revision,
             "queue_length": len(self.queue),
