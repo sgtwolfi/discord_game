@@ -1,6 +1,6 @@
-# Discord Game + GHOST Assistant (v8.1.0)
+# Discord Game + GHOST Assistant (v8.2.0)
 
-This release adds API and Local assistant runtime modes while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
+This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
 ## Setup
 
@@ -25,8 +25,9 @@ Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → As
 - Configure its provider, API credentials, model, system prompt and available tools/functions in that agent's own Home Assistant integration settings.
 - GHOST does not overwrite that agent's system prompt or tool configuration. It sends bounded conversation context and the approved contact's private saved facts with each request.
 - GHOST still owns Discord queueing, contact isolation, memory extraction/consolidation, audit history and action-result verification. Switching models or changing the agent does not disable or erase memory.
-- For safety, API Mode only responds to group messages that directly mention or reply to GHOST. It does not send untrusted group text to the tool-enabled agent for a relevance decision.
-- The Operations and Fallback selectors are ignored in this mode. The selected Conversation Agent handles ordinary chat, relevance decisions, live-state queries and actions.
+- For safety, API Mode only responds to group messages that directly mention or reply to GHOST, or explicitly address the standalone name “ghost” (for example, “my bad ghost”). It does not send unaddressed group text to the tool-enabled agent for a relevance decision.
+- Select **API fallback agent** separately from the primary Conversation Agent in Discord Game → Configure. It is used for recoverable primary-model failures on conversation and read-only work. Side-effecting actions are never replayed through fallback after an ambiguous result.
+- The Local Operations and Local Fallback selectors are not used by API Mode. The selected API Conversation Agent handles ordinary chat, live-state queries and actions; the API fallback is a separate recovery model.
 
 ### Local Mode
 
@@ -35,6 +36,15 @@ Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → As
 - Simple live lookups are answered directly from Home Assistant state without asking a model to use a tool: Discord presence/activity sensors, lights, current local time and configured weather entities.
 - Clear private-DM reminder requests are parsed deterministically and sent directly to the configured reminder script. This avoids relying on a tiny model to discover and call a function. The default script entity is `script.set_timer_alarm_or_reminder`; change it in GHOST → Settings if yours is named differently. The script must return `success: true` before GHOST confirms the reminder. Ambiguous times (for example, “at 7”) trigger a clarification instead of a guess.
 - Other device actions still depend on the selected Operations Agent and its Home Assistant tool support. A 0.5B model is not guaranteed to make reliable tool calls merely because prompts are shorter; use the direct handlers where available and test any other action with the Activity panel open.
+
+## Spam protection
+
+Configure the per-sender message threshold and rolling time window in Discord Game → Configure. When a sender exceeds the threshold, choose one policy:
+- **Defer to local model**: route that sender to the separately selected `spam_local_agent` for the configured cooldown. Configure this agent as a lightweight local Home Assistant conversation agent; do not give it privileged control tools unless you explicitly intend that.
+- **Discord timeout**: request a Discord member timeout for the configured duration. The bot needs the Discord moderation permission and this applies to server members, not direct messages. If Discord rejects the timeout, GHOST still suppresses the sender during the cooldown and logs the failure.
+- **Ignore during cooldown**: discard that sender's messages until the cooldown expires.
+
+The default threshold is 8 messages in 30 seconds. The default policy is local deferral for 10 minutes. Queue capacity and duplicate-message protection remain in place independently.
 
 ## Memory ownership and cleanup
 
