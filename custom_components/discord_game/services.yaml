@@ -75,3 +75,16 @@ set_friend_memory:
       selector:
         text:
           multiline: true
+set_context_note:
+  name: Inject conversation context
+  description: Set temporary admin context for one approved DM or selected server channel. The note is held in memory only.
+  fields:
+    conversation:
+      required: true
+      selector:
+        text:
+    context:
+      required: true
+      selector:
+        text:
+          multiline: true
