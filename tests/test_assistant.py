@@ -297,3 +297,50 @@ def test_editing_queue_rejects_blank_content():
 
     with pytest.raises(ValueError, match="cannot be empty"):
         asyncio.run(assistant.edit_queued_message("111", "   "))
+
+
+
+def test_transcript_replay_requeues_original_dm_messages():
+    from types import SimpleNamespace
+    import asyncio
+
+    channel = SimpleNamespace(id=789)
+
+    class FakeUser:
+        async def create_dm(self):
+            return channel
+
+    class FakeBot:
+        async def fetch_user(self, user_id):
+            assert user_id == 123
+            return FakeUser()
+
+    events = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.transcript = [{
+        "timestamp": "2026-11-14T00:00:00+00:00",
+        "conversation": "dm:123",
+        "is_dm": True,
+        "sender_ids": ["123"],
+        "sender": "Max",
+        "channel_id": "789",
+        "user_messages": ["Switch the bedroom light on"],
+    }]
+    assistant.queue = []
+    assistant.max_queue = 200
+    assistant.bot = FakeBot()
+    assistant.wake = asyncio.Event()
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(
+        async_fire=lambda *args, **kwargs: events.append((args, kwargs))
+    ))
+
+    count = asyncio.run(assistant.replay_transcript(
+        "2026-11-14T00:00:00+00:00", "dm:123"
+    ))
+
+    assert count == 1
+    assert assistant.queue[0]["content"] == "Switch the bedroom light on"
+    assert assistant.queue[0]["channel"] is channel
+    assert assistant.wake.is_set()
+    assert events[0][0][0] == "discord_game_assistant_replayed"
