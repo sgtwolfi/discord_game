@@ -2150,3 +2150,55 @@ def test_mention_only_still_blocks_unrelated_group_message_without_history():
 
     assert result[0] is False
     assert "mention-only" in result[1]
+
+
+
+def test_reminder_confirmation_executes_only_a_clear_pending_offer():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yes pall"}],
+        [{
+            "role": "assistant",
+            "content": "You want a reminder in two minutes to text Ryan, right? Confirm if you'd like me to set that up.",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result == {"name": "text Ryan", "duration_seconds": 120}
+
+
+def test_reminder_confirmation_decline_never_creates_reminder():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "nah"}],
+        [{
+            "role": "assistant",
+            "content": "You want a reminder in two minutes to text Ryan, right? Confirm if you'd like me to set that up.",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result == {"declined": True}
+
+
+def test_reminder_confirmation_requires_a_real_previous_confirmation_question():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yes"}],
+        [{"role": "assistant", "content": "The reminder has not been set."}],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result is None
+
+
+def test_reminder_confirmation_does_not_guess_missing_task_details():
+    result = assistant_module.resolve_reminder_confirmation(
+        [{"content": "yes"}],
+        [{
+            "role": "assistant",
+            "content": "Would you like me to set a two-minute timer now?",
+        }],
+        datetime(2026, 11, 14, 12, 34, tzinfo=UTC),
+    )
+    assert result["needs_clarification"] is True
+
+
+def test_function_configuration_errors_are_non_retryable_and_detected_for_fallback():
+    assert assistant_module.is_function_configuration_error(
+        "The selected Home Assistant conversation agent could not load its configured functions."
+    )
