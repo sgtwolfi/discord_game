@@ -196,6 +196,21 @@ class DiscordAssistant:
                     "channel_id": str(entry.get("channel_id") or ""),
                     "kind": "friend" if entry.get("is_dm") else "group",
                 })
+        # Older releases stored durable DM history separately from the audit
+        # transcript. Seed the new chat view from that history when needed.
+        for user_id, record in self.friends.items():
+            key = f"dm:{user_id}"
+            if not self.conversation_logs.get(key):
+                for message in record.get("messages", []):
+                    role = message.get("role", "user")
+                    self.conversation_logs[key].append({
+                        "role": role,
+                        "sender": message.get("sender") or ("GHOST" if role == "assistant" else self._display_name(user_id)),
+                        "sender_id": str(user_id) if role == "user" else "",
+                        "content": message.get("content", ""),
+                        "timestamp": message.get("timestamp"),
+                        "model": message.get("model"),
+                    })
         if self.enabled:
             for user_id in self.approved_users:
                 if user_id not in self.contact_names:
