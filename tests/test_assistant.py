@@ -1957,6 +1957,9 @@ def test_memory_purge_scopes_preserve_unselected_data():
     assistant.approved_users = {"123"}
     assistant.friends = {"123": {"summary": "Preference: likes tea", "pending_messages": [{"content": "remember this"}], "messages": [{"content": "hello"}]}}
     assistant.conversation_logs = {"dm:123": [{"content": "hello"}], "guild:1:2": [{"content": "group"}]}
+    assistant.queue = [{"key": "dm:123", "message_id": "pending"}]
+    assistant.context_notes = {"dm:123": "temporary"}
+    assistant.active_request = None
     assistant.transcript = [{"is_dm": True, "sender_ids": ["123"]}, {"is_dm": False, "sender_ids": []}]
     assistant._save = lambda: asyncio.sleep(0)
     assistant._refresh_sensor = lambda: None
@@ -1967,6 +1970,8 @@ def test_memory_purge_scopes_preserve_unselected_data():
     asyncio.run(assistant.purge_friend_memory("123", "history"))
     assert assistant.friends["123"]["pending_messages"]
     assert "dm:123" not in assistant.conversation_logs
+    assert not assistant.queue
+    assert "dm:123" not in assistant.context_notes
     assert len(assistant.transcript) == 1
     asyncio.run(assistant.purge_friend_memory("123", "all"))
     assert "123" not in assistant.friends
