@@ -259,7 +259,7 @@ class DiscordAssistant:
 
     def diagnostics(self):
         conversations = []
-        keys = set(self.conversation_logs) | set(self.conversation_meta)
+        keys = {key for key in set(self.conversation_logs) | set(self.conversation_meta) if not key.startswith("dm:") or key[3:] in self.approved_users}
         keys.update(f"dm:{user_id}" for user_id in self.approved_users)
         for channel_id in self.group_channels:
             channel = self.bot.get_channel(int(channel_id))
@@ -897,8 +897,6 @@ class DiscordAssistant:
             approved.add(user_id)
             if name:
                 names[user_id] = name[:80]
-        if not approved:
-            raise ValueError("Keep at least one approved GHOST contact")
         entries = self.hass.config_entries.async_entries(DOMAIN)
         entry = next((item for item in entries if item.entry_id == self.entry_id), None)
         if entry is None:
