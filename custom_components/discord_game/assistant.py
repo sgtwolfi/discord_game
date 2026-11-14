@@ -1388,20 +1388,21 @@ class DiscordAssistant:
                 entry.get("directly_addressed") for entry in batch
             )
             kind = request_kind(request_text)
-            if (
-                kind in {"action", "query"}
-                and group_action_is_addressed
-                and not self.agents.get("operations_agent")
-            ):
-                raise RuntimeError(
-                    "The Home Assistant operations agent is not configured. "
-                    "I cannot safely execute actions or report live device states."
-                )
             local_reminder = (
                 parse_local_reminder(request_text, dt_util.now())
                 if self.mode == "local" and item["is_dm"]
                 else None
             )
+            if (
+                kind in {"action", "query"}
+                and group_action_is_addressed
+                and not self.agents.get("operations_agent")
+                and local_reminder is None
+            ):
+                raise RuntimeError(
+                    "The Home Assistant operations agent is not configured. "
+                    "I cannot safely execute actions or report live device states."
+                )
             if local_reminder is not None:
                 role = "local_reminder"
                 model = "local-script:" + self.local_reminder_script
