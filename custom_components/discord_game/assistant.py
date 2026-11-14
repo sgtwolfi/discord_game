@@ -265,7 +265,7 @@ class DiscordAssistant:
         keys = {key for key in set(logs) | set(meta_map) if not key.startswith("dm:") or key[3:] in self.approved_users}
         keys.update(f"dm:{user_id}" for user_id in self.approved_users)
         for channel_id in self.group_channels:
-            channel = self.bot.get_channel(int(channel_id))
+            channel = bot.get_channel(int(channel_id)) if bot else None
             guild_id = str(getattr(getattr(channel, "guild", None), "id", ""))
             if guild_id:
                 keys.add(f"guild:{guild_id}:{channel_id}")
@@ -296,7 +296,7 @@ class DiscordAssistant:
             groups.append({
                 "channel_id": channel_id,
                 "guild_id": guild_id,
-                "name": getattr(channel, "name", None) or self.conversation_meta.get(key or "", {}).get("channel_name") or channel_id,
+                "name": getattr(channel, "name", None) or meta_map.get(key or "", {}).get("channel_name") or channel_id,
                 "conversation": key,
             })
         return {"enabled":self.enabled,"paused":self.paused,"approved_users":sorted(self.approved_users),"group_channels":sorted(self.group_channels),"queue_length":len(self.queue),"processing":self.active,
@@ -318,7 +318,7 @@ class DiscordAssistant:
           "active_request": self.active_request,
           "context_notes": dict(self.context_notes),
           "model_usage": self.model_usage(),
-          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "recent_messages": v.get("messages", [])[-self.history_limit:]} for k,v in self.friends.items()},
+          "friend_memory":{k:{"summary":v.get("summary",""),"messages":len(v.get("messages",[])), "recent_messages": v.get("messages", [])[-getattr(self, "history_limit", 60):]} for k,v in self.friends.items()},
           "contacts": contacts,
           "conversations": conversations,
           "groups": groups,
