@@ -253,3 +253,47 @@ def test_sensor_attributes_expose_paused_state_and_active_request():
 
     assert attributes["paused"] is True
     assert attributes["active_request"] == {"conversation": "dm:123"}
+
+
+
+def test_queued_message_can_be_edited_and_cancelled_individually():
+    from types import SimpleNamespace
+    import asyncio
+
+    events = []
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.queue = [{
+        "message_id": "111",
+        "key": "dm:123",
+        "content": "original",
+    }, {
+        "message_id": "222",
+        "key": "dm:456",
+        "content": "keep this",
+    }]
+    assistant.sensor = SimpleNamespace(hass=None)
+    assistant.hass = SimpleNamespace(bus=SimpleNamespace(
+        async_fire=lambda *args, **kwargs: events.append((args, kwargs))
+    ))
+
+    edited = asyncio.run(assistant.edit_queued_message("111", "corrected"))
+    assert edited is True
+    assert assistant.queue[0]["content"] == "corrected"
+
+    cancelled = asyncio.run(assistant.cancel_queued_message("111"))
+    assert cancelled is True
+    assert len(assistant.queue) == 1
+    assert assistant.queue[0]["message_id"] == "222"
+    assert events[0][0][0] == "discord_game_assistant_queue_edited"
+    assert events[1][0][0] == "discord_game_assistant_queue_message_cancelled"
+
+
+def test_editing_queue_rejects_blank_content():
+    import asyncio
+    import pytest
+
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.queue = [{"message_id": "111", "content": "original"}]
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        asyncio.run(assistant.edit_queued_message("111", "   "))
