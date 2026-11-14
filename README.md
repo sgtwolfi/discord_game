@@ -1,4 +1,4 @@
-# Discord Game + GHOST Assistant (v8.2.4)
+# Discord Game + GHOST Assistant (v9.0.0)
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
@@ -14,6 +14,13 @@ Choose the agents from Home Assistant's conversation-agent dropdowns:
 
 Use IDs such as `conversation.my_ollama_agent`. This integration does not store API keys.
 
+
+## Reliability and live status (9.0.0)
+
+- GHOST reads its live status directly from `input_text.ghost_status` by default. Change the entity in GHOST → Configuration → Assistant behaviour if your helper has a different ID. The integration reads the state itself and injects the current value into both Local and API model context; it does **not** need to be exposed to Assist or enabled as an AI tool.
+- Questions such as “what's your status?” are answered directly from that helper, without a model call. If the helper is missing or unavailable, GHOST says so rather than inventing a status.
+- The typing indicator starts before group relevance checks and model calls, and stays active while GHOST works. This is enabled by default for DMs and configured group channels.
+- Friend profile pictures are retrieved from Discord user profiles, with the existing Discord Game user sensors as a fallback. The chat panel uses these avatars and opens each conversation at the newest message automatically.
 
 ## Runtime modes
 
@@ -34,7 +41,7 @@ Choose **Local Mode** or **API Mode** in the GHOST sidebar under Settings → As
 
 - Select separate Conversation and Operations agents, with an optional Fallback agent, in Discord Game → Configure.
 - GHOST assigns narrow role-specific prompts and routes Home Assistant work to the Operations Agent. The fallback is for model-call recovery, not a second attempt at an uncertain side effect.
-- Simple live lookups are answered directly from Home Assistant state without asking a model to use a tool: Discord presence/activity sensors, lights, current local time and configured weather entities.
+- Simple live lookups are answered directly from Home Assistant state without asking a model to use a tool in either mode: the configured GHOST status helper, Discord presence/activity sensors, lights, current local time and configured weather entities.
 - Clear private-DM reminder requests are parsed deterministically and sent directly to the configured reminder script. This avoids relying on a tiny model to discover and call a function. The default script entity is `script.set_timer_alarm_or_reminder`; change it in GHOST → Settings if yours is named differently. The script must return `success: true` before GHOST confirms the reminder. Ambiguous times (for example, “at 7”) trigger a clarification instead of a guess.
 - Other device actions still depend on the selected Operations Agent and its Home Assistant tool support. A 0.5B model is not guaranteed to make reliable tool calls merely because prompts are shorter; use the direct handlers where available and test any other action with the Activity panel open.
 
