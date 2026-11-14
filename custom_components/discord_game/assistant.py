@@ -160,15 +160,15 @@ class DiscordAssistant:
             self.sensor.async_write_ha_state()
 
     async def async_start(self):
+        saved = await self.store.async_load() or {}
+        self.friends = saved.get("friends", {})
+        self.transcript = saved.get("transcript", [])[-100:]
+        self.model_usage_data = saved.get("model_usage", {})
         if not self.enabled:
             self._refresh_sensor()
             return
-        saved=await self.store.async_load() or {}
-        self.friends=saved.get("friends",{})
-        self.transcript=saved.get("transcript",[])[-100:]
-        self.model_usage_data = saved.get("model_usage", {})
-        self.worker=asyncio.create_task(self._run())
-        self._state="ready"
+        self.worker = asyncio.create_task(self._run())
+        self._state = "ready"
         self._refresh_sensor()
     async def async_stop(self):
         self.stopped=True
