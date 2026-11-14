@@ -28,12 +28,13 @@ Use IDs such as `conversation.my_ollama_agent`. This integration does not store 
 
 New entity: `sensor.discord_game_assistant`. Attributes include queue state, model agent IDs, recent transcript, context snapshots, estimated token counts, errors and friend-memory counts.
 
-A GHOST entry is added to the Home Assistant sidebar. The admin panel shows the active request and prompt snapshot, pending messages, recent transcript, structured action results, estimated model usage and approved-contact memory. It provides pause/resume, queue editing/cancellation, transcript replay, clear-queue, manual send and per-contact memory clearing controls.
+A GHOST entry is added to the Home Assistant sidebar. The admin panel shows the active request and prompt snapshot, pending messages, recent transcript, structured action results, estimated model usage and approved-contact memory. It provides pause/resume, queue editing/cancellation, transcript replay, clear-queue, manual send, temporary context injection and per-contact memory correction/clearing controls.
 
 Services:
 - `discord_game.send_message`: manually send as the bot; supply `message` and either `user_id` or `channel_id`.
 - `discord_game.clear_friend_memory`: clear one friend's persistent DM memory using their Discord user ID.
 - `discord_game.set_friend_memory`: replace a contact's durable memory with an administrator correction.
+- `discord_game.set_context_note`: inject temporary context for an approved DM or selected server channel; it is not persisted across restarts.
 - `discord_game.pause`, `resume`, and `clear_queue`: control pending processing.
 - `discord_game.edit_queued_message` and `cancel_queued_message`: edit or cancel an individual pending message by its Discord message ID.
 - `discord_game.replay_transcript`: reprocess the original user messages from a retained transcript entry.
