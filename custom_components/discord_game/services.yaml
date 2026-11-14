@@ -1,0 +1,90 @@
+send_message:
+  name: Send message as GHOST
+  fields:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    user_id:
+      selector:
+        text:
+    channel_id:
+      selector:
+        text:
+clear_friend_memory:
+  name: Clear friend memory
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+
+pause:
+  name: Pause GHOST
+  description: Stop starting new replies while allowing the current reply to finish.
+resume:
+  name: Resume GHOST
+  description: Resume processing queued Discord messages.
+clear_queue:
+  name: Clear pending messages
+  description: Discard queued messages without interrupting the active reply.
+edit_queued_message:
+  name: Edit pending message
+  description: Change a message before GHOST processes it.
+  fields:
+    message_id:
+      required: true
+      selector:
+        text:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+cancel_queued_message:
+  name: Cancel pending message
+  description: Remove one message from the pending queue.
+  fields:
+    message_id:
+      required: true
+      selector:
+        text:
+replay_transcript:
+  name: Replay conversation
+  description: Reprocess the original user messages from a retained transcript entry.
+  fields:
+    timestamp:
+      required: true
+      selector:
+        text:
+    conversation:
+      required: true
+      selector:
+        text:
+set_friend_memory:
+  name: Correct contact memory
+  description: Replace the durable memory summary for an approved Discord contact.
+  fields:
+    user_id:
+      required: true
+      selector:
+        text:
+    summary:
+      required: true
+      selector:
+        text:
+          multiline: true
+set_context_note:
+  name: Inject conversation context
+  description: Set temporary admin context for one approved DM or selected server channel. The note is held in memory only.
+  fields:
+    conversation:
+      required: true
+      selector:
+        text:
+    context:
+      required: true
+      selector:
+        text:
+          multiline: true

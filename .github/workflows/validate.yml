@@ -1,0 +1,52 @@
+name: Validate integration
+
+on:
+  push:
+    branches: ["master", "feature/ghost-assistant-v7"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Python files
+        run: python -m compileall -q custom_components/discord_game tests
+      - name: Install integration test dependencies
+        run: |
+          pip install pytest
+      - name: Run assistant unit tests
+        run: pytest -q tests
+      - name: Lint new assistant runtime
+        run: |
+          pip install ruff
+          ruff check custom_components/discord_game/assistant.py custom_components/discord_game/services.py custom_components/discord_game/panel.py custom_components/discord_game/websocket.py custom_components/discord_game/__init__.py tests/test_assistant.py
+      - name: Validate frontend panel JavaScript
+        run: node --check custom_components/discord_game/frontend/ghost-panel.js
+      - name: Validate service descriptions
+        run: |
+          pip install pyyaml
+          python - <<'PY'
+          import yaml
+          from pathlib import Path
+          yaml.safe_load(Path("custom_components/discord_game/services.yaml").read_text())
+          PY
+      - name: Validate JSON files
+        run: |
+          python -m json.tool custom_components/discord_game/manifest.json >/dev/null
+          python -m json.tool custom_components/discord_game/strings.json >/dev/null
+          python -m json.tool custom_components/discord_game/translations/en.json >/dev/null
+      - name: Validate manifest version
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("custom_components/discord_game/manifest.json").read_text())
+          assert manifest["domain"] == "discord_game"
+          assert manifest["version"]
+          assert manifest["requirements"]
+          PY
