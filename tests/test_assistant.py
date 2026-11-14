@@ -22,12 +22,19 @@ helpers = types.ModuleType("homeassistant.helpers")
 helpers.__path__ = []
 storage_module = types.ModuleType("homeassistant.helpers.storage")
 storage_module.Store = type("Store", (), {})
+util_module = types.ModuleType("homeassistant.util")
+util_module.__path__ = []
+dt_module = types.ModuleType("homeassistant.util.dt")
+dt_module.now = lambda: datetime.now(UTC)
+util_module.dt = dt_module
 sys.modules.update({
     "homeassistant": ha,
     "homeassistant.components": components,
     "homeassistant.components.sensor": sensor_module,
     "homeassistant.helpers": helpers,
     "homeassistant.helpers.storage": storage_module,
+    "homeassistant.util": util_module,
+    "homeassistant.util.dt": dt_module,
 })
 
 repo_root = Path(__file__).resolve().parents[1]
@@ -35,6 +42,11 @@ package = types.ModuleType("custom_components.discord_game")
 package.__path__ = [str(repo_root / "custom_components" / "discord_game")]
 sys.modules["custom_components.discord_game"] = package
 assistant_module = importlib.import_module("custom_components.discord_game.assistant")
+local_status_module = importlib.import_module("custom_components.discord_game.local_status")
+local_tasks_module = importlib.import_module("custom_components.discord_game.local_tasks")
+answer_local_status = local_status_module.answer_local_status
+parse_local_reminder = local_tasks_module.parse_local_reminder
+
 DiscordAssistant = assistant_module.DiscordAssistant
 speech = assistant_module.speech
 
@@ -1510,3 +1522,217 @@ def test_live_state_classifier_routes_presence_questions_to_operations():
     assert query.search("whats Harvey doing right now?")
     assert query.search("what is the current status of the bedroom?")
     assert query.search("is Harvey home?")
+
+
+
+def test_legacy_memory_cleanup_removes_assistant_banter_and_unverified_claims():
+    legacy = """
+    Ooh right, Harvey's doing nothing, just chillin' at full brightness mate.
+    Harvey is definitely sat at his PC.
+    Preference: like science fiction films
+    Action record (NOT CONFIRMED): Turn the room lights red
+    """
+    cleaned = assistant_module.sanitize_legacy_memory_summary(legacy)
+    assert "Ooh right" not in cleaned
+    assert "definitely sat at his PC" not in cleaned
+    assert "Preference: like science fiction films" in cleaned
+    assert "Action record (NOT CONFIRMED): Turn the room lights red" in cleaned
+
+
+def test_api_mode_prompt_keeps_ghost_memory_without_overriding_ha_agent_prompt():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.limit = 8
+    assistant.budget = 4000
+    batch = [{"sender_name": "Tokyo", "content": "What is Harvey doing?", "is_dm": True}]
+
+    prompt = assistant._prompt(
+        batch,
+        [{"role": "user", "sender": "Tokyo", "content": "Earlier question"}],
+        "- Preference: likes science fiction films",
+        role="operations",
+    )
+
+    assert "Preference: likes science fiction films" in prompt
+    assert "What is Harvey doing?" in prompt
+    assert "Earlier question" in prompt
+    assert "GHOST reference context" in prompt
+    assert "Role instructions" not in prompt
+    assert "You are GHOST:" not in prompt
+
+
+def test_api_mode_prompt_does_not_include_another_contact_memory():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.limit = 8
+    assistant.budget = 4000
+    prompt = assistant._prompt(
+        [{"sender_name": "Tokyo", "content": "Hello", "is_dm": True}],
+        [],
+        "",
+        role="conversation",
+    )
+    assert "private memory" not in prompt.lower()
+    assert "Saved facts about this approved DM contact" not in prompt
+
+
+
+def test_local_reminder_parser_handles_relative_duration():
+    parsed = parse_local_reminder(
+        "Remind me to take the bins out in 20 minutes",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed == {"name": "take the bins out", "duration_seconds": 1200}
+
+
+def test_local_reminder_parser_handles_duration_before_task():
+
+    parsed = parse_local_reminder(
+        "Remind me in two hours to call Max",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed == {"name": "call Max", "duration_seconds": 7200}
+
+
+def test_local_reminder_parser_handles_spoken_tens():
+    parsed = parse_local_reminder(
+        "Remind me to call Max in twenty minutes",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed == {"name": "call Max", "duration_seconds": 1200}
+
+
+def test_local_reminder_parser_handles_explicit_date_and_clock_time():
+
+    parsed = parse_local_reminder(
+        "Remind me to take the bins out tomorrow at 7pm",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed == {"name": "take the bins out", "alarm_time": "19:00", "date": "2026-11-15"}
+
+
+def test_local_reminder_parser_asks_instead_of_guessing_ambiguous_time():
+
+    parsed = parse_local_reminder(
+        "Remind me to call Max at 7",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed["needs_clarification"] is True
+    assert "AM or PM" in parsed["clarification"]
+
+
+def test_local_reminder_parser_requires_a_time():
+
+    parsed = parse_local_reminder(
+        "Remind me to call Max",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert parsed["needs_clarification"] is True
+    assert "When should I remind you" in parsed["clarification"]
+
+
+def test_local_status_reader_uses_discord_presence_sensor():
+    state = SimpleNamespace(
+        entity_id="sensor.discord_user_123",
+        state="online",
+        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+    )
+    hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
+    answer = answer_local_status(
+        hass, "What's Harvey doing?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "Harvey is playing Factorio."
+
+
+def test_local_status_reader_reports_missing_weather_without_inventing_it():
+
+    hass = SimpleNamespace(states=SimpleNamespace(async_all=list))
+    answer = answer_local_status(
+        hass, "What's the weather and current time?",
+        datetime(2026, 11, 14, 9, 5, tzinfo=UTC),
+    )
+    assert "Saturday 09:05" in answer
+    assert "can't see a Home Assistant weather entity" in answer
+
+
+
+def test_local_reminder_executor_requires_script_success_response():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.local_reminder_script = "script.set_timer_alarm_or_reminder"
+
+    class FakeServices:
+        def has_service(self, domain, service):
+            return (domain, service) == ("script", "set_timer_alarm_or_reminder")
+
+        async def async_call(self, domain, service, data, **kwargs):
+            assert domain == "script"
+            assert service == "set_timer_alarm_or_reminder"
+            assert data == {"name": "take bins out", "duration_seconds": 1200}
+            assert kwargs == {"blocking": True, "return_response": True}
+            return {"success": True, "name": "take bins out", "kind": "reminder"}
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    result = asyncio.run(assistant._execute_local_reminder({
+        "name": "take bins out", "duration_seconds": 1200
+    }))
+    assert assistant_module.action_result_error(result) is None
+    snapshot = assistant_module.action_result_snapshot(result)
+    assert snapshot["success"][0]["id"] == "script.set_timer_alarm_or_reminder"
+
+
+def test_local_reminder_executor_does_not_claim_success_without_success_flag():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.local_reminder_script = "script.set_timer_alarm_or_reminder"
+
+    class FakeServices:
+        def has_service(self, domain, service):
+            return True
+
+        async def async_call(self, *args, **kwargs):
+            return {"message": "The script did not return its success flag"}
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    result = asyncio.run(assistant._execute_local_reminder({
+        "name": "take bins out", "duration_seconds": 1200
+    }))
+    assert assistant_module.action_result_error(result) is not None
+
+
+
+def test_local_status_reader_recovers_a_minor_contact_name_typo():
+    state = SimpleNamespace(
+        entity_id="sensor.discord_user_123",
+        state="online",
+        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+    )
+    hass = SimpleNamespace(states=SimpleNamespace(async_all=lambda: [state]))
+    answer = answer_local_status(
+        hass, "What's ahrveys doing?",
+        datetime(2026, 11, 14, 9, 0, tzinfo=UTC),
+    )
+    assert answer == "Harvey is playing Factorio."
+
+
+def test_local_status_intent_recognises_time_weather_and_informal_presence_questions():
+    assert assistant_module.request_kind("What's the current time and weather?") == "query"
+    assert assistant_module.request_kind("Can you tell me what ahrveys doing?") == "query"
+    assert assistant_module.request_kind("The weather is rubbish today") == "conversation"
+
+
+
+def test_api_mode_requires_direct_address_before_group_messages_reach_tool_enabled_agent():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+
+    ignored = asyncio.run(assistant._should_respond_to_group(
+        [{"directly_addressed": False, "sender_name": "Tokyo", "content": "Turn the lights red"}],
+        [],
+    ))
+    allowed = asyncio.run(assistant._should_respond_to_group(
+        [{"directly_addressed": True, "sender_name": "Tokyo", "content": "GHOST, turn the lights red"}],
+        [],
+    ))
+
+    assert ignored[0] is False
+    assert allowed[0] is True

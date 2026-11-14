@@ -91,8 +91,22 @@ set_context_note:
 
 update_settings:
   name: Save GHOST assistant configuration
-  description: Save advanced assistant tuning and custom role prompts from the GHOST sidebar panel.
+  description: Save GHOST runtime mode, reminder script and assistant tuning from the sidebar panel.
   fields:
+    assistant_mode:
+      required: true
+      selector:
+        select:
+          options:
+            - label: Local Mode
+              value: local
+            - label: API Mode
+              value: api
+    local_reminder_script:
+      required: true
+      selector:
+        entity:
+          domain: script
     fallback_after_failures:
       required: true
       selector:

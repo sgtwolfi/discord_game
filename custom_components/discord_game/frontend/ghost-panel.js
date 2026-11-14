@@ -15,6 +15,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     this._capabilitiesLoading = false;
     this._capabilitiesFilter = "";
     this._capabilityDomain = "all";
+    this._modeOverride = null;
   }
 
   set hass(hass) {
@@ -461,21 +462,55 @@ class DiscordGameGhostPanel extends HTMLElement {
     const agentsPanel = this._el("section", null, "panel");
     agentsPanel.append(this._el("h2", "Assigned conversation agents"));
     const agentGrid = this._el("div", null, "fieldgrid");
-    for (const item of [["Conversation", d.conversation_agent], ["Operations", d.operations_agent], ["Memory", "Evidence-only (no model)"], ["Fallback", d.fallback_agent]]) {
+    const assigned = d.mode === "api"
+      ? [["API conversation agent", d.conversation_agent], ["Memory", "GHOST-managed; independent of model"]]
+      : [["Conversation", d.conversation_agent], ["Operations", d.operations_agent], ["Memory", "Evidence-only (no model)"], ["Fallback", d.fallback_agent]];
+    for (const item of assigned) {
       const cell = this._el("div", null, "field");
       cell.append(this._el("label", item[0]));
       cell.append(this._el("strong", item[1] || "Not selected"));
       agentGrid.append(cell);
     }
     agentsPanel.append(agentGrid);
-    agentsPanel.append(this._el("p", "Choose the Conversation, Operations and Fallback agents in Settings → Devices & services → Discord Game → Configure. Conversation handles chat and group relevance. Operations performs Home Assistant actions and live-state queries. Fallback recovers from primary model failures. Memory is handled locally by a conservative evidence-only extractor; it does not need a model.", "help"));
-    agentsPanel.append(this._el("p", "Selecting an operations agent does not automatically give it access to devices or scripts. Use the capability manager below to expose the exact Home Assistant entities it needs to Assist.", "help"));
+    agentsPanel.append(this._el("p", d.mode === "api"
+      ? "API Mode uses one Home Assistant conversation agent for chat, status questions and actions. Its model, system prompt and tool/function configuration stay in that agent's own settings. GHOST still injects the correct contact's saved memory and records verified outcomes; changing models does not remove memory. For group-chat safety, GHOST only responds when directly mentioned or replied to."
+      : "Local Mode splits work between the Conversation, Operations and optional Fallback agents. GHOST supplies short role-specific prompts and keeps memory deterministic, so no memory model is needed.", "help"));
+    agentsPanel.append(this._el("p", "Entity exposure and script access are still managed by Home Assistant Assist. The capability manager below lets you expose the exact entities and scripts. Exposing a script makes it available as a tool; it does not automatically explain its arguments or purpose to a weak model, so give scripts clear names and descriptions.", "help"));
     shell.append(agentsPanel);
 
     const panel = this._el("section", null, "panel");
     panel.append(this._el("h2", "Assistant behaviour"));
-    panel.append(this._el("p", "Model assignments remain in Discord Game integration settings. These controls tune how GHOST uses those agents.", "muted"));
+    panel.append(this._el("p", "Choose how GHOST uses Home Assistant conversation agents. Memory, contact isolation and action verification remain owned by GHOST in both modes.", "muted"));
     const form = this._el("form");
+    const modeWrap = this._el("div", null, "field");
+    modeWrap.append(this._el("label", "Assistant mode"));
+    const modeSelect = this._el("select");
+    for (const [value, label] of [["local", "Local Mode — multi-agent, small-model workflow"], ["api", "API Mode — one native Home Assistant agent"]]) {
+      const option = this._el("option", label); option.value = value; modeSelect.append(option);
+    }
+    modeSelect.name = "assistant_mode"; modeSelect.value = this._modeOverride || settings.assistant_mode || d.mode || "local";
+    modeSelect.dataset.keep = "cfg-assistant_mode";
+    modeWrap.append(modeSelect);
+    modeWrap.append(this._el("p", modeSelect.value === "api"
+      ? "Configure the provider, model, system prompt and available tools in the selected Home Assistant conversation agent. GHOST adds private memory and keeps its own conversation records."
+      : "Assign separate Conversation, Operations and optional Fallback agents in Discord Game → Configure. Use small local models for narrow tasks; keep tool access restricted.", "help"));
+    modeSelect.addEventListener("change", () => {
+      this._modeOverride = modeSelect.value;
+      this._render();
+    });
+    form.append(modeWrap);
+    const reminderWrap = this._el("div", null, "field");
+    reminderWrap.append(this._el("label", "Local Mode reminder script entity"));
+    const reminderScript = this._el("input");
+    reminderScript.name = "local_reminder_script";
+    reminderScript.value = settings.local_reminder_script || "script.set_timer_alarm_or_reminder";
+    reminderScript.dataset.keep = "cfg-local_reminder_script";
+    if (modeSelect.value === "api") reminderScript.type = "hidden";
+    reminderWrap.append(reminderScript);
+    if (modeSelect.value !== "api") {
+      reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear private-DM reminders, so a tiny model does not have to discover or invoke a tool. It should accept name plus either duration_seconds or alarm_time (and optional date), and return success: true. GHOST does not send announce_message or text fields unless a future explicit option is added.", "help"));
+    }
+    form.append(reminderWrap);
     const grid = this._el("div", null, "fieldgrid");
     const number = (key, title, value, min, max, step, help) => {
       const wrap = this._el("div", null, "field");
@@ -506,6 +541,14 @@ class DiscordGameGhostPanel extends HTMLElement {
     typing.dataset.keep = "cfg-typing_enabled"; typingLabel.prepend(typing);
     form.append(typingLabel);
 
+    const apiMode = modeSelect.value === "api";
+    if (apiMode) {
+      form.append(this._el("h3", "System prompts and functions"));
+      form.append(this._el("p", "API Mode deliberately does not override your Home Assistant agent's system prompt or function/tool configuration. Edit those in the selected conversation agent's settings. The saved GHOST prompt overrides below are retained but inactive until you switch back to Local Mode.", "help"));
+      for (const key of ["conversation_system_prompt", "operations_system_prompt", "advanced_system_prompt"]) {
+        const hidden = this._el("input"); hidden.type = "hidden"; hidden.name = key; hidden.value = settings[key] || ""; hidden.dataset.keep = "cfg-" + key; form.append(hidden);
+      }
+    } else {
     form.append(this._el("h3", "System prompts"));
     form.append(this._el("p", "These are additional instructions layered onto GHOST's built-in identity, privacy and action-verification rules.", "help"));
     const prompts = [
@@ -527,6 +570,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       form.append(row, area);
       form.append(this._el("p", settings[p[0]] ? "Custom instructions are active. Reset restores the built-in northern British default." : "Built-in default is active. Edit this text and save to create your own override.", "help"));
     }
+    }
     form.append(this._button("Save assistant settings", async () => {
       const data = {};
       for (const field of form.querySelectorAll("[name]")) {
@@ -544,7 +588,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     capTitle.append(this._el("p", "Expose entities and scripts so the selected Home Assistant conversation agent can use them.", "muted"));
     capHead.append(capTitle, this._button("Refresh", () => { this._capabilities = null; this._loadCapabilities(); }, true));
     capabilitiesPanel.append(capHead);
-    capabilitiesPanel.append(this._el("p", "This controls Home Assistant's Assist exposure list. It does not grant access to arbitrary services. Scripts are the easiest way to give GHOST a named, reusable function such as setting a reminder.", "help"));
+    capabilitiesPanel.append(this._el("p", "This controls Home Assistant's Assist exposure list. It does not grant access to arbitrary services. Scripts are the easiest way to give GHOST a named, reusable function such as setting a reminder. In Local Mode, the separately configured reminder script can be called directly by GHOST and does not rely on the model discovering a tool.", "help"));
     capabilitiesPanel.append(this._el("p", "One more required step for Ollama: open Settings → Devices & services → Ollama → Configure and enable the Device control AI tool. This exposure list controls which entities that tool can access. The selected model must support tool calling; very small models can struggle even when everything is configured correctly.", "help"));
     if (this._capabilitiesLoading) {
       capabilitiesPanel.append(this._el("p", "Loading your Home Assistant entities…", "muted"));
@@ -588,7 +632,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       }
       if (entities.length > filtered.length) capabilitiesPanel.append(this._el("p", "Showing " + filtered.length + " matching entities. Narrow the search to find more.", "muted"));
     }
-    capabilitiesPanel.append(this._el("p", "To add a new function: create a Script in Settings → Automations & Scenes → Scripts, give it a clear name, save it, then find it here and switch on Available to Assist. To remove a capability, switch it off. You can expose lights, switches and scripts separately.", "help"));
+    capabilitiesPanel.append(this._el("p", "To add a function for the model: create a Script in Settings → Automations & Scenes → Scripts. Give it a clear name and a useful Description, and describe each input field so Assist knows what arguments it accepts. Then find it here under Scripts / functions and switch on Available to Assist. In Local Mode, also make sure the selected Operations agent has its Home Assistant control tool enabled. In API Mode, enable the equivalent Home Assistant control tool in the selected native conversation agent. You can expose lights, switches and scripts separately; only expose what GHOST should be allowed to use.", "help"));
     shell.append(capabilitiesPanel);
 
     const contactsPanel = this._el("section", null, "panel");
@@ -661,6 +705,8 @@ class DiscordGameGhostPanel extends HTMLElement {
         this._render(); return;
       }
       const data = {};
+      data.assistant_mode = modeSelect.value;
+      data.local_reminder_script = reminderScript.value || "script.set_timer_alarm_or_reminder";
       data.fallback_after_failures = Number(settings.fallback_after_failures ?? 2);
       data.queue_debounce_seconds = Number(settings.queue_debounce_seconds ?? 2.5);
       data.max_context_messages = Number(settings.max_context_messages ?? 12);
