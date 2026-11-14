@@ -402,6 +402,7 @@ def test_admin_memory_correction_has_a_size_limit():
 
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.friends = {}
+    assistant.approved_users = {"123"}
     with pytest.raises(ValueError, match="4000 characters"):
         asyncio.run(assistant.set_friend_memory("123", "x" * 4001))
 
