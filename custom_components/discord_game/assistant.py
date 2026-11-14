@@ -1509,7 +1509,7 @@ class DiscordAssistant:
     async def _compress(self, user_id):
         """Compatibility helper: consolidate one contact's pending memory immediately."""
         record = self.friends.get(str(user_id))
-        if not record or not record.get("pending_messages") or not self.agents.get("memory_agent"):
+        if not record or not record.get("pending_messages"):
             return False
         original = self.friends
         self.friends = {str(user_id): record}
