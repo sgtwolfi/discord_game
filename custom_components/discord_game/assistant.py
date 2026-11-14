@@ -1853,8 +1853,30 @@ class DiscordAssistant:
 
         try:
             return await ask(agent, decision_prompt)
-        except Exception as error:  # noqa: BLE001
-            _LOGGER.warning("GHOST local group relevance check failed; suppressing reply: %s", error)
+        except Exception as primary_error:  # noqa: BLE001
+            # In Local Mode, retain the existing independent fallback agent.
+            # API Mode must never send untrusted group text to its tool-enabled
+            # fallback agent for a relevance decision.
+            fallback = (
+                self.agents.get("fallback_agent")
+                if getattr(self, "mode", "local") != "api"
+                else ""
+            )
+            if fallback and fallback != agent:
+                try:
+                    fallback_prompt = (
+                        "JOB: Recover a failed group relevance decision. Return only the required JSON "
+                        "decision; never write a conversational reply.\n\n" + decision_prompt
+                    )
+                    return await ask(fallback, fallback_prompt)
+                except Exception as fallback_error:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "GHOST local relevance and fallback checks failed: primary=%s fallback=%s",
+                        primary_error,
+                        fallback_error,
+                    )
+            else:
+                _LOGGER.warning("GHOST local group relevance check failed; suppressing reply: %s", primary_error)
             return False, "Local relevance inference failed; GHOST stayed quiet safely."
 
     def _capture_contact_messages(self, batch):
