@@ -57,6 +57,20 @@ def action_result_error(data):
         return "Home Assistant did not report any successfully completed targets."
     return None
 
+def action_result_retryable(data):
+    """Only retry when no target was reported as failed or partially completed."""
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict) or response.get("response_type") != "action_done":
+        return True
+    result_data = response.get("data") or {}
+    if not isinstance(result_data, dict):
+        return True
+    # A partial/failed action must be reported, not blindly repeated.
+    if result_data.get("failed"):
+        return False
+    return not bool(result_data.get("success"))
+
+
 def action_result_snapshot(data):
     """Keep a small, safe audit summary of Home Assistant's action result."""
     response = data.get("response", data) if isinstance(data, dict) else {}
@@ -503,7 +517,7 @@ class DiscordAssistant:
                 # Give the configured paid agent one chance to recover from a
                 # malformed/incomplete local action result, but apply the same
                 # structured-success requirement to that result too.
-                if verification_error and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
+                if verification_error and action_result_retryable(getattr(self, "_last_call_result", None)) and self.agents["fallback_agent"] and model != self.agents["fallback_agent"]:
                     _LOGGER.warning("Operations agent returned an unconfirmed action; retrying with fallback: %s", verification_error)
                     model = self.agents["fallback_agent"]
                     if self.active_request:
