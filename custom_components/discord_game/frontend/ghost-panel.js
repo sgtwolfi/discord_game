@@ -15,6 +15,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     this._capabilitiesLoading = false;
     this._capabilitiesFilter = "";
     this._capabilityDomain = "all";
+    this._modeOverride = null;
   }
 
   set hass(hass) {
@@ -487,13 +488,16 @@ class DiscordGameGhostPanel extends HTMLElement {
     for (const [value, label] of [["local", "Local Mode — multi-agent, small-model workflow"], ["api", "API Mode — one native Home Assistant agent"]]) {
       const option = this._el("option", label); option.value = value; modeSelect.append(option);
     }
-    modeSelect.name = "assistant_mode"; modeSelect.value = settings.assistant_mode || d.mode || "local";
+    modeSelect.name = "assistant_mode"; modeSelect.value = this._modeOverride || settings.assistant_mode || d.mode || "local";
     modeSelect.dataset.keep = "cfg-assistant_mode";
     modeWrap.append(modeSelect);
     modeWrap.append(this._el("p", modeSelect.value === "api"
       ? "Configure the provider, model, system prompt and available tools in the selected Home Assistant conversation agent. GHOST adds private memory and keeps its own conversation records."
       : "Assign separate Conversation, Operations and optional Fallback agents in Discord Game → Configure. Use small local models for narrow tasks; keep tool access restricted.", "help"));
-    modeSelect.addEventListener("change", () => this._render());
+    modeSelect.addEventListener("change", () => {
+      this._modeOverride = modeSelect.value;
+      this._render();
+    });
     form.append(modeWrap);
     const reminderWrap = this._el("div", null, "field");
     reminderWrap.append(this._el("label", "Local Mode reminder script entity"));
