@@ -94,7 +94,7 @@ ACTION_REQUEST = re.compile(
 
 def is_text_addressed(content):
     """Recognise an explicit natural-language address to GHOST without matching words like ghosted."""
-    return bool(re.search(r"\\bghost\\b", str(content or ""), re.IGNORECASE))
+    return bool(re.search(r"\bghost\b", str(content or ""), re.IGNORECASE))
 
 
 def speech(data):
