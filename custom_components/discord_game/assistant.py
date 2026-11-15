@@ -528,6 +528,7 @@ def verify_action_against_live_states(request_text, states, area_names=None, bef
         return None
 
     successes = []
+    verified_states = []
     for state in candidates:
         entity_id = str(state.entity_id)
         entity_domain = entity_id.split(".", 1)[0]
@@ -613,10 +614,18 @@ def verify_action_against_live_states(request_text, states, area_names=None, bef
             )
         if not matches:
             return None
+        display_name = str(attributes.get("friendly_name") or entity_id)
         successes.append({
-            "name": str(attributes.get("friendly_name") or entity_id),
+            "name": display_name,
             "type": "entity",
             "id": entity_id,
+        })
+        verified_states.append({
+            "name": display_name,
+            "id": entity_id,
+            "state": current,
+            "brightness": attributes.get("brightness"),
+            "temperature": attributes.get("temperature"),
         })
 
     return {
@@ -625,7 +634,52 @@ def verify_action_against_live_states(request_text, states, area_names=None, bef
             "data": {"success": successes, "failed": []},
         },
         "verification": "live_entity_state",
+        "verified_states": verified_states,
     }
+
+
+def live_action_confirmation(request_text, result):
+    """Describe only the live states actually verified, not the model's claim."""
+    response = result.get("response", result) if isinstance(result, dict) else {}
+    result_data = response.get("data") if isinstance(response, dict) else {}
+    targets = result_data.get("success", []) if isinstance(result_data, dict) else []
+    names = [
+        str(item.get("name") or item.get("id"))
+        for item in targets if isinstance(item, dict)
+    ]
+    if not names:
+        return ""
+    constraints = _requested_action_constraints(request_text)
+    if "brightness" in constraints:
+        values = [
+            round(float(item["brightness"]) / 255 * 100)
+            for item in result.get("verified_states", [])
+            if isinstance(item.get("brightness"), (int, float))
+        ]
+        detail = (
+            f"at {values[0]} percent brightness"
+            if values and len(set(values)) == 1
+            else "at the requested brightness"
+        )
+    elif "brightness_direction" in constraints:
+        detail = "brighter" if constraints["brightness_direction"] == "up" else "dimmer"
+    elif "colour" in constraints:
+        detail = f"showing {constraints['colour']}"
+    elif "temperature" in constraints:
+        values = [
+            item.get("temperature") for item in result.get("verified_states", [])
+            if isinstance(item.get("temperature"), (int, float))
+        ]
+        detail = f"with a target temperature of {values[0]} degrees" if values else "at the requested temperature"
+    else:
+        state = constraints.get("state")
+        detail = {
+            "on": "on", "off": "off", "locked": "locked", "unlocked": "unlocked",
+            "open": "open", "closed": "closed", "playing": "playing", "paused": "paused",
+        }.get(state, "in the requested state")
+    if len(names) == 1:
+        return f"Home Assistant's live state confirms {names[0]} is {detail}."
+    return f"Home Assistant's live state confirms these matching entities are {detail}: {', '.join(names)}."
 
 
 def action_result_error(data):
@@ -819,6 +873,9 @@ def action_result_snapshot(data):
     verification = data.get("verification") if isinstance(data, dict) else None
     if verification:
         snapshot["verification"] = verification
+    verified_states = data.get("verified_states") if isinstance(data, dict) else None
+    if verified_states:
+        snapshot["verified_states"] = verified_states[:25]
     return snapshot
 
 
@@ -2272,6 +2329,10 @@ class DiscordAssistant:
                                 operation_result = live_verification
                                 action_result = action_result_snapshot(operation_result)
                                 verification_error = action_result_error(operation_result)
+                                if not verification_error:
+                                    verified_answer = live_action_confirmation(request_text, operation_result)
+                                    if verified_answer:
+                                        answer = verified_answer
                             else:
                                 response_data = operation_result.get("response", operation_result)
                                 response_data = response_data.get("data") or {}
