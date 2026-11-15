@@ -2757,6 +2757,31 @@ def test_mention_only_continuity_recognises_the_reported_messages():
         assert "follow-up" in result[1]
 
 
+def test_group_relevance_has_conservative_fallback_when_local_judge_is_missing():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 0
+    assistant.group_relevance_agent = ""
+    assistant.approved_users = set()
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("No relevance model should be called in fallback mode")
+
+    assistant._call = unexpected
+    asked = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Ryan", "sender_id": "456", "content": "what do you think of this film?", "directly_addressed": False}], []
+    ))
+    chatter = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Ryan", "sender_id": "456", "content": "that film was decent", "directly_addressed": False}], []
+    ))
+    assert asked[0] is True
+    assert chatter[0] is False
+
+
 def test_group_followup_continuity_is_shared_across_different_speakers():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
