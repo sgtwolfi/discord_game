@@ -644,6 +644,14 @@ def action_result_error(data):
         return "Home Assistant returned no structured action result."
     failed = result_data.get("failed") or []
     succeeded = result_data.get("success") or []
+    if not isinstance(succeeded, list) or not isinstance(failed, list):
+        return "Home Assistant returned malformed target result lists."
+    valid_target = lambda item: (
+        isinstance(item, dict)
+        and any(str(item.get(key) or "").strip() for key in ("id", "entity_id", "name"))
+    )
+    if any(not valid_target(item) for item in succeeded + failed):
+        return "Home Assistant returned a target entry without a usable name or identifier."
     if failed:
         details = []
         for item in failed:
