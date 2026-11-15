@@ -931,7 +931,10 @@ class DiscordAssistant:
         # GHOST continues to own memory, queueing, privacy and verification.
         self.api_fallback_agent = str(config.get("api_fallback_agent", "")).strip()
         self.group_relevance_agent = str(config.get("group_relevance_agent", "")).strip()
-        self.group_require_mention = bool(config.get("group_require_mention", False))
+        self.group_participation_mode = str(config.get("group_participation_mode", "mention" if config.get("group_require_mention", False) else "participant")).strip().lower()
+        if self.group_participation_mode not in {"participant", "mention", "always"}:
+            self.group_participation_mode = "participant"
+        self.group_require_mention = self.group_participation_mode == "mention"
         self.group_continuity_seconds = max(0, min(1800, int(config.get("group_continuity_seconds", 300))))
         self.spam_local_agent = str(config.get("spam_local_agent", "")).strip()
         self.spam_policy = str(config.get("spam_policy", "defer_local")).strip().lower()
@@ -2543,8 +2546,11 @@ class DiscordAssistant:
     async def _should_respond_to_group(self, batch, history, context_note=""):
         """Use continuity and direct-address signals before local relevance inference."""
         addressed = any(entry.get("directly_addressed") for entry in batch)
+        participation_mode = str(getattr(self, "group_participation_mode", "mention" if getattr(self, "group_require_mention", False) else "participant"))
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
+        if participation_mode == "always":
+            return True, "Always-respond group mode is enabled."
         # A clear follow-up from the same speaker shortly after GHOST replied
         # belongs to the active thread, even when ordinary group messages are
         # configured as mention-only. HA actions and live-state queries remain
@@ -2575,7 +2581,7 @@ class DiscordAssistant:
             if followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
                 return True, "GHOST continued the shared group conversation; another participant was recognised as a follow-up."
 
-        if getattr(self, "group_require_mention", False):
+        if participation_mode == "mention":
             return False, "GHOST stayed quiet because mention-only mode is enabled."
 
         # Never send untrusted group text to the API agent, which may have HA tools.
