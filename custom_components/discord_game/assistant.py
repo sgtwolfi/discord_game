@@ -2577,8 +2577,8 @@ class DiscordAssistant:
             first_current = batch[0] if batch else {}
             prior_id = str((prior_user or {}).get("sender_id") or "").strip()
             current_id = str(first_current.get("sender_id") or "").strip()
-            prior_name = re.sub(r"\\s+", " ", str((prior_user or {}).get("sender_name") or (prior_user or {}).get("sender") or "")).strip().casefold()
-            current_name = re.sub(r"\\s+", " ", str(first_current.get("sender_name") or first_current.get("sender") or "")).strip().casefold()
+            prior_name = re.sub(r"\s+", " ", str((prior_user or {}).get("sender_name") or (prior_user or {}).get("sender") or "")).strip().casefold()
+            current_name = re.sub(r"\s+", " ", str(first_current.get("sender_name") or first_current.get("sender") or "")).strip().casefold()
             identity_conflict = bool(prior_id and current_id and prior_id != current_id and prior_name and prior_name == current_name)
             elapsed = _timestamp_delta_seconds(assistant_turn.get("timestamp"), batch[-1].get("timestamp"))
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
