@@ -367,6 +367,175 @@ def take_conversation_batch(queue):
     return sorted(batch, key=lambda entry: entry["sort"])
 
 
+ACTION_TARGET_STOPWORDS = {
+    "a", "an", "the", "my", "our", "your", "please", "could", "would",
+    "can", "you", "i", "want", "need", "to", "for", "in", "on", "at",
+    "of", "and", "then", "now", "currently", "just", "all", "every",
+    "turn", "switch", "set", "change", "adjust", "dim", "brighten",
+    "increase", "decrease", "toggle", "activate", "deactivate", "enable",
+    "disable", "make", "put", "lights", "light", "bulbs", "bulb",
+    "switches", "switch", "devices", "device", "brightness", "bright",
+    "dimmer", "dimmest", "maximum", "max", "minimum", "min", "full",
+    "percent", "percentage", "colour", "color", "red", "green", "blue",
+    "white", "warm", "cool", "temperature", "degrees", "degree",
+    "open", "close", "lock", "unlock", "play", "pause", "stop", "start",
+    "fan", "fans", "cover", "covers", "blind", "blinds", "shutter",
+    "shutters", "door", "doors", "garage",
+}
+
+
+def _action_domain_hint(request_text):
+    """Return a domain only when the request names a recognisable device class."""
+    value = str(request_text or "").casefold()
+    if re.search(r"\\b(?:lights?|bulbs?)\\b", value):
+        return "light"
+    if re.search(r"\\bswitch(?:es)?\\b", value):
+        return "switch"
+    if re.search(r"\\b(?:blinds?|shutters?|covers?|garage door)\\b", value):
+        return "cover"
+    if re.search(r"\\block(?:s)?\\b", value):
+        return "lock"
+    if re.search(r"\\bfans?\\b", value):
+        return "fan"
+    if re.search(r"\\b(?:thermostat|climate)\\b", value):
+        return "climate"
+    if re.search(r"\\b(?:media player|speaker|speakers)\\b", value):
+        return "media_player"
+    return None
+
+
+def _action_target_terms(request_text):
+    """Extract only likely target-name words, excluding commands and properties."""
+    return {
+        token for token in re.findall(r"[a-z0-9]+", str(request_text or "").casefold())
+        if token not in ACTION_TARGET_STOPWORDS and not token.isdigit()
+    }
+
+
+def _requested_action_constraints(request_text):
+    """Translate supported, unambiguous requested state changes into checks."""
+    value = str(request_text or "").casefold()
+    constraints = {}
+    if re.search(r"\\b(?:turn|switch)\\s+on\\b|\\b(?:activate|enable)\\b", value):
+        constraints["state"] = "on"
+    elif re.search(r"\\b(?:turn|switch)\\s+off\\b|\\b(?:deactivate|disable)\\b", value):
+        constraints["state"] = "off"
+    elif re.search(r"\\bunlock\\b", value):
+        constraints["state"] = "unlocked"
+    elif re.search(r"\\block\\b", value):
+        constraints["state"] = "locked"
+    elif re.search(r"\\bopen\\b", value):
+        constraints["state"] = "open"
+    elif re.search(r"\\bclose\\b", value):
+        constraints["state"] = "closed"
+    elif re.search(r"\\bplay\\b|\\bstart\\b", value):
+        constraints["state"] = "playing"
+    elif re.search(r"\\bpause\\b|\\bstop\\b", value):
+        constraints["state"] = "paused"
+
+    if "brightness" in value or re.search(r"\\b(?:brighter|dimmer)\\b", value):
+        if re.search(r"\\b(?:maximum|max|full)\\b", value):
+            constraints["brightness"] = 255
+        else:
+            percent = re.search(r"\\b(\\d{1,3})\\s*%", value)
+            if percent and int(percent.group(1)) <= 100:
+                constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
+    temperature = re.search(
+        r"\\b(?:temperature|thermostat|climate)\\b.{0,30}?\\b(?:to|at)\\s*(-?\\d+(?:\\.\\d+)?)",
+        value,
+    )
+    if temperature:
+        constraints["temperature"] = float(temperature.group(1))
+    return constraints
+
+
+def verify_action_against_live_states(request_text, states):
+    """Build structured success evidence only when named HA entities match the request.
+
+    This is a read-after-write verification fallback for conversation agents that
+    return action_done without target lists. It never infers success from model
+    speech, unrelated state changes, or an ambiguous target.
+    """
+    constraints = _requested_action_constraints(request_text)
+    if not constraints:
+        return None
+    domain = _action_domain_hint(request_text)
+    terms = _action_target_terms(request_text)
+    all_targets = not terms and bool(re.search(r"\\b(?:all|every)\\b", str(request_text), re.IGNORECASE))
+    if not terms and not all_targets:
+        return None
+
+    candidates = []
+    for state in states or []:
+        entity_id = str(getattr(state, "entity_id", "") or "")
+        entity_domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+        if domain and entity_domain != domain:
+            continue
+        attributes = getattr(state, "attributes", {}) or {}
+        name = str(attributes.get("friendly_name") or attributes.get("name") or "")
+        entity_tokens = set(re.findall(
+            r"[a-z0-9]+", (entity_id + " " + name).casefold()
+        ))
+        if all_targets or terms.issubset(entity_tokens):
+            candidates.append(state)
+
+    if not candidates:
+        return None
+
+    successes = []
+    for state in candidates:
+        entity_id = str(state.entity_id)
+        entity_domain = entity_id.split(".", 1)[0]
+        current = str(getattr(state, "state", "")).casefold()
+        attributes = getattr(state, "attributes", {}) or {}
+        matches = True
+        expected_state = constraints.get("state")
+        if expected_state == "on":
+            matches = current in {"on", "playing", "open", "unlocked", "home"}
+        elif expected_state == "off":
+            matches = current in {"off", "paused", "closed", "locked", "not_home"}
+        elif expected_state == "locked":
+            matches = current == "locked"
+        elif expected_state == "unlocked":
+            matches = current == "unlocked"
+        elif expected_state == "open":
+            matches = current == "open"
+        elif expected_state == "closed":
+            matches = current == "closed"
+        elif expected_state == "playing":
+            matches = current == "playing"
+        elif expected_state == "paused":
+            matches = current in {"paused", "idle", "off"}
+        if matches and "brightness" in constraints:
+            brightness = attributes.get("brightness")
+            matches = (
+                entity_domain == "light"
+                and isinstance(brightness, (int, float))
+                and abs(float(brightness) - constraints["brightness"]) <= 13
+            )
+        if matches and "temperature" in constraints:
+            actual = attributes.get("temperature")
+            matches = (
+                isinstance(actual, (int, float))
+                and abs(float(actual) - constraints["temperature"]) <= 0.5
+            )
+        if not matches:
+            return None
+        successes.append({
+            "name": str(attributes.get("friendly_name") or entity_id),
+            "type": "entity",
+            "id": entity_id,
+        })
+
+    return {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": successes, "failed": []},
+        },
+        "verification": "live_entity_state",
+    }
+
+
 def action_result_error(data):
     """Return why a requested HA action is not positively confirmed.
 
@@ -521,8 +690,13 @@ def action_result_snapshot(data):
 
     return {
         "response_type": response.get("response_type"),
+        "targets": targets(result_data.get("targets")),
         "success": targets(result_data.get("success")),
         "failed": targets(result_data.get("failed")),
+        "verification": (
+            data.get("verification")
+            if isinstance(data, dict) else None
+        ),
     }
 
 
@@ -1235,6 +1409,17 @@ class DiscordAssistant:
             try: await channel.trigger_typing()
             except Exception: _LOGGER.debug("Typing indicator failed",exc_info=True)
             await asyncio.sleep(8)
+    async def _verify_action_live_state(self, request_text):
+        """Wait briefly for HA state updates and verify the exact requested target."""
+        for delay in (0, 0.25, 0.5, 1.0):
+            if delay:
+                await asyncio.sleep(delay)
+            states = self.hass.states.async_all()
+            verified = verify_action_against_live_states(request_text, states)
+            if verified is not None:
+                return verified
+        return None
+
     async def _retry_failed_action(self, agent, prompt, first_result, models_attempted):
         """Retry one explicit structured failure, targeting only failed entity IDs."""
         targets = action_retry_targets(first_result)
@@ -1938,6 +2123,17 @@ class DiscordAssistant:
                     action_result = action_result_snapshot(operation_result) if is_action else None
                     if is_action:
                         verification_error = action_result_error(operation_result)
+                        if (
+                            verification_error
+                            and isinstance(operation_result, dict)
+                            and isinstance(operation_result.get("response", operation_result), dict)
+                            and operation_result.get("response", operation_result).get("response_type") == "action_done"
+                        ):
+                            live_verification = await self._verify_action_live_state(request_text)
+                            if live_verification is not None:
+                                operation_result = live_verification
+                                action_result = action_result_snapshot(operation_result)
+                                verification_error = action_result_error(operation_result)
                         if verification_error and action_result_retryable(operation_result):
                             retry_answer, merged_result = await self._retry_failed_action(
                                 agent, prompt, operation_result, models_attempted
