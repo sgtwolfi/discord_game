@@ -2684,6 +2684,26 @@ class DiscordAssistant:
         participation_mode = str(getattr(self, "group_participation_mode", "mention" if getattr(self, "group_require_mention", False) else "participant"))
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
+
+        # Deterministic conversational check-ins are direct bids for GHOST's
+        # attention. Never let a tiny relevance model label these rhetorical
+        # and suppress them. Include common Discord typos/phonetic spellings.
+        current_text = " ".join(str(entry.get("content") or "") for entry in batch).strip()
+        ghost_check_in = re.search(
+            r"\\b(?:you|u)\\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
+            r"finished|done|listening|alive|available|responding|ignoring)"
+            r"(?:\\s+(?:yet|now|still))?\\s*[?!.,]*$",
+            current_text,
+            re.IGNORECASE,
+        ) or re.search(
+            r"\\b(?:are|is)\\s+(?:you|u)\\s+(?:working|workign|workin|there|back|ready|"
+            r"fixed|sorted|finished|done|listening|alive|available|responding|ignoring)"
+            r"(?:\\s+(?:yet|now|still))?\\s*[?!.,]*$",
+            current_text,
+            re.IGNORECASE,
+        )
+        if ghost_check_in:
+            return True, "GHOST recognised a direct conversational check-in; relevance inference was bypassed."
         if batch and all(str(entry.get("sender_id") or "") in getattr(self, "approved_users", set()) for entry in batch):
             status_text = " ".join(str(entry.get("content") or "") for entry in batch)
             if request_kind(status_text) == "query" and answer_local_status(
