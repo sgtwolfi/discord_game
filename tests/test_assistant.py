@@ -914,6 +914,11 @@ def test_contact_memory_capture_is_per_approved_speaker_only():
 
     assert len(assistant.friends["123"]["pending_messages"]) == 1
     assert assistant.friends["123"]["pending_messages"][0]["content"] == "I like strategy games"
+    assert assistant.friends["123"]["messages"] == []
+    assistant._capture_contact_messages([
+        {"sender_id": "123", "sender_name": "Max", "content": "DM-only detail", "timestamp": "3", "key": "dm:123", "is_dm": True},
+    ])
+    assert assistant.friends["123"]["messages"][0]["content"] == "DM-only detail"
     assert "456" not in assistant.friends
 
 
@@ -1885,7 +1890,8 @@ def test_group_continuity_does_not_cross_speakers_or_expire():
         [{"sender_name": "Max", "sender_id": "456", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:45:10+00:00"}], history))
     expired = asyncio.run(assistant._should_respond_to_group(
         [{"sender_name": "Tokyo", "sender_id": "123", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:50:00+00:00"}], history))
-    assert other[0] is False
+    assert other[0] is True
+    assert "shared group conversation" in other[1]
     assert expired[0] is False
 
 
@@ -2711,6 +2717,38 @@ def test_live_action_confirmation_uses_verified_entities_not_model_speech():
     assert snapshot["verified_states"][0]["id"] == "light.bedroom_strip"
 
 
+def test_degraded_conversation_reply_is_honest_and_non_empty():
+    reply = assistant_module.degraded_conversation_reply()
+    assert "I'm here" in reply
+    assert "chat models" in reply
+    assert "hasn't been ignored" in reply
+
+
+def test_recent_direct_request_anchors_followup_even_when_ghost_never_replied():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+    history = [{
+        "role": "user", "sender": "Tokyo", "sender_id": "123",
+        "content": "Ghost, can you sort the group chat?",
+        "timestamp": "2026-11-15T11:30:00+00:00",
+    }]
+    batch = [{
+        "sender_name": "Tokyo", "sender_id": "123",
+        "content": "oi you fixed yet?",
+        "timestamp": "2026-11-15T11:32:00+00:00",
+        "directly_addressed": False,
+    }]
+    result = asyncio.run(assistant._should_respond_to_group(batch, history))
+    assert result[0] is True
+    assert "previous reply failed" in result[1]
+
+
 def test_followup_classifier_handles_casual_greetings_and_natural_questions():
     assert assistant_module.is_contextual_followup("oi, you fixed yet?")
     assert assistant_module.is_contextual_followup("yoyoyo, do you know what harveys doing yet?")
@@ -2749,6 +2787,237 @@ def test_mention_only_continuity_recognises_the_reported_messages():
         ))
         assert result[0] is True
         assert "follow-up" in result[1]
+
+
+def test_group_relevance_has_conservative_fallback_when_local_judge_is_missing():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 0
+    assistant.group_relevance_agent = ""
+    assistant.approved_users = set()
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("No relevance model should be called in fallback mode")
+
+    assistant._call = unexpected
+    asked = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Ryan", "sender_id": "456", "content": "what do you think of this film?", "directly_addressed": False}], []
+    ))
+    chatter = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Ryan", "sender_id": "456", "content": "that film was decent", "directly_addressed": False}], []
+    ))
+    assert asked[0] is True
+    assert chatter[0] is False
+
+    assistant.group_relevance_agent = "conversation.local_relevance"
+
+    async def failed(*args):
+        raise RuntimeError("local relevance model unavailable")
+
+    assistant._call = failed
+    recovered = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Ryan", "sender_id": "456", "content": "what do you think of this film?", "directly_addressed": False}], []
+    ))
+    assert recovered[0] is True
+    assert "fallback" in recovered[1].lower() or "unavailable" in recovered[1].lower()
+
+
+def test_group_followup_continuity_is_shared_across_different_speakers():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A shared-thread follow-up must not need relevance inference")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "123",
+         "content": "Ghost, do you know what Harvey is doing?",
+         "timestamp": "2026-11-15T10:17:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "I will check.",
+         "timestamp": "2026-11-15T10:17:10+00:00"},
+    ]
+    batch = [{"sender_name": "Ryan", "sender_id": "456", "content": "oi you fixed yet?",
+              "timestamp": "2026-11-15T10:17:39+00:00", "directly_addressed": False}]
+    result = asyncio.run(assistant._should_respond_to_group(batch, history))
+    assert result[0] is True
+    assert "shared group conversation" in result[1]
+
+
+def test_approved_friend_group_status_question_bypasses_relevance_guessing():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.approved_users = {"123"}
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: SimpleNamespace(state="At the downstairs PC")))
+
+    async def unexpected(*args):
+        raise AssertionError("Approved-friend owner status is a deterministic authorised query")
+
+    assistant._call = unexpected
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123",
+          "content": "what is Harvey doing?", "directly_addressed": False}], []
+    ))
+    assert result[0] is True
+    assert "owner live status" in result[1]
+
+
+def test_approved_friend_group_reminder_bypasses_relevance_guessing():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.approved_users = {"123"}
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("An explicit approved-friend reminder is already a direct request")
+
+    assistant._call = unexpected
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123",
+          "content": "Remind me to take the bins out in 20 minutes",
+          "directly_addressed": False}], []
+    ))
+    assert result[0] is True
+    assert "reminder request" in result[1]
+
+
+def test_group_reminder_confirmation_is_bound_to_the_friend_who_received_offer():
+    history = [{
+        "role": "assistant", "sender": "GHOST",
+        "content": "Would you like me to set a reminder in 10 minutes to check the oven?",
+        "recipient_ids": ["123"],
+    }]
+    assert assistant_module.group_reminder_confirmation_is_authorized(
+        [{"sender_id": "123", "content": "yes"}], history
+    )
+    assert not assistant_module.group_reminder_confirmation_is_authorized(
+        [{"sender_id": "456", "content": "yes"}], history
+    )
+    assert not assistant_module.group_reminder_confirmation_is_authorized(
+        [{"sender_id": "123", "content": "yes"}, {"sender_id": "456", "content": "yes"}], history
+    )
+
+
+def test_group_prompt_includes_durable_facts_but_never_dm_history_or_unapproved_owner_status():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.limit = 8
+    assistant.budget = 5000
+    assistant.approved_users = {"123"}
+    assistant.contact_names = {"123": "Tokyo"}
+    assistant.friends = {
+        "123": {"summary": "Enjoys strategy games.", "messages": [{"content": "PRIVATE DM CONTENT"}]}
+    }
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: SimpleNamespace(state="At the downstairs PC")))
+    history = [{"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "hello"}]
+    approved_batch = [{"sender_name": "Tokyo", "sender_id": "123", "content": "What do you reckon?", "is_dm": False}]
+    prompt = assistant._prompt(approved_batch, history, "", "conversation")
+    assert "Tokyo: Enjoys strategy games." in prompt
+    assert "PRIVATE DM CONTENT" not in prompt
+    assert "At the downstairs PC" in prompt
+
+    unapproved_batch = [{"sender_name": "Guest", "sender_id": "999", "content": "What is Harvey doing?", "is_dm": False}]
+    private_prompt = assistant._prompt(unapproved_batch, [], "", "conversation")
+    assert "At the downstairs PC" not in private_prompt
+
+
+def test_group_persistent_memory_contains_only_approved_durable_summaries():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123", "456"}
+    assistant.contact_names = {"123": "Tokyo", "456": "Ryan"}
+    assistant.friends = {
+        "123": {"summary": "Likes tactical games.", "messages": [{"content": "PRIVATE DM SECRET"}]},
+        "456": {"summary": "Works nights.", "messages": [{"content": "ANOTHER PRIVATE DM"}]},
+        "789": {"summary": "Unapproved fact."},
+    }
+    history = [{"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "hello"}]
+    batch = [{"sender_name": "Ryan", "sender_id": "456", "content": "hi"}]
+    result = assistant._group_persistent_memory(batch, history)
+    assert "Tokyo: Likes tactical games." in result
+    assert "Ryan: Works nights." in result
+    assert "PRIVATE DM SECRET" not in result
+    assert "ANOTHER PRIVATE DM" not in result
+    assert "Unapproved fact." not in result
+
+
+def test_group_continuity_supports_legacy_history_without_sender_ids():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A legacy same-speaker follow-up must not need relevance inference")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "content": "Ghost, are you there?",
+         "timestamp": "2026-11-15T10:17:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "Unfortunately, yes.",
+         "timestamp": "2026-11-15T10:17:10+00:00"},
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123", "content": "oi you fixed yet?",
+          "timestamp": "2026-11-15T10:17:39+00:00", "directly_addressed": False}],
+        history,
+    ))
+    assert result[0] is True
+    assert "follow-up" in result[1]
+
+
+def test_group_continuity_never_uses_name_fallback_when_both_ids_disagree():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("Mention-only mode must suppress a different Discord user")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "old-id",
+         "content": "Ghost, are you there?", "timestamp": "2026-11-15T10:17:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "Unfortunately, yes.",
+         "timestamp": "2026-11-15T10:17:10+00:00"},
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "new-id", "content": "oi you fixed yet?",
+          "timestamp": "2026-11-15T10:17:39+00:00", "directly_addressed": False}],
+        history,
+    ))
+    assert result[0] is False
+    assert "mention-only" in result[1]
 
 
 def test_continuation_authorises_read_only_query_but_not_device_action():
