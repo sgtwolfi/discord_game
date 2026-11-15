@@ -2834,7 +2834,7 @@ def test_group_prompt_includes_durable_facts_but_never_dm_history_or_unapproved_
     assistant.owner_name = "Harvey"
     assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: SimpleNamespace(state="At the downstairs PC")))
     history = [{"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "hello"}]
-    approved_batch = [{"sender_name": "Ryan", "sender_id": "123", "content": "What do you reckon?", "is_dm": False}]
+    approved_batch = [{"sender_name": "Tokyo", "sender_id": "123", "content": "What do you reckon?", "is_dm": False}]
     prompt = assistant._prompt(approved_batch, history, "", "conversation")
     assert "Tokyo: Enjoys strategy games." in prompt
     assert "PRIVATE DM CONTENT" not in prompt
