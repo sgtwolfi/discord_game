@@ -2685,25 +2685,6 @@ class DiscordAssistant:
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
 
-        # Deterministic conversational check-ins are direct bids for GHOST's
-        # attention. Never let a tiny relevance model label these rhetorical
-        # and suppress them. Include common Discord typos/phonetic spellings.
-        current_text = " ".join(str(entry.get("content") or "") for entry in batch).strip()
-        ghost_check_in = re.search(
-            r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
-            r"finished|done|listening|alive|available|responding|ignoring)"
-            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
-            current_text,
-            re.IGNORECASE,
-        ) or re.search(
-            r"\b(?:are|is)\s+(?:you|u)\s+(?:working|workign|workin|there|back|ready|"
-            r"fixed|sorted|finished|done|listening|alive|available|responding|ignoring)"
-            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
-            current_text,
-            re.IGNORECASE,
-        )
-        if ghost_check_in:
-            return True, "GHOST recognised a direct conversational check-in; relevance inference was bypassed."
         if batch and all(str(entry.get("sender_id") or "") in getattr(self, "approved_users", set()) for entry in batch):
             status_text = " ".join(str(entry.get("content") or "") for entry in batch)
             if request_kind(status_text) == "query" and answer_local_status(
@@ -2728,6 +2709,7 @@ class DiscordAssistant:
         # Shared group continuity applies across members, not just the last speaker.
         # A reused display name with a conflicting stable Discord ID is rejected.
         assistant_turn = next((entry for entry in reversed(history) if entry.get("role") == "assistant"), None)
+        continuity_identity_conflict = False
         if assistant_turn and getattr(self, "group_continuity_seconds", 300):
             last_index = max((index for index, entry in enumerate(history) if entry is assistant_turn), default=-1)
             preceding = history[:last_index] if last_index >= 0 else []
@@ -2738,6 +2720,7 @@ class DiscordAssistant:
             prior_name = re.sub(r"\s+", " ", str((prior_user or {}).get("sender_name") or (prior_user or {}).get("sender") or "")).strip().casefold()
             current_name = re.sub(r"\s+", " ", str(first_current.get("sender_name") or first_current.get("sender") or "")).strip().casefold()
             identity_conflict = bool(prior_id and current_id and prior_id != current_id and prior_name and prior_name == current_name)
+            continuity_identity_conflict = identity_conflict
             elapsed = _timestamp_delta_seconds(assistant_turn.get("timestamp"), batch[-1].get("timestamp"))
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
             if not identity_conflict and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
@@ -2769,6 +2752,25 @@ class DiscordAssistant:
                 if not identity_conflict and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
                     return True, "GHOST recognised a follow-up to a recent addressed request, even though the previous reply failed."
 
+        # Deterministic conversational check-ins are direct bids for GHOST's
+        # attention. Never let a tiny relevance model label these rhetorical
+        # and suppress them. Include common Discord typos/phonetic spellings.
+        current_text = " ".join(str(entry.get("content") or "") for entry in batch).strip()
+        ghost_check_in = re.search(
+            r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
+            r"finished|done|listening|alive|available|responding|ignoring)"
+            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
+            current_text,
+            re.IGNORECASE,
+        ) or re.search(
+            r"\b(?:are|is)\s+(?:you|u)\s+(?:working|workign|workin|there|back|ready|"
+            r"fixed|sorted|finished|done|listening|alive|available|responding|ignoring)"
+            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
+            current_text,
+            re.IGNORECASE,
+        )
+        if ghost_check_in and not (participation_mode == "mention" and continuity_identity_conflict):
+            return True, "GHOST recognised a direct conversational check-in without the relevance model; relevance inference was bypassed."
         if participation_mode == "mention":
             return False, "GHOST stayed quiet because mention-only mode is enabled."
 
