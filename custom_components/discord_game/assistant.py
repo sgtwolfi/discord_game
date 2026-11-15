@@ -2884,7 +2884,7 @@ class DiscordAssistant:
             "Judge relevance like a considerate human group member: join when directly asked, when someone is clearly continuing a discussion with you, when your known expertise or a relevant saved fact adds value, or when the group needs a useful answer. Do not answer every message, repeat what others already said, or interrupt unrelated banter.",
             "The group is shared across all approved friends. A different member may naturally continue a thread after GHOST speaks; do not require the same speaker.",
             "Recognise follow-ups to GHOST's recent replies, including short questions, pronouns and references such as 'you', 'that', 'it', 'why' and 'what do you mean'.",
-            "A direct mention or reply is a strong relevance signal, but is not required in human-like participant mode.",
+            "A direct mention or reply is a strong relevance signal, but is not required unless mention-only mode is enabled.",
             "A plain imperative or question with no named human addressee may be directed to GHOST even without an @mention; use the thread to judge intent.",
             "For simple diagnostic requests such as 'count to 20', respond when the context suggests the assistant is being tested or asked to do something.",
             "Stay silent for ordinary banter, rhetorical remarks, reactions, messages already answered, or conversations where an interruption adds nothing.",

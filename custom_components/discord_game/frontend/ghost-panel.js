@@ -502,7 +502,7 @@ class DiscordGameGhostPanel extends HTMLElement {
     }
     agentsPanel.append(agentGrid);
     agentsPanel.append(this._el("p", d.mode === "api"
-      ? "API Mode uses one Home Assistant conversation agent for chat, status questions and actions. Its model, system prompt and tool/function configuration stay in that agent's own settings. GHOST still injects the correct contact's saved memory and records verified outcomes; changing models does not remove memory. Group participation is configured separately below; human-like mode uses a separate tool-free relevance agent."
+      ? "API Mode uses one Home Assistant conversation agent for chat, status questions and actions. Its model, system prompt and tool/function configuration stay in that agent's own settings. GHOST still injects the correct contact's saved memory and records verified outcomes; changing models does not remove memory. For group-chat safety, GHOST only responds when directly mentioned or replied to."
       : "Local Mode splits work between the Conversation, Operations and optional Fallback agents. GHOST supplies short role-specific prompts and keeps memory deterministic, so no memory model is needed.", "help"));
     agentsPanel.append(this._el("p", "Entity exposure and script access are still managed by Home Assistant Assist. The capability manager below lets you expose the exact entities and scripts. Exposing a script makes it available as a tool; it does not automatically explain its arguments or purpose to a weak model, so give scripts clear names and descriptions.", "help"));
     shell.append(agentsPanel);
@@ -537,26 +537,16 @@ class DiscordGameGhostPanel extends HTMLElement {
     relevanceAgent.dataset.keep = "cfg-group_relevance_agent";
     groupWrap.append(relevanceAgent);
     groupWrap.append(this._el("p", "Select a local Home Assistant conversation agent with no HA control tools. It decides whether GHOST should join group conversations. In API Mode this prevents group text being sent to the tool-enabled API agent just for relevance.", "help"));
-    groupWrap.append(this._el("label", "How GHOST participates in group chats"));
-    const groupParticipation = this._el("select");
-    const currentParticipation = settings.group_participation_mode
-      || (settings.group_require_mention ? "mention" : "participant");
-    for (const [value, label] of [
-      ["participant", "Human-like — judge whether joining adds value"],
-      ["mention", "Called-only — respond only when mentioned or replied to"],
-      ["always", "Always respond — every group message"]
-    ]) {
-      const option = this._el("option", label);
-      option.value = value;
-      groupParticipation.append(option);
-    }
-    groupParticipation.name = "group_participation_mode";
-    groupParticipation.value = currentParticipation;
-    groupParticipation.dataset.keep = "cfg-group_participation_mode";
-    groupWrap.append(groupParticipation);
-    groupWrap.append(this._el("p", "Human-like mode uses the recent group thread to decide whether GHOST has something useful to add. It does not need its name mentioned. Called-only mode ignores unaddressed messages. Home Assistant actions remain protected by separate authorisation checks.", "help"));
+    const mentionLabel = this._el("label", "Require @mention or reply in group chats");
+    const mentionRequired = this._el("input");
+    mentionRequired.type = "checkbox";
+    mentionRequired.name = "group_require_mention";
+    mentionRequired.checked = !!settings.group_require_mention;
+    mentionRequired.dataset.keep = "cfg-group_require_mention";
+    mentionLabel.prepend(mentionRequired);
+    groupWrap.append(mentionLabel);
+    groupWrap.append(this._el("p", "When enabled, unaddressed messages are ignored without a model call. When disabled, the local relevance model infers whether GHOST should respond.", "help"));
     form.append(groupWrap);
-
     const reminderWrap = this._el("div", null, "field");
     reminderWrap.append(this._el("label", "Local Mode reminder script entity"));
     const reminderScript = this._el("input");
@@ -620,7 +610,6 @@ class DiscordGameGhostPanel extends HTMLElement {
     const typing = this._el("input"); typing.type = "checkbox"; typing.name = "typing_enabled"; typing.checked = settings.typing_enabled !== false;
     typing.dataset.keep = "cfg-typing_enabled"; typingLabel.prepend(typing);
     form.append(typingLabel);
-    form.append(this._el("p", "Typing starts only after GHOST has decided to reply and passed the group safety checks. It stays active while the response is being generated.", "help"));
 
     const apiMode = modeSelect.value === "api";
     if (apiMode) {
@@ -789,8 +778,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       data.assistant_mode = modeSelect.value;
       data.local_reminder_script = reminderScript.value || "script.set_timer_alarm_or_reminder";
       data.group_relevance_agent = relevanceAgent.value.trim();
-      data.group_participation_mode = groupParticipation.value;
-      data.group_require_mention = groupParticipation.value === "mention";
+      data.group_require_mention = mentionRequired.checked;
       data.fallback_after_failures = Number(settings.fallback_after_failures ?? 2);
       data.queue_debounce_seconds = Number(settings.queue_debounce_seconds ?? 2.5);
       data.max_context_messages = Number(settings.max_context_messages ?? 12);
@@ -872,7 +860,7 @@ class DiscordGameGhostPanel extends HTMLElement {
 
     const relevance = this._el("section", null, "panel");
     relevance.append(this._el("h2", "Group-chat relevance filter"));
-    relevance.append(this._el("p", "In human-like mode, GHOST evaluates the recent group conversation and joins only when it has something useful to add. Direct mentions and replies are strong signals, not mandatory. Called-only mode suppresses unaddressed messages. Group Home Assistant actions and private status access still pass separate authorisation checks.", "muted"));
+    relevance.append(this._el("p", "GHOST uses recent channel history when deciding whether to join in. Clear follow-ups to its own recent replies are treated as part of the same conversation for the configured continuity window. Home Assistant actions and live-state queries still require an explicit mention or reply.", "muted"));
     relevance.append(this._el("p", "Messages deliberately ignored: " + (d.suppressed_group_messages || 0), "help"));
     if (d.last_group_decision) {
       relevance.append(this._el("p", "Last decision: " + d.last_group_decision.decision + " · " + (d.last_group_decision.reason || "") + " · " + (d.last_group_decision.timestamp || ""), "muted"));
