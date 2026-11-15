@@ -8,6 +8,7 @@ from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -480,7 +481,7 @@ def _live_rgb_matches(rgb, colour):
     return dominant.get(colour, False)
 
 
-def verify_action_against_live_states(request_text, states):
+def verify_action_against_live_states(request_text, states, area_names=None):
     """Build structured success evidence only when named HA entities match the request.
 
     This is a read-after-write verification fallback for conversation agents that
@@ -504,8 +505,9 @@ def verify_action_against_live_states(request_text, states):
             continue
         attributes = getattr(state, "attributes", {}) or {}
         name = str(attributes.get("friendly_name") or attributes.get("name") or "")
+        area_name = str((area_names or {}).get(entity_id, "") or "")
         entity_tokens = set(re.findall(
-            r"[a-z0-9]+", (entity_id + " " + name).casefold()
+            r"[a-z0-9]+", (entity_id + " " + name + " " + area_name).casefold()
         ))
         if all_targets or terms.issubset(entity_tokens):
             candidates.append(state)
@@ -1487,7 +1489,19 @@ class DiscordAssistant:
             if delay:
                 await asyncio.sleep(delay)
             states = self.hass.states.async_all()
-            verified = verify_action_against_live_states(request_text, states)
+            area_names = {}
+            try:
+                entity_registry = er.async_get(self.hass)
+                area_registry = ar.async_get(self.hass)
+                for state in states:
+                    entry = entity_registry.async_get(state.entity_id)
+                    if entry and entry.area_id:
+                        area = area_registry.async_get(entry.area_id)
+                        if area:
+                            area_names[state.entity_id] = area.name
+            except (AttributeError, KeyError, TypeError):
+                _LOGGER.debug("Area registry lookup unavailable during action verification", exc_info=True)
+            verified = verify_action_against_live_states(request_text, states, area_names)
             if verified is not None:
                 return verified
         return None
