@@ -1,4 +1,10 @@
-# Discord Game + GHOST Assistant (v9.2.2)
+# Discord Game + GHOST Assistant (v9.2.3)
+
+## 9.2.3 production reliability fixes
+
+- Delivers the shared group conversation implementation on the HACS default branch.
+- Recognises follow-ups to a recent explicit request even if GHOST's previous reply failed.
+- Sends a clear degraded-mode response for ordinary chat when both configured conversation agents are unavailable; actions are never replayed or falsely confirmed.
 
 ## 9.2.2 group conversation overhaul
 
