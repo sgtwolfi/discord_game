@@ -2831,6 +2831,30 @@ def test_group_relevance_has_conservative_fallback_when_local_judge_is_missing()
     assert "fallback" in recovered[1].lower() or "unavailable" in recovered[1].lower()
 
 
+def test_direct_checkins_bypass_relevance_model_even_when_it_would_reject_them():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "local"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 0
+    assistant.group_relevance_agent = "conversation.gemma_2b"
+    assistant.agents = {"conversation_agent": "conversation.gemma_2b"}
+    assistant.limit = 8
+
+    async def reject(*args):
+        raise AssertionError("A deterministic direct check-in must bypass Gemma entirely")
+
+    assistant._call = reject
+    for message in ("you working yet?", "aye you workign yet?", "are you working yet?",
+                    "u workin yet?", "you there?"):
+        result = asyncio.run(assistant._should_respond_to_group(
+            [{"sender_name": "Tokyo", "sender_id": "123", "content": message,
+              "directly_addressed": False}], []
+        ))
+        assert result[0] is True, message
+        assert "check-in" in result[1], message
+
+
 def test_mention_signal_persisted_in_history_anchors_followup_after_failed_reply():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
