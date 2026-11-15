@@ -433,13 +433,21 @@ def _requested_action_constraints(request_text):
     elif re.search(r"\bpause\b|\bstop\b", value):
         constraints["state"] = "paused"
 
-    if "brightness" in value or re.search(r"\b(?:brighter|dimmer)\b", value):
+    if (
+        "brightness" in value
+        or re.search(r"\b(?:brighter|dimmer)\b", value)
+        or (_action_domain_hint(value) == "light" and re.search(r"\b\d{1,3}\s*%", value))
+    ):
         if re.search(r"\b(?:maximum|max|full)\b", value):
             constraints["brightness"] = 255
         else:
             percent = re.search(r"\b(\d{1,3})\s*%", value)
             if percent and int(percent.group(1)) <= 100:
                 constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
+    for colour in ("red", "green", "blue", "yellow", "orange", "purple", "pink", "cyan", "magenta", "white"):
+        if re.search(rf"\b{colour}\b", value):
+            constraints["colour"] = colour
+            break
     temperature = re.search(
         r"\b(?:temperature|thermostat|climate)\b.{0,30}?\b(?:to|at)\s*(-?\d+(?:\.\d+)?)",
         value,
@@ -447,6 +455,29 @@ def _requested_action_constraints(request_text):
     if temperature:
         constraints["temperature"] = float(temperature.group(1))
     return constraints
+
+
+def _live_rgb_matches(rgb, colour):
+    """Compare an HA RGB/HS colour state against a plain colour request."""
+    if not isinstance(rgb, (list, tuple)) or len(rgb) < 3:
+        return False
+    try:
+        red, green, blue = (int(value) for value in rgb[:3])
+    except (TypeError, ValueError):
+        return False
+    dominant = {
+        "red": (red >= 180 and green <= 100 and blue <= 100),
+        "green": (green >= 120 and red <= 100 and blue <= 100),
+        "blue": (blue >= 180 and red <= 100 and green <= 100),
+        "yellow": (red >= 180 and green >= 150 and blue <= 100),
+        "orange": (red >= 180 and 60 <= green <= 190 and blue <= 100),
+        "purple": (red >= 90 and blue >= 120 and green <= 120),
+        "pink": (red >= 180 and blue >= 100 and green <= 210),
+        "cyan": (green >= 150 and blue >= 150 and red <= 100),
+        "magenta": (red >= 150 and blue >= 150 and green <= 100),
+        "white": (min(red, green, blue) >= 170 and max(red, green, blue) - min(red, green, blue) <= 85),
+    }
+    return dominant.get(colour, False)
 
 
 def verify_action_against_live_states(request_text, states):
@@ -513,6 +544,34 @@ def verify_action_against_live_states(request_text, states):
                 and isinstance(brightness, (int, float))
                 and abs(float(brightness) - constraints["brightness"]) <= 13
             )
+        if matches and "colour" in constraints:
+            matches = (
+                entity_domain == "light"
+                and _live_rgb_matches(attributes.get("rgb_color"), constraints["colour"])
+            )
+            if not matches:
+                hs = attributes.get("hs_color")
+                if isinstance(hs, (list, tuple)) and hs:
+                    try:
+                        hue = float(hs[0]) % 360
+                        ranges = {
+                            "red": (0, 20, 340, 360), "orange": (20, 50),
+                            "yellow": (45, 75), "green": (75, 165),
+                            "cyan": (165, 205), "blue": (205, 255),
+                            "purple": (255, 295), "magenta": (295, 335),
+                            "pink": (325, 360),
+                        }
+                        limits = ranges.get(constraints["colour"])
+                        matches = bool(
+                            limits and (
+                                limits[0] <= hue <= limits[1]
+                                or (len(limits) == 4 and limits[2] <= hue <= limits[3])
+                            )
+                        )
+                        if constraints["colour"] == "white":
+                            matches = False
+                    except (TypeError, ValueError):
+                        matches = False
         if matches and "temperature" in constraints:
             actual = attributes.get("temperature")
             matches = (
