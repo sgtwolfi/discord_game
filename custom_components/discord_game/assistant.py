@@ -2662,7 +2662,7 @@ class DiscordAssistant:
             re.IGNORECASE,
         )
         informal_you_question = re.search(
-            r"\byou\s+(?:working|there|back|ready|fixed|sorted|finished|done|"
+            r"\byou\s+(?:working|there|back|ready|finished|done|"
             r"listening|alive|available|responding|ignoring)\b",
             text,
             re.IGNORECASE,
