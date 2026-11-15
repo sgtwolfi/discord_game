@@ -3193,6 +3193,8 @@ def test_typing_response_only_option_defaults_off_and_is_configurable(monkeypatc
     "you okay now?",
     "oi, you feeling better?",
     "you still tripping?",
+    "you fixced yet bruvvah?",
+    "you fixed yet bro?",
 ])
 def test_casual_wellbeing_checkins_bypass_group_relevance_model(message):
     assistant = DiscordAssistant.__new__(DiscordAssistant)
