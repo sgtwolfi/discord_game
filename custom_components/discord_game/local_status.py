@@ -130,7 +130,15 @@ def _normalise_name(value: str) -> str:
 
 def _is_owner_activity_query(query: str, owner_name: str) -> bool:
     """Recognise owner-status wording before attempting any Discord friend lookup."""
-    text = _normalise_name(query)
+    # Strip casual openers before interpreting the question shape. These
+    # greetings are common in an ongoing Discord thread ("yoyoyo, do you know...").
+    cleaned_query = re.sub(
+        r"^(?:(?:oi+|(?:yo){1,4}|hey|hiya|hello|alright|right|mate|bro)\\b[\\s,!.:-]*)+",
+        "",
+        str(query or "").strip(),
+        flags=re.IGNORECASE,
+    )
+    text = _normalise_name(cleaned_query)
     configured = str(owner_name or "").strip()
     # Harvey remains a compatibility alias for installations created before the
     # owner-name setting existed. The configured name is always authoritative too.
