@@ -2628,11 +2628,11 @@ class DiscordAssistant:
         direct_question = re.search(
             r"\b(?:what do you think|what is your take|what do you reckon|"
             r"do you reckon|do you know|can you|could you|would you|have you|are you|"
-            r"you fixed|you there|your opinion|any thoughts)\b",
+            r"your opinion|any thoughts)\\b",
             text,
             re.IGNORECASE,
         )
-        if direct_question and ("?" in text or re.search(r"\b(?:you fixed|you there)\b", text, re.IGNORECASE)):
+        if direct_question and "?" in text:
             detail = "A clear question directed at GHOST was recognised without the relevance model."
             if cause:
                 detail += " Relevance model unavailable: " + str(cause)[:160]
