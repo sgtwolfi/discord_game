@@ -699,16 +699,18 @@ def action_result_snapshot(data):
             result.append(target)
         return result
 
-    return {
+    snapshot = {
         "response_type": response.get("response_type"),
-        "targets": targets(result_data.get("targets")),
         "success": targets(result_data.get("success")),
         "failed": targets(result_data.get("failed")),
-        "verification": (
-            data.get("verification")
-            if isinstance(data, dict) else None
-        ),
     }
+    target_list = targets(result_data.get("targets"))
+    if target_list:
+        snapshot["targets"] = target_list
+    verification = data.get("verification") if isinstance(data, dict) else None
+    if verification:
+        snapshot["verification"] = verification
+    return snapshot
 
 
 class AssistantSensor(SensorEntity):
