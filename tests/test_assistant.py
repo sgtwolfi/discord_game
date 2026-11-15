@@ -2779,6 +2779,23 @@ def test_group_followup_continuity_is_shared_across_different_speakers():
     assert "shared group conversation" in result[1]
 
 
+def test_group_reminder_confirmation_is_bound_to_the_friend_who_received_offer():
+    history = [{
+        "role": "assistant", "sender": "GHOST",
+        "content": "Would you like me to set a reminder in 10 minutes to check the oven?",
+        "recipient_ids": ["123"],
+    }]
+    assert assistant_module.group_reminder_confirmation_is_authorized(
+        [{"sender_id": "123", "content": "yes"}], history
+    )
+    assert not assistant_module.group_reminder_confirmation_is_authorized(
+        [{"sender_id": "456", "content": "yes"}], history
+    )
+    assert not assistant_module.group_reminder_confirmation_is_authorized(
+        [{"sender_id": "123", "content": "yes"}, {"sender_id": "456", "content": "yes"}], history
+    )
+
+
 def test_group_persistent_memory_contains_only_approved_durable_summaries():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.approved_users = {"123", "456"}
