@@ -1,4 +1,10 @@
-# Discord Game + GHOST Assistant (v9.2.4)
+# Discord Game + GHOST Assistant (v9.2.5)
+
+## 9.2.5 deterministic group check-ins
+
+- Recognises direct availability check-ins such as “you working yet?” before invoking the group relevance model, so a false negative from Gemma cannot veto them.
+- Handles common informal spellings such as “workign” and “workin”.
+- Keeps bounded conversation continuity and stable Discord identity checks ahead of the generic check-in gate; the shortcut does not grant Home Assistant action permissions.
 
 ## 9.2.4 group addressing and follow-up reliability
 
