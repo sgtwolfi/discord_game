@@ -2772,8 +2772,8 @@ class DiscordAssistant:
                         continue
                     anchor_id = str(anchor.get("sender_id") or "").strip()
                     followup_id = str(followup.get("sender_id") or "").strip()
-                    anchor_name = re.sub(r"\\s+", " ", str(anchor.get("sender_name") or anchor.get("sender") or "")).strip().casefold()
-                    followup_name = re.sub(r"\\s+", " ", str(followup.get("sender_name") or followup.get("sender") or "")).strip().casefold()
+                    anchor_name = str(anchor.get("sender_name") or anchor.get("sender") or "").strip().casefold()
+                    followup_name = str(followup.get("sender_name") or followup.get("sender") or "").strip().casefold()
                     identity_conflict = bool(
                         anchor_id and followup_id and anchor_id != followup_id
                         and anchor_name and anchor_name == followup_name
