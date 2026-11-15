@@ -2781,6 +2781,18 @@ def test_group_relevance_has_conservative_fallback_when_local_judge_is_missing()
     assert asked[0] is True
     assert chatter[0] is False
 
+    assistant.group_relevance_agent = "conversation.local_relevance"
+
+    async def failed(*args):
+        raise RuntimeError("local relevance model unavailable")
+
+    assistant._call = failed
+    recovered = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Ryan", "sender_id": "456", "content": "oi you fixed yet?", "directly_addressed": False}], []
+    ))
+    assert recovered[0] is True
+    assert "fallback" in recovered[1].lower() or "unavailable" in recovered[1].lower()
+
 
 def test_group_followup_continuity_is_shared_across_different_speakers():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
