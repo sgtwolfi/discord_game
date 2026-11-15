@@ -1037,6 +1037,17 @@ class DiscordAssistant:
             self._last_message_monotonic = time.monotonic()
         self.conversation_meta = saved.get("conversation_meta", {})
         self._backfill_action_outcomes_from_transcript()
+        # Migrate group-sourced raw messages out of per-friend DM histories.
+        # Their pending evidence remains available for durable fact consolidation.
+        for record in self.friends.values():
+            messages = record.get("messages", [])
+            private_messages = [
+                message for message in messages
+                if not str(message.get("source") or "").startswith("guild:")
+            ]
+            if len(private_messages) != len(messages):
+                record["messages"] = private_messages
+                legacy_memory_cleaned = True
         if not self.conversation_logs:
             # Migrate the earlier audit transcript into the new chat-history store.
             for entry in self.transcript:
