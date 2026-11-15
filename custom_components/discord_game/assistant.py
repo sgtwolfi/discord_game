@@ -1857,7 +1857,7 @@ class DiscordAssistant:
         )
         try:
             candidate = await self._call(agent, prompt)
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.debug("Status reply rephrasing failed; using verified state text: %s", err)
             return factual
         if not candidate or factual not in candidate:
@@ -2455,7 +2455,7 @@ class DiscordAssistant:
                         self.active_request["models_attempted"] = list(models_attempted)
                         self._refresh_sensor()
                     answer = await self._call(agent, prompt)
-                except Exception as err:  # noqa: BLE001
+                except Exception as err:
                     primary_error = err
                     failures.append(f"{type(err).__name__}: {err!r}")
                     _LOGGER.warning(
