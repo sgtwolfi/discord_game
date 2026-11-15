@@ -2189,10 +2189,11 @@ class DiscordAssistant:
                 group_directly_addressed = any(entry.get("directly_addressed") for entry in batch)
                 if group_kind in {"action", "query"} and (
                     not group_friend_authorised
+                    or (group_kind == "action" and len(group_senders) != 1)
                     or (not group_directly_addressed and not group_private_request_allowed)
                 ):
                     now = datetime.now(UTC).isoformat()
-                    reason = "Group Home Assistant requests require an approved friend; owner status and reminders are available to approved friends."
+                    reason = "Group Home Assistant requests require an approved friend; device actions must come from one friend at a time, while owner status and reminders are available to approved friends."
                     self.last_group_decision = {
                         "conversation": item["key"],
                         "decision": "ignored",
