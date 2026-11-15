@@ -705,6 +705,14 @@ def action_result_retryable(data):
     failed = result_data.get("failed") or []
     if not isinstance(succeeded, list) or not isinstance(failed, list) or not failed:
         return False
+    for item in succeeded:
+        if not isinstance(item, dict):
+            return False
+        success_id = str(item.get("entity_id") or item.get("id") or "").strip()
+        if "." not in success_id:
+            # We cannot safely exclude an already-completed non-entity target
+            # from a retry, so ambiguous successes disable retries entirely.
+            return False
     for item in failed:
         if not isinstance(item, dict):
             return False
