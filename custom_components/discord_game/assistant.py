@@ -2690,15 +2690,15 @@ class DiscordAssistant:
         # and suppress them. Include common Discord typos/phonetic spellings.
         current_text = " ".join(str(entry.get("content") or "") for entry in batch).strip()
         ghost_check_in = re.search(
-            r"\\b(?:you|u)\\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
+            r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
             r"finished|done|listening|alive|available|responding|ignoring)"
-            r"(?:\\s+(?:yet|now|still))?\\s*[?!.,]*$",
+            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
             current_text,
             re.IGNORECASE,
         ) or re.search(
-            r"\\b(?:are|is)\\s+(?:you|u)\\s+(?:working|workign|workin|there|back|ready|"
+            r"\b(?:are|is)\s+(?:you|u)\s+(?:working|workign|workin|there|back|ready|"
             r"fixed|sorted|finished|done|listening|alive|available|responding|ignoring)"
-            r"(?:\\s+(?:yet|now|still))?\\s*[?!.,]*$",
+            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
             current_text,
             re.IGNORECASE,
         )
