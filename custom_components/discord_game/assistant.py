@@ -2612,6 +2612,19 @@ class DiscordAssistant:
         participation_mode = str(getattr(self, "group_participation_mode", "mention" if getattr(self, "group_require_mention", False) else "participant"))
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
+        # Explicit reminders and their confirmations are direct requests to GHOST,
+        # even when the friend omits a mention in a shared channel.
+        if batch and all(str(entry.get("sender_id") or "") in getattr(self, "approved_users", set()) for entry in batch):
+            sender_ids = {str(entry.get("sender_id") or "") for entry in batch}
+            if len(sender_ids) == 1:
+                reminder_confirmation = (
+                    resolve_reminder_confirmation(batch, history, dt_util.now())
+                    if group_reminder_confirmation_is_authorized(batch, history)
+                    else None
+                )
+                reminder_request = parse_local_reminder(" ".join(str(entry.get("content") or "") for entry in batch), dt_util.now())
+                if reminder_confirmation or reminder_request:
+                    return True, "An approved friend made a direct reminder request in the shared group."
         if participation_mode == "always":
             return True, "Always-respond group mode is enabled."
         # Shared group continuity applies across members, not just the last speaker.
