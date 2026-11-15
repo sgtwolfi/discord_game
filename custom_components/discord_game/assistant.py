@@ -182,6 +182,14 @@ def speech(data):
     return str(value or "").strip()
 
 
+def degraded_conversation_reply():
+    """Keep ordinary conversation responsive when every configured chat agent is down."""
+    return (
+        "I'm here. My chat models are having a wobble, so I can't give you a proper "
+        "answer just now, but your message hasn't been ignored."
+    )
+
+
 def request_kind(text):
     """Classify requests without treating a colour/state noun as an action by itself."""
     value = str(text or "").strip()
@@ -2434,7 +2442,11 @@ class DiscordAssistant:
                         self.active_request["models_attempted"] = list(models_attempted)
                         self._refresh_sensor()
                     models_attempted.append(model)
-                    answer = await self._call(model, prompt)
+                    try:
+                        answer = await self._call(model, prompt)
+                    except Exception as fallback_error:  # noqa: BLE001
+                        failures.append(str(fallback_error))
+                        _LOGGER.warning("Fallback assistant agent failed: %s", fallback_error)
 
                 if not answer and is_action:
                     reason = str(primary_error or "The primary agent returned no usable result.")
@@ -2444,6 +2456,13 @@ class DiscordAssistant:
                         + (" The fallback agent was unavailable." if not fallback_agent else
                            " The fallback was not used because the primary failure could have occurred after execution.")
                     )
+                if not answer and kind == "conversation" and not is_action:
+                    # Ordinary chat has no side effects. If both configured agents
+                    # are unavailable, send an honest degraded response rather than
+                    # leaving a directly addressed Discord message unanswered.
+                    answer = degraded_conversation_reply()
+                    role = "degraded_fallback"
+                    model = "built_in_degraded_fallback"
                 if not answer:
                     raise RuntimeError("; ".join(failures) or "All models failed")
                 if role in {"operations", "fallback"} and is_action:
@@ -2543,7 +2562,7 @@ class DiscordAssistant:
                 "context_snapshot": prompt,
                 "action_result": action_result,
                 "models_attempted": models_attempted,
-                "fallback_used": model == self.agents["fallback_agent"] and bool(self.agents["fallback_agent"]),
+                "fallback_used": model == self.agents.get("fallback_agent") and bool(self.agents.get("fallback_agent")),
             })
             self.transcript = self.transcript[-100:]
             self._trim_context_snapshots()
@@ -2686,6 +2705,32 @@ class DiscordAssistant:
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
             if not identity_conflict and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
                 return True, "GHOST continued the shared group conversation; another participant was recognised as a follow-up."
+
+        # A prior explicit request to GHOST is also a valid thread anchor when
+        # GHOST failed to answer it. This covers "oi, you fixed yet?" after an
+        # addressed request even when no assistant turn could be saved.
+        if batch and getattr(self, "group_continuity_seconds", 300):
+            first_current = batch[0]
+            current_id = str(first_current.get("sender_id") or "").strip()
+            current_name = re.sub(r"\s+", " ", str(first_current.get("sender_name") or first_current.get("sender") or "")).strip().casefold()
+            prior_direct = next((
+                entry for entry in reversed(history)
+                if entry.get("role") == "user"
+                and (
+                    entry.get("directly_addressed")
+                    or is_text_addressed(entry.get("content"))
+                )
+            ), None)
+            if prior_direct and any(is_contextual_followup(entry.get("content")) for entry in batch):
+                prior_id = str(prior_direct.get("sender_id") or "").strip()
+                prior_name = re.sub(r"\s+", " ", str(prior_direct.get("sender_name") or prior_direct.get("sender") or "")).strip().casefold()
+                identity_conflict = bool(
+                    prior_id and current_id and prior_id != current_id
+                    and prior_name and prior_name == current_name
+                )
+                elapsed = _timestamp_delta_seconds(prior_direct.get("timestamp"), batch[-1].get("timestamp"))
+                if not identity_conflict and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
+                    return True, "GHOST recognised a follow-up to a recent addressed request, even though the previous reply failed."
 
         if participation_mode == "mention":
             return False, "GHOST stayed quiet because mention-only mode is enabled."

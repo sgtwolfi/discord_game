@@ -2717,6 +2717,38 @@ def test_live_action_confirmation_uses_verified_entities_not_model_speech():
     assert snapshot["verified_states"][0]["id"] == "light.bedroom_strip"
 
 
+def test_degraded_conversation_reply_is_honest_and_non_empty():
+    reply = assistant_module.degraded_conversation_reply()
+    assert "I'm here" in reply
+    assert "chat models" in reply
+    assert "hasn't been ignored" in reply
+
+
+def test_recent_direct_request_anchors_followup_even_when_ghost_never_replied():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+    history = [{
+        "role": "user", "sender": "Tokyo", "sender_id": "123",
+        "content": "Ghost, can you sort the group chat?",
+        "timestamp": "2026-11-15T11:30:00+00:00",
+    }]
+    batch = [{
+        "sender_name": "Tokyo", "sender_id": "123",
+        "content": "oi you fixed yet?",
+        "timestamp": "2026-11-15T11:32:00+00:00",
+        "directly_addressed": False,
+    }]
+    result = asyncio.run(assistant._should_respond_to_group(batch, history))
+    assert result[0] is True
+    assert "previous reply failed" in result[1]
+
+
 def test_followup_classifier_handles_casual_greetings_and_natural_questions():
     assert assistant_module.is_contextual_followup("oi, you fixed yet?")
     assert assistant_module.is_contextual_followup("yoyoyo, do you know what harveys doing yet?")
