@@ -2585,3 +2585,31 @@ def test_live_state_verification_only_runs_when_ha_returns_no_target_outcome():
     assert not assistant_module.action_result_needs_live_verification({
         "response": {"response_type": "query_answer", "data": {}}
     })
+
+
+
+def test_live_state_verification_checks_requested_colour_and_plain_light_percentage():
+    red_light = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "rgb_color": (255, 0, 0)},
+    )
+    blue_light = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "rgb_color": (0, 0, 255)},
+    )
+    half_brightness = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 128},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Change the bedroom lights to red", [red_light]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Change the bedroom lights to red", [blue_light]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Set the bedroom lights to 50%", [half_brightness]
+    ) is not None
