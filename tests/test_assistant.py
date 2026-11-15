@@ -22,6 +22,10 @@ helpers = types.ModuleType("homeassistant.helpers")
 helpers.__path__ = []
 storage_module = types.ModuleType("homeassistant.helpers.storage")
 storage_module.Store = type("Store", (), {})
+area_registry_module = types.ModuleType("homeassistant.helpers.area_registry")
+area_registry_module.async_get = lambda hass: None
+entity_registry_module = types.ModuleType("homeassistant.helpers.entity_registry")
+entity_registry_module.async_get = lambda hass: None
 util_module = types.ModuleType("homeassistant.util")
 util_module.__path__ = []
 dt_module = types.ModuleType("homeassistant.util.dt")
@@ -33,6 +37,8 @@ sys.modules.update({
     "homeassistant.components.sensor": sensor_module,
     "homeassistant.helpers": helpers,
     "homeassistant.helpers.storage": storage_module,
+    "homeassistant.helpers.area_registry": area_registry_module,
+    "homeassistant.helpers.entity_registry": entity_registry_module,
     "homeassistant.util": util_module,
     "homeassistant.util.dt": dt_module,
 })
@@ -2613,3 +2619,19 @@ def test_live_state_verification_checks_requested_colour_and_plain_light_percent
     assert assistant_module.verify_action_against_live_states(
         "Set the bedroom lights to 50%", [half_brightness]
     ) is not None
+
+
+
+def test_live_state_verification_can_match_home_assistant_area_names():
+    ceiling = SimpleNamespace(
+        entity_id="light.ceiling",
+        state="on",
+        attributes={"friendly_name": "Ceiling"},
+    )
+    result = assistant_module.verify_action_against_live_states(
+        "Turn on the living room lights",
+        [ceiling],
+        {"light.ceiling": "Living Room"},
+    )
+    assert result is not None
+    assert result["response"]["data"]["success"][0]["id"] == "light.ceiling"
