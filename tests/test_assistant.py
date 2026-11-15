@@ -3177,6 +3177,7 @@ def test_typing_response_only_option_defaults_off_and_is_configurable(monkeypatc
         def __init__(self, *args, **kwargs):
             pass
 
+    monkeypatch.setattr(assistant_module, "Store", FakeStore)
     default = DiscordAssistant(SimpleNamespace(), "entry", {}, None)
     enabled = DiscordAssistant(
         SimpleNamespace(), "entry", {"typing_only_when_responding": True}, None
