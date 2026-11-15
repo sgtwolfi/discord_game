@@ -576,6 +576,17 @@ def action_result_error(data):
         )
     return None
 
+def action_result_needs_live_verification(data):
+    """Only use read-after-write checks when HA returned no target outcome at all."""
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict) or response.get("response_type") != "action_done":
+        return False
+    result_data = response.get("data")
+    if not isinstance(result_data, dict):
+        return False
+    return not result_data.get("success") and not result_data.get("failed")
+
+
 def action_result_retryable(data):
     """Allow one retry only for explicit, structured failures with known targets.
 
@@ -2125,9 +2136,7 @@ class DiscordAssistant:
                         verification_error = action_result_error(operation_result)
                         if (
                             verification_error
-                            and isinstance(operation_result, dict)
-                            and isinstance(operation_result.get("response", operation_result), dict)
-                            and operation_result.get("response", operation_result).get("response_type") == "action_done"
+                            and action_result_needs_live_verification(operation_result)
                         ):
                             if self.active_request:
                                 self.active_request["stage"] = "Verifying the requested target against live Home Assistant state"
