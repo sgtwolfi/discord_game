@@ -1,4 +1,10 @@
-# Discord Game + GHOST Assistant (v9.2.3)
+# Discord Game + GHOST Assistant (v9.2.4)
+
+## 9.2.4 group addressing and follow-up reliability
+
+- Persists Discord @mention, reply-to-GHOST and text-address signals in both saved conversation history and the active group thread, so later messages can correctly continue a conversation even when GHOST's previous reply failed.
+- Recognises colloquial check-ins such as “you working yet?” when the tool-free relevance model is unavailable, without bypassing the configured continuity expiry.
+- Adds regression tests for address-signal persistence, failed-reply follow-ups and the exact no-mention check-in.
 
 ## 9.2.3 production reliability fixes
 
