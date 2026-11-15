@@ -377,7 +377,7 @@ ACTION_TARGET_STOPWORDS = {
     "increase", "decrease", "toggle", "activate", "deactivate", "enable",
     "disable", "make", "put", "lights", "light", "bulbs", "bulb",
     "switches", "devices", "device", "brightness", "bright",
-    "dimmer", "dimmest", "maximum", "max", "minimum", "min", "full",
+    "dimmer", "dimmest", "brighter", "brighten", "dim", "maximum", "max", "minimum", "min", "full",
     "percent", "percentage", "colour", "color", "red", "green", "blue",
     "white", "warm", "cool", "temperature", "degrees", "degree",
     "open", "close", "lock", "unlock", "play", "pause", "stop", "start",
@@ -443,7 +443,7 @@ def _requested_action_constraints(request_text):
         if re.search(r"\b(?:maximum|max|full)\b", value):
             constraints["brightness"] = 255
         else:
-            percent = re.search(r"\b(\d{1,3})\s*(?:%|percent)\b", value)
+            percent = re.search(r"\b(\d{1,3})\s*(?:%|percent)(?![a-z])", value)
             if percent and int(percent.group(1)) <= 100:
                 constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
     if re.search(r"\b(?:brighter|brighten)\b", value):
