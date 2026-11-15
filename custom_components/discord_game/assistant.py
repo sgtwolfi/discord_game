@@ -443,7 +443,7 @@ def _requested_action_constraints(request_text):
         if re.search(r"\b(?:maximum|max|full)\b", value):
             constraints["brightness"] = 255
         else:
-            percent = re.search(r"\b(\d{1,3})\s*%", value)
+            percent = re.search(r"\b(\d{1,3})\s*(?:%|percent)\b", value)
             if percent and int(percent.group(1)) <= 100:
                 constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
     if re.search(r"\b(?:brighter|brighten)\b", value):
