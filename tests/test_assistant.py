@@ -2635,3 +2635,31 @@ def test_live_state_verification_can_match_home_assistant_area_names():
     )
     assert result is not None
     assert result["response"]["data"]["success"][0]["id"] == "light.ceiling"
+
+
+
+def test_live_state_verification_checks_relative_brightness_against_pre_action_state():
+    before = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 80},
+    )
+    brighter = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 180},
+    )
+    dimmer = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 40},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Make the bedroom lights brighter", [brighter], before_states=[before]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Dim the bedroom lights", [dimmer], before_states=[before]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Make the bedroom lights brighter", [dimmer], before_states=[before]
+    ) is None
