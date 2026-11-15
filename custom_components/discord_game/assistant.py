@@ -497,6 +497,13 @@ def verify_action_against_live_states(request_text, states, area_names=None, bef
     if not constraints:
         return None
     domain = _action_domain_hint(request_text)
+    if domain is None and any(
+        key in constraints
+        for key in ("brightness", "brightness_direction", "colour")
+    ):
+        domain = "light"
+    if domain is None and "temperature" in constraints:
+        domain = "climate"
     terms = _action_target_terms(request_text)
     all_targets = not terms and bool(re.search(r"\b(?:all|every)\b", str(request_text), re.IGNORECASE))
     if not terms and not all_targets:
