@@ -2724,6 +2724,39 @@ def test_degraded_conversation_reply_is_honest_and_non_empty():
     assert "hasn't been ignored" in reply
 
 
+def test_recent_checkin_anchors_natural_followup_even_when_ghost_never_replied():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "local"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.gemma_b2_non_extended"
+    assistant.agents = {"conversation_agent": "conversation.gemma_b2_non_extended"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A follow-up to a recognised check-in must bypass relevance inference")
+
+    assistant._call = unexpected
+    history = [{
+        "role": "user", "sender": "Tokyo", "sender_id": "123",
+        "content": "aye you workign yet?",
+        "timestamp": "2026-11-15T13:48:00+00:00",
+        "directly_addressed": False,
+    }]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{
+            "sender_name": "Tokyo", "sender_id": "123",
+            "content": "how about now, feeling any better?",
+            "timestamp": "2026-11-15T13:50:06+00:00",
+            "directly_addressed": False,
+        }],
+        history,
+    ))
+    assert result[0] is True
+    assert "previous reply failed" in result[1]
+
+
 def test_recent_direct_request_anchors_followup_even_when_ghost_never_replied():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
