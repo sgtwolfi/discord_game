@@ -2709,3 +2709,70 @@ def test_live_action_confirmation_uses_verified_entities_not_model_speech():
     snapshot = assistant_module.action_result_snapshot(result)
     assert snapshot["verification"] == "live_entity_state"
     assert snapshot["verified_states"][0]["id"] == "light.bedroom_strip"
+
+
+def test_followup_classifier_handles_casual_greetings_and_natural_questions():
+    assert assistant_module.is_contextual_followup("oi, you fixed yet?")
+    assert assistant_module.is_contextual_followup("yoyoyo, do you know what harveys doing yet?")
+    assert assistant_module.is_contextual_followup("yo, have you sorted that?")
+    assert not assistant_module.is_contextual_followup("oi, anyone fancy a game?")
+
+
+def test_mention_only_continuity_recognises_the_reported_messages():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A valid continuation must not need a new relevance call")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "123",
+         "content": "Ghost, do you know what Harvey is doing?",
+         "timestamp": "2026-11-15T09:00:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "I'll check that for you.",
+         "timestamp": "2026-11-15T09:00:10+00:00"},
+    ]
+    for content, timestamp in (
+        ("yoyoyo, do you know what harveys doing yet?", "2026-11-15T09:00:20+00:00"),
+        ("oi, you fixed yet?", "2026-11-15T09:00:30+00:00"),
+    ):
+        result = asyncio.run(assistant._should_respond_to_group(
+            [{"sender_name": "Tokyo", "sender_id": "123", "content": content,
+              "timestamp": timestamp, "directly_addressed": False}],
+            history,
+        ))
+        assert result[0] is True
+        assert "follow-up" in result[1]
+
+
+def test_continuation_authorises_read_only_query_but_not_device_action():
+    item = {"is_dm": False}
+    batch = [{"directly_addressed": False}]
+    assert assistant_module.group_request_is_addressed(
+        item, batch, "query", continuation=True
+    )
+    assert not assistant_module.group_request_is_addressed(
+        item, batch, "action", continuation=True
+    )
+    assert not assistant_module.group_request_is_addressed(
+        item, batch, "query", continuation=False
+    )
+
+
+def test_indirect_owner_activity_question_uses_owner_status_not_discord_friend_lookup():
+    from custom_components.discord_game.local_status import answer_local_status
+
+    state = SimpleNamespace(state="At the downstairs PC")
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: state))
+    query = "yoyoyo, do you know what harveys doing yet?"
+    assert assistant_module.request_kind(query) == "query"
+    assert answer_local_status(
+        hass, query, datetime(2026, 11, 15, 10, 0, tzinfo=UTC),
+        "input_text.ghost_status", "Harvey",
+    ) == "Harvey is currently: At the downstairs PC"

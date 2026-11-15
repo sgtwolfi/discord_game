@@ -130,7 +130,15 @@ def _normalise_name(value: str) -> str:
 
 def _is_owner_activity_query(query: str, owner_name: str) -> bool:
     """Recognise owner-status wording before attempting any Discord friend lookup."""
-    text = _normalise_name(query)
+    # Strip casual openers before interpreting the question shape. These
+    # greetings are common in an ongoing Discord thread ("yoyoyo, do you know...").
+    cleaned_query = re.sub(
+        r"^(?:(?:oi+|(?:yo){1,4}|hey|hiya|hello|alright|right|mate|bro)\b[\s,!.:-]*)+",
+        "",
+        str(query or "").strip(),
+        flags=re.IGNORECASE,
+    )
+    text = _normalise_name(cleaned_query)
     configured = str(owner_name or "").strip()
     # Harvey remains a compatibility alias for installations created before the
     # owner-name setting existed. The configured name is always authoritative too.
@@ -140,8 +148,14 @@ def _is_owner_activity_query(query: str, owner_name: str) -> bool:
     tokens = text.split()
     if not tokens:
         return False
-    has_question_shape = tokens[0] in {"what", "whats", "tell"} or (
-        len(tokens) > 1 and tokens[0:2] == ["what", "is"]
+    has_question_shape = (
+        tokens[0] in {"what", "whats", "tell"}
+        or tokens[:2] == ["what", "is"]
+        or tokens[:3] in (
+            ["do", "you", "know"], ["did", "you", "find"],
+            ["can", "you", "tell"], ["could", "you", "tell"],
+            ["would", "you", "know"], ["have", "you", "checked"],
+        )
     )
     if not has_question_shape:
         return False

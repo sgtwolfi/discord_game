@@ -1,6 +1,12 @@
-# Discord Game + GHOST Assistant (v9.2.0)
+# Discord Game + GHOST Assistant (v9.2.1)
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
+
+## 9.2.1 group conversation continuity fix
+
+- Casual follow-ups such as “yoyoyo, do you know what Harvey's doing yet?” and “oi, you fixed yet?” are recognised after a recent GHOST reply from the same person, including when mention-only mode is enabled.
+- Continuity is evaluated against the persisted channel thread and is bounded by the configured time window. It cannot transfer to another speaker or survive an intervening different speaker.
+- A recognised continuation may ask a read-only live-state query without repeating GHOST's name. Side-effecting Home Assistant actions still require a fresh explicit mention or reply; continuity never grants inherited control permission.
 
 ## 9.2.0 action verification and 9.1.x reliability updates
 
@@ -81,7 +87,7 @@ On startup, legacy non-administrator summaries are now allow-listed to evidence-
 
 - DMs are only processed for users already selected in the existing Discord Game user configuration.
 - Server AI is separately opt-in by comma-separated channel IDs.
-- Home Assistant actions and live-state queries in group chats require GHOST to be directly mentioned or explicitly replied to; this prevents unrelated group conversation from exposing private house state or triggering actions.
+- Home Assistant actions in group chats require GHOST to be directly mentioned or explicitly replied to. A recent same-speaker continuation may ask a read-only live-state query without repeating the mention; this is bounded by the continuity window and cannot authorise device changes.
 - Approved DM history is persisted per user. Server context is isolated by channel and held in RAM only; strangers are not given persistent memories.
 - The oldest pending conversation is processed first. After the configurable debounce period, all currently queued messages for that same conversation are coalesced in chronological order, even if other conversations are interleaved. Different conversations are never combined. Discord message IDs are deduplicated across the pending queue and recent transcript. The pending queue is capped at 200 messages; when full, new messages are rejected with an error event rather than silently deleting older messages.
 - Discord typing indicators are enabled by default.

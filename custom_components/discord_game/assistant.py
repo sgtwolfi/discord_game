@@ -55,7 +55,8 @@ ACTION=re.compile(
     re.IGNORECASE,
 )
 LIVE_STATE_QUERY = re.compile(
-    r"\b(what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
+    r"\b((?:do|did|can|could|would)\s+you\s+(?:know|tell me|check)\s+what .{0,60}\s+(?:doing|up to|status|state)|"
+    r"what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
     r"what(?:'s| is) the (?:current )?(?:status|state)|current status|"
     r"what time is it|current time|what's the time|whats the time|time right now|"
     r"what(?:'s| is) (?:the )?weather|weather right now|weather today|forecast|temperature outside|"
@@ -108,16 +109,37 @@ FOLLOWUP_TEXT = re.compile(
 
 
 def is_contextual_followup(text):
-    """Recognise short replies that depend on GHOST's immediately previous turn."""
+    """Recognise natural follow-ups, including casual greetings before a question."""
     value = re.sub(r"^[\s\W]+|[\s\W]+$", "", str(text or "")).strip()
     if not value or len(value) > 240:
         return False
+    # People often reopen an active thread with a greeting ("oi", "yo",
+    # "yoyoyo", "hey") before referring to GHOST's previous answer.
+    value = re.sub(
+        r"^(?:(?:oi+|(?:yo){1,4}|hey|hiya|hello|alright|right|mate|bro)\b[\s,!.:-]*)+",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not value:
+        return False
     if FOLLOWUP_TEXT.search(value):
+        return True
+    # Questions phrased as "do you know...", "have you...", etc. are common
+    # follow-ups but were not covered by the old opener-only classifier.
+    if re.match(r"^(?:do|did|have|has|are|can|could|would|will)\s+you\b", value, re.IGNORECASE):
         return True
     return bool(re.fullmatch(
         r"(?:and\s+)?(?:you|yourself|that|it|this|what|why|how|really|then|now)[\s?!.,]*",
         value, re.IGNORECASE,
     ))
+
+
+def group_request_is_addressed(item, batch, kind, continuation=False):
+    """Allow a trusted same-speaker continuation to ask read-only queries, never actions."""
+    if item.get("is_dm") or any(entry.get("directly_addressed") for entry in batch):
+        return True
+    return bool(continuation and kind == "query")
 
 
 def _timestamp_delta_seconds(older, newer):
@@ -2109,13 +2131,17 @@ class DiscordAssistant:
                     )
                     return
 
-            # Relevance inference can authorise ordinary conversation only.
-            # Device actions and live-state queries still require an explicit
-            # mention or reply, even when mention-only chat mode is disabled.
-            group_action_is_addressed = item["is_dm"] or any(
-                entry.get("directly_addressed") for entry in batch
-            )
+            # A same-speaker continuation inherits permission for read-only
+            # live queries, but never for side effects. Device actions still
+            # require a fresh explicit mention or reply.
             kind = request_kind(request_text)
+            group_continuation = (
+                not item["is_dm"]
+                and "recognised as a follow-up" in str(reason).casefold()
+            )
+            group_action_is_addressed = group_request_is_addressed(
+                item, batch, kind, continuation=group_continuation
+            )
             local_status_answer = (
                 answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
                 if kind == "query" and group_action_is_addressed and not any(entry.get("forced_agent") for entry in batch)
