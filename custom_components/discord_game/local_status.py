@@ -140,8 +140,14 @@ def _is_owner_activity_query(query: str, owner_name: str) -> bool:
     tokens = text.split()
     if not tokens:
         return False
-    has_question_shape = tokens[0] in {"what", "whats", "tell"} or (
-        len(tokens) > 1 and tokens[0:2] == ["what", "is"]
+    has_question_shape = (
+        tokens[0] in {"what", "whats", "tell"}
+        or tokens[:2] == ["what", "is"]
+        or tokens[:3] in (
+            ["do", "you", "know"], ["did", "you", "find"],
+            ["can", "you", "tell"], ["could", "you", "tell"],
+            ["would", "you", "know"], ["have", "you", "checked"],
+        )
     )
     if not has_question_shape:
         return False
