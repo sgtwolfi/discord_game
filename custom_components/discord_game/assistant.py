@@ -108,7 +108,7 @@ def is_direct_conversational_checkin(text):
     return bool(
         re.search(
             r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
-            r"finished|done|listening|alive|available|responding|ignoring)"
+            r"finished|done|listening|alive|available|responding|ignoring|good|okay|ok|alright|well|feeling|tripping)"
             r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
             value,
             re.IGNORECASE,

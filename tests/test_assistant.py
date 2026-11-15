@@ -3184,3 +3184,38 @@ def test_typing_response_only_option_defaults_off_and_is_configurable(monkeypatc
     )
     assert default.typing_only_when_responding is False
     assert enabled.typing_only_when_responding is True
+
+
+
+@pytest.mark.parametrize("message", [
+    "aye bro, you good yet?",
+    "you alright?",
+    "you okay now?",
+    "oi, you feeling better?",
+    "you still tripping?",
+])
+def test_casual_wellbeing_checkins_bypass_group_relevance_model(message):
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "local"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.gemma_b2_non_extended"
+    assistant.agents = {"conversation_agent": "conversation.gemma_b2_non_extended"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("Direct casual check-ins must bypass relevance inference")
+
+    assistant._call = unexpected
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{
+            "sender_name": "Tokyo", "sender_id": "123",
+            "content": message,
+            "timestamp": "2026-11-15T14:19:07+00:00",
+            "directly_addressed": False,
+        }],
+        [],
+    ))
+    assert result[0] is True
+    assert "direct conversational check-in" in result[1]
