@@ -2746,14 +2746,17 @@ class DiscordAssistant:
             if user_id not in self.approved_users:
                 continue
             record = self.friends.setdefault(user_id, {"messages": [], "summary": "", "pending_messages": []})
-            record.setdefault("messages", []).append({
-                "role": "user",
-                "sender": item.get("sender_name") or self._display_name(user_id),
-                "content": item.get("content", ""),
-                "timestamp": item.get("timestamp"),
-                "source": item.get("key"),
-            })
-            record["messages"] = record["messages"][-max(self.limit, self.history_limit):]
+            # Raw conversation history stays scoped to its original DM or group.
+            # Group messages may contribute durable facts, but never enter private DM transcripts.
+            if item.get("is_dm"):
+                record.setdefault("messages", []).append({
+                    "role": "user",
+                    "sender": item.get("sender_name") or self._display_name(user_id),
+                    "content": item.get("content", ""),
+                    "timestamp": item.get("timestamp"),
+                    "source": item.get("key"),
+                })
+                record["messages"] = record["messages"][-max(self.limit, self.history_limit):]
             record.setdefault("pending_messages", []).append({
                 "role": "user",
                 "sender": item.get("sender_name") or self._display_name(user_id),
