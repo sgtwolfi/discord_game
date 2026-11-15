@@ -914,6 +914,11 @@ def test_contact_memory_capture_is_per_approved_speaker_only():
 
     assert len(assistant.friends["123"]["pending_messages"]) == 1
     assert assistant.friends["123"]["pending_messages"][0]["content"] == "I like strategy games"
+    assert assistant.friends["123"]["messages"] == []
+    assistant._capture_contact_messages([
+        {"sender_id": "123", "sender_name": "Max", "content": "DM-only detail", "timestamp": "3", "key": "dm:123", "is_dm": True},
+    ])
+    assert assistant.friends["123"]["messages"][0]["content"] == "DM-only detail"
     assert "456" not in assistant.friends
 
 
