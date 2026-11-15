@@ -1917,8 +1917,8 @@ class DiscordAssistant:
                 allowance = max(1, self.budget - len(fixed) - 2)
                 current_text = "\n".join(current)
                 current = [current_text[:allowance]]
-                sections[-1] = "New Discord message(s), oldest first:\\n" + current[0]
-                    prompt = "\n\n".join(sections)
+                sections[-1] = "New Discord message(s), oldest first:\n" + current[0]
+                prompt = "\n\n".join(sections)
             if len(prompt) > self.budget:
                 raise RuntimeError("Prompt budget is too small for GHOST mandatory context and the live request")
             return prompt
