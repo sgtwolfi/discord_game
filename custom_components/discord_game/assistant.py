@@ -107,10 +107,10 @@ def is_direct_conversational_checkin(text):
     value = str(text or "").strip()
     return bool(
         re.search(
-            r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
-            r"finished|done|listening|alive|available|responding|ignoring|good|okay|ok|alright|well|feeling|tripping)"
-            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
-            value,
+            r"\b(?:you|u)\s+(?:(?:still|even|actually)\s+)?(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
+            r"finished|done|listening|alive|available|responding|ignoring|good|okay|ok|alright|"
+            r"well|feeling(?:\s+(?:better|okay|alright|good))?|tripping)"
+            r"(?:\s+(?:yet|now|still|better|though))?\s*[?!.,]*$",
             re.IGNORECASE,
         )
         or re.search(
