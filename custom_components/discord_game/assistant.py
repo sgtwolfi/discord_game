@@ -2612,6 +2612,12 @@ class DiscordAssistant:
         participation_mode = str(getattr(self, "group_participation_mode", "mention" if getattr(self, "group_require_mention", False) else "participant"))
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
+        if batch and all(str(entry.get("sender_id") or "") in getattr(self, "approved_users", set()) for entry in batch):
+            status_text = " ".join(str(entry.get("content") or "") for entry in batch)
+            if request_kind(status_text) == "query" and answer_local_status(
+                self.hass, status_text, dt_util.now(), self.status_entity, self.owner_name
+            ) is not None:
+                return True, "An approved friend requested the owner live status in the shared group."
         # Explicit reminders and their confirmations are direct requests to GHOST,
         # even when the friend omits a mention in a shared channel.
         if batch and all(str(entry.get("sender_id") or "") in getattr(self, "approved_users", set()) for entry in batch):
