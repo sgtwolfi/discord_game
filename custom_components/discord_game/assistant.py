@@ -102,6 +102,27 @@ def is_text_addressed(content):
     return bool(re.search(r"\bghost\b", str(content or ""), re.IGNORECASE))
 
 
+def is_direct_conversational_checkin(text):
+    """Recognise a direct check-in that can anchor the next message in the same thread."""
+    value = str(text or "").strip()
+    return bool(
+        re.search(
+            r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
+            r"finished|done|listening|alive|available|responding|ignoring)"
+            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
+            value,
+            re.IGNORECASE,
+        )
+        or re.search(
+            r"\b(?:are|is)\s+(?:you|u)\s+(?:working|workign|workin|there|back|ready|"
+            r"fixed|sorted|finished|done|listening|alive|available|responding|ignoring)"
+            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
+            value,
+            re.IGNORECASE,
+        )
+    )
+
+
 FOLLOWUP_TEXT = re.compile(
     r"^(?:you\b|so\b|and\b|but\b|why\b|how\b|what\b|really\b|wait\b|then\b|that\b|it\b|this\b|right\b|okay\b|ok\b|i mean\b|what about\b|how so\b|what do you mean\b)",
     re.IGNORECASE,
@@ -2739,6 +2760,7 @@ class DiscordAssistant:
                 and (
                     entry.get("directly_addressed")
                     or is_text_addressed(entry.get("content"))
+                    or is_direct_conversational_checkin(entry.get("content"))
                 )
             ), None)
             if prior_direct and any(is_contextual_followup(entry.get("content")) for entry in batch):
@@ -2756,19 +2778,7 @@ class DiscordAssistant:
         # attention. Never let a tiny relevance model label these rhetorical
         # and suppress them. Include common Discord typos/phonetic spellings.
         current_text = " ".join(str(entry.get("content") or "") for entry in batch).strip()
-        ghost_check_in = re.search(
-            r"\b(?:you|u)\s+(?:work(?:ing|ign|in|in')|there|back|ready|fixed|sorted|"
-            r"finished|done|listening|alive|available|responding|ignoring)"
-            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
-            current_text,
-            re.IGNORECASE,
-        ) or re.search(
-            r"\b(?:are|is)\s+(?:you|u)\s+(?:working|workign|workin|there|back|ready|"
-            r"fixed|sorted|finished|done|listening|alive|available|responding|ignoring)"
-            r"(?:\s+(?:yet|now|still))?\s*[?!.,]*$",
-            current_text,
-            re.IGNORECASE,
-        )
+        ghost_check_in = is_direct_conversational_checkin(current_text)
         if ghost_check_in and not (participation_mode == "mention" and continuity_identity_conflict):
             return True, "GHOST recognised a direct conversational check-in without the relevance model; relevance inference was bypassed."
         if participation_mode == "mention":
