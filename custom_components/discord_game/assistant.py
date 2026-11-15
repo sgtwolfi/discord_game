@@ -2167,21 +2167,27 @@ class DiscordAssistant:
             group_action_is_addressed = group_request_is_addressed(
                 item, batch, kind, continuation=group_continuation
             )
+            group_friend_authorised = bool(
+                not item["is_dm"] and batch
+                and all(str(entry.get("sender_id") or "") in self.approved_users for entry in batch)
+            )
             local_status_answer = (
                 answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
-                if kind == "query" and group_action_is_addressed and not any(entry.get("forced_agent") for entry in batch)
+                if kind == "query" and (group_action_is_addressed or group_friend_authorised) and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             local_reminder_confirmation = (
                 resolve_reminder_confirmation(batch, prior_history, dt_util.now())
-                if item["is_dm"] and not any(entry.get("forced_agent") for entry in batch)
+                if (item["is_dm"] or group_friend_authorised) and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             local_reminder = (
                 local_reminder_confirmation
                 or (
                     parse_local_reminder(request_text, dt_util.now())
-                    if item["is_dm"] and not any(entry.get("forced_agent") for entry in batch)
+                    if (item["is_dm"] or group_friend_authorised)
+                    and len({str(entry.get("sender_id") or "") for entry in batch}) == 1
+                    and not any(entry.get("forced_agent") for entry in batch)
                     else None
                 )
             )
