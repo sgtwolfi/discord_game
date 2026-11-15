@@ -2557,3 +2557,31 @@ def test_live_state_verification_requires_clear_action_and_target():
     assert assistant_module.verify_action_against_live_states(
         "Turn on all lights", [state]
     ) is not None
+
+
+
+def test_live_state_verification_only_runs_when_ha_returns_no_target_outcome():
+    empty = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": []},
+        }
+    }
+    explicit_failure = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": [{"id": "light.bedroom", "error": "Rejected"}]},
+        }
+    }
+    explicit_success = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [{"id": "light.bedroom"}], "failed": []},
+        }
+    }
+    assert assistant_module.action_result_needs_live_verification(empty)
+    assert not assistant_module.action_result_needs_live_verification(explicit_failure)
+    assert not assistant_module.action_result_needs_live_verification(explicit_success)
+    assert not assistant_module.action_result_needs_live_verification({
+        "response": {"response_type": "query_answer", "data": {}}
+    })
