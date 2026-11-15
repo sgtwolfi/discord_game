@@ -2451,3 +2451,21 @@ def test_api_mode_never_uses_tool_enabled_agent_for_status_rewording():
     assistant._call = unexpected_call
     factual = "Harvey is currently: Working downstairs"
     assert asyncio.run(assistant._rephrase_readonly_status(factual)) == factual
+
+
+
+def test_api_mode_uses_only_the_tool_free_relevance_agent_for_status_rewording():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.group_relevance_agent = "conversation.local_relevance"
+
+    async def fake_call(agent, prompt):
+        assert agent == "conversation.local_relevance"
+        assert "<FACT>Harvey is currently: Working downstairs</FACT>" in prompt
+        return "Well, Harvey is currently: Working downstairs. There you go."
+
+    assistant._call = fake_call
+    assert asyncio.run(assistant._rephrase_readonly_status(
+        "Harvey is currently: Working downstairs"
+    )) == "Well, Harvey is currently: Working downstairs. There you go."
