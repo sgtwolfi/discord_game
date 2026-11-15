@@ -2137,6 +2137,7 @@ class DiscordAssistant:
                         "content": msg["content"],
                         "sender_id": msg["sender_id"],
                         "timestamp": msg["timestamp"],
+                        "directly_addressed": bool(msg.get("directly_addressed")),
                     }
                     for msg in batch
                 ]
