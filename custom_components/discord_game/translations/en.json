@@ -45,7 +45,9 @@
           "spam_message_limit": "Messages before spam action",
           "spam_window_seconds": "Spam detection window in seconds",
           "spam_defer_minutes": "Local deferral duration in minutes",
-          "spam_timeout_minutes": "Discord timeout duration in minutes"
+          "spam_timeout_minutes": "Discord timeout duration in minutes",
+          "typing_enabled": "Show Discord typing indicator",
+          "typing_only_when_responding": "Only show typing when GHOST has decided to reply"
         }
       },
       "members": {
