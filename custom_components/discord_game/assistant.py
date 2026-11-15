@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import time
+import traceback
 from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 
@@ -2446,6 +2447,7 @@ class DiscordAssistant:
                 # Never repeat the same model call. A fallback is a different
                 # configured agent, not a second paid attempt at an unchanged prompt.
                 primary_error = None
+                agent_diagnostics = []
                 if is_action:
                     pre_action_states = self.hass.states.async_all()
                 try:
@@ -2458,6 +2460,12 @@ class DiscordAssistant:
                 except Exception as err:
                     primary_error = err
                     failures.append(f"{type(err).__name__}: {err!r}")
+                    agent_diagnostics.append({
+                        "agent": agent,
+                        "stage": "primary",
+                        "exception": f"{type(err).__name__}: {err!r}",
+                        "traceback": traceback.format_exc()[-12000:],
+                    })
                     _LOGGER.warning(
                         "Primary assistant agent failed (%s): %r",
                         type(err).__name__, err, exc_info=True,
@@ -2494,6 +2502,12 @@ class DiscordAssistant:
                         failures.append(
                             f"{type(fallback_error).__name__}: {fallback_error!r}"
                         )
+                        agent_diagnostics.append({
+                            "agent": model,
+                            "stage": "fallback",
+                            "exception": f"{type(fallback_error).__name__}: {fallback_error!r}",
+                            "traceback": traceback.format_exc()[-12000:],
+                        })
                         _LOGGER.warning(
                             "Fallback assistant agent failed (%s): %r",
                             type(fallback_error).__name__, fallback_error,
@@ -2614,6 +2628,7 @@ class DiscordAssistant:
                 "context_snapshot": prompt,
                 "action_result": action_result,
                 "models_attempted": models_attempted,
+                "agent_diagnostics": agent_diagnostics,
                 "fallback_used": model == self.agents.get("fallback_agent") and bool(self.agents.get("fallback_agent")),
             })
             self.transcript = self.transcript[-100:]
@@ -2673,6 +2688,7 @@ class DiscordAssistant:
                 "context_snapshot": prompt,
                 "action_result": action_result,
                 "models_attempted": models_attempted,
+                "agent_diagnostics": agent_diagnostics,
             })
             self.transcript = self.transcript[-100:]
             self._trim_context_snapshots()

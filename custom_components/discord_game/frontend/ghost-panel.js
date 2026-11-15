@@ -899,6 +899,18 @@ class DiscordGameGhostPanel extends HTMLElement {
       if (item.request_kind) card.append(this._el("p", "Request type: " + item.request_kind, "muted"));
       if (item.models_attempted && item.models_attempted.length) card.append(this._el("p", "Agents attempted: " + item.models_attempted.join(" → "), "muted"));
       if (item.fallback_used) card.append(this._el("p", "Fallback agent was used.", "muted"));
+      if (item.agent_diagnostics && item.agent_diagnostics.length) {
+        const details = document.createElement("details");
+        details.append(this._el("summary", "View model error logs (" + item.agent_diagnostics.length + ")"));
+        for (const failure of item.agent_diagnostics) {
+          const block = this._el("section", null, "memorybox");
+          block.append(this._el("strong", [failure.stage, failure.agent].filter(Boolean).join(" · ")));
+          block.append(this._el("p", failure.exception || "Agent call failed", "error"));
+          if (failure.traceback) block.append(this._el("pre", failure.traceback));
+          details.append(block);
+        }
+        card.append(details);
+      }
       if (item.action_result) {
         const details = document.createElement("details");
         details.append(this._el("summary", "View Home Assistant action result"));
