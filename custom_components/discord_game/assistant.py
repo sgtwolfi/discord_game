@@ -646,10 +646,11 @@ def action_result_error(data):
     succeeded = result_data.get("success") or []
     if not isinstance(succeeded, list) or not isinstance(failed, list):
         return "Home Assistant returned malformed target result lists."
-    valid_target = lambda item: (
-        isinstance(item, dict)
-        and any(str(item.get(key) or "").strip() for key in ("id", "entity_id", "name"))
-    )
+    def valid_target(item):
+        return (
+            isinstance(item, dict)
+            and any(str(item.get(key) or "").strip() for key in ("id", "entity_id", "name"))
+        )
     if any(not valid_target(item) for item in succeeded + failed):
         return "Home Assistant returned a target entry without a usable name or identifier."
     if failed:
