@@ -1,11 +1,11 @@
-# Discord Game + GHOST Assistant (v9.1.0)
+# Discord Game + GHOST Assistant (v9.1.1)
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
 ## 9.1.0 reliability updates
 
 - Owner activity questions are resolved before Discord friend matching. The default owner name `Harvey` remains a compatibility alias even if the configurable display name has been changed, and matching is tolerant of punctuation, apostrophes and common spoken variants.
-- Local Mode now passes deterministic live-state answers through its conversation model for natural, varied phrasing. The verified factual answer must be reproduced verbatim; if the model omits or changes it, GHOST falls back to the deterministic answer. API Mode does not call its potentially tool-enabled agent for cosmetic rewording.
+- Local Mode passes deterministic live-state answers through its conversation model for natural, varied phrasing. API Mode uses only the separately configured tool-free group relevance agent for this cosmetic step; it never calls the potentially tool-enabled API agent to reword a status. The verified factual answer must be reproduced verbatim; if the model omits or changes it, GHOST falls back to the deterministic answer. If no safe rephrasing agent is configured, the deterministic answer is retained.
 
 ## Setup
 

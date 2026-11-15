@@ -1366,11 +1366,13 @@ class DiscordAssistant:
         verbatim. If it fails or alters the payload, use the original answer.
         """
         factual = str(factual_answer or "").strip()
-        # API Mode's selected agent may have privileged HA tools. Never use a
-        # tool-enabled agent merely to decorate a read-only answer.
-        if getattr(self, "mode", "local") != "local":
-            return factual
-        agent = str(self.agents.get("conversation_agent") or "").strip()
+        mode = getattr(self, "mode", "local")
+        if mode == "api":
+            # API Mode's primary agent may have privileged HA tools. Use only
+            # the separately configured, tool-free group relevance agent.
+            agent = str(getattr(self, "group_relevance_agent", "") or "").strip()
+        else:
+            agent = str(self.agents.get("conversation_agent") or "").strip()
         if not factual or not agent:
             return factual
         prompt = (
