@@ -1907,18 +1907,18 @@ class DiscordAssistant:
                     section = sections[index]
                     if not section.startswith(("Saved facts", "SHARED GROUP FACTS", "Temporary administrator context")):
                         continue
-                    heading, separator, content = section.partition("\\n")
+                    heading, separator, content = section.partition("\n")
                     excess = len(prompt) - self.budget
                     keep = max(0, len(content) - excess)
                     sections[index] = heading + separator + content[:keep]
-                    prompt = "\\n\\n".join(sections)
+                    prompt = "\n\n".join(sections)
             if len(prompt) > self.budget and current:
-                fixed = "\\n\\n".join(sections[:-1] + ["New Discord message(s), oldest first:"])
+                fixed = "\n\n".join(sections[:-1] + ["New Discord message(s), oldest first:"])
                 allowance = max(1, self.budget - len(fixed) - 2)
-                current_text = "\\n".join(current)
+                current_text = "\n".join(current)
                 current = [current_text[:allowance]]
                 sections[-1] = "New Discord message(s), oldest first:\\n" + current[0]
-                prompt = "\\n\\n".join(sections)
+                    prompt = "\n\n".join(sections)
             if len(prompt) > self.budget:
                 raise RuntimeError("Prompt budget is too small for GHOST mandatory context and the live request")
             return prompt
@@ -2002,7 +2002,7 @@ class DiscordAssistant:
             if len(build_prompt()) <= self.budget:
                 break
             section = optional_sections[index]
-            heading, separator, content = section.partition("\n")
+                    heading, separator, content = section.partition("\n")
             excess = len(build_prompt()) - self.budget
             minimum_content = min(32, len(content))
             keep = max(minimum_content, len(content) - excess)
