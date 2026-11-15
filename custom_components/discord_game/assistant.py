@@ -2700,7 +2700,7 @@ class DiscordAssistant:
             getattr(self, "mode", "local") == "api"
             and agent == str(self.agents.get("conversation_agent") or "").strip()
         ):
-            return self._fallback_group_relevance(batch, history, "the configured relevance agent is the tool-enabled API agent")
+            return self._fallback_group_relevance(batch, history, "a separate local agent is required because the configured relevance agent is the tool-enabled API agent")
 
         prompt = [
             "Decide whether GHOST should reply in this Discord group.",
