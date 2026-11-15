@@ -2690,3 +2690,22 @@ def test_action_result_error_rejects_malformed_success_target_lists():
     assert assistant_module.action_result_error(
         named_target_without_id_is_valid_per_ha_conversation_api
     ) is None
+
+
+
+def test_live_action_confirmation_uses_verified_entities_not_model_speech():
+    bedroom = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 255},
+    )
+    result = assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", [bedroom]
+    )
+    answer = assistant_module.live_action_confirmation(
+        "Turn on the bedroom lights", result
+    )
+    assert answer == "Home Assistant's live state confirms Bedroom Strip is on."
+    snapshot = assistant_module.action_result_snapshot(result)
+    assert snapshot["verification"] == "live_entity_state"
+    assert snapshot["verified_states"][0]["id"] == "light.bedroom_strip"
