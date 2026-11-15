@@ -1006,6 +1006,7 @@ class DiscordAssistant:
         self.memory_batch_messages=max(1,min(100,int(config.get("memory_batch_messages",20))))
         self.conversation_history_limit=max(50,min(2000,int(config.get("conversation_history_limit",500))))
         self.typing=bool(config.get("typing_enabled",True))
+        self.typing_only_when_responding = bool(config.get("typing_only_when_responding", False))
         self.group_channels={x.strip() for x in str(config.get("assistant_group_channels","")).split(",") if x.strip().isdigit()}
         self.approved_users = {str(user_id) for user_id in config.get("assistant_approved_users", config.get(CONF_MEMBERS, []))}
         self.contact_names = {str(k): str(v) for k, v in (config.get("assistant_contact_names") or {}).items()}
@@ -1296,6 +1297,7 @@ class DiscordAssistant:
               "memory_batch_messages": getattr(self, "memory_batch_messages", 20),
               "conversation_history_limit": getattr(self, "conversation_history_limit", 500),
               "typing_enabled": getattr(self, "typing", True),
+              "typing_only_when_responding": getattr(self, "typing_only_when_responding", False),
               "assistant_group_channels": ",".join(sorted(getattr(self, "group_channels", set()))),
               "conversation_system_prompt": getattr(self, "config", {}).get("conversation_system_prompt", ""),
               "operations_system_prompt": getattr(self, "config", {}).get("operations_system_prompt", ""),
@@ -2131,9 +2133,8 @@ class DiscordAssistant:
             # The prompt is built from the pre-message snapshot to avoid duplication.
             prompt = self._prompt(batch, prior_history, summary, "conversation", context_note)
             self._capture_contact_messages(batch)
-            if self.typing:
-                # Start typing before any model/relevance call, for both DMs and
-                # groups, so slow local models never leave people wondering.
+            if self.typing and not getattr(self, "typing_only_when_responding", False):
+                # Legacy behaviour: indicate activity while relevance is checked.
                 typing = asyncio.create_task(self._typing(item["channel"]))
 
             if not item["is_dm"]:
@@ -2268,6 +2269,12 @@ class DiscordAssistant:
                         {"conversation": item["key"], "reason": reason},
                     )
                     return
+
+            # In response-only mode, start typing only after group relevance and
+            # group safety gates have passed. Keep it active throughout response
+            # generation, including slow local-model calls.
+            if self.typing and getattr(self, "typing_only_when_responding", False):
+                typing = asyncio.create_task(self._typing(item["channel"]))
 
             # A same-speaker continuation inherits permission for read-only
             # live queries, but never for side effects. Device actions still
@@ -2746,6 +2753,34 @@ class DiscordAssistant:
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
             if not identity_conflict and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
                 return True, "GHOST continued the shared group conversation; another participant was recognised as a follow-up."
+
+        # A debounce batch can contain both the original check-in and its
+        # follow-up. In that case neither message exists in prior history yet,
+        # so recognise the relationship inside the batch before consulting a
+        # relevance model.
+        if batch and getattr(self, "group_continuity_seconds", 300):
+            for anchor_index, anchor in enumerate(batch[:-1]):
+                is_anchor = bool(
+                    anchor.get("directly_addressed")
+                    or is_text_addressed(anchor.get("content"))
+                    or is_direct_conversational_checkin(anchor.get("content"))
+                )
+                if not is_anchor:
+                    continue
+                for followup in batch[anchor_index + 1:]:
+                    if not is_contextual_followup(followup.get("content")):
+                        continue
+                    anchor_id = str(anchor.get("sender_id") or "").strip()
+                    followup_id = str(followup.get("sender_id") or "").strip()
+                    anchor_name = re.sub(r"\\s+", " ", str(anchor.get("sender_name") or anchor.get("sender") or "")).strip().casefold()
+                    followup_name = re.sub(r"\\s+", " ", str(followup.get("sender_name") or followup.get("sender") or "")).strip().casefold()
+                    identity_conflict = bool(
+                        anchor_id and followup_id and anchor_id != followup_id
+                        and anchor_name and anchor_name == followup_name
+                    )
+                    elapsed = _timestamp_delta_seconds(anchor.get("timestamp"), followup.get("timestamp"))
+                    if not identity_conflict and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
+                        return True, "GHOST recognised a follow-up to a direct check-in within the same queued batch."
 
         # A prior explicit request to GHOST is also a valid thread anchor when
         # GHOST failed to answer it. This covers "oi, you fixed yet?" after an

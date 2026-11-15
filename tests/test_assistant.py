@@ -3136,3 +3136,50 @@ def test_indirect_owner_activity_question_uses_owner_status_not_discord_friend_l
         hass, query, datetime(2026, 11, 15, 10, 0, tzinfo=UTC),
         "input_text.ghost_status", "Harvey",
     ) == "Harvey is currently: At the downstairs PC"
+
+
+
+def test_same_queued_batch_checkin_followup_bypasses_relevance_model():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "local"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.gemma_b2_non_extended"
+    assistant.agents = {"conversation_agent": "conversation.gemma_b2_non_extended"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A check-in and its follow-up in one debounce batch must bypass relevance inference")
+
+    assistant._call = unexpected
+    batch = [
+        {
+            "sender_name": "Tokyo", "sender_id": "123",
+            "content": "aye you workign yet?",
+            "timestamp": "2026-11-15T13:48:00+00:00",
+            "directly_addressed": False,
+        },
+        {
+            "sender_name": "Tokyo", "sender_id": "123",
+            "content": "so you still tripping or you back on the ball?",
+            "timestamp": "2026-11-15T13:50:06+00:00",
+            "directly_addressed": False,
+        },
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(batch, []))
+    assert result[0] is True
+    assert "same queued batch" in result[1]
+
+
+def test_typing_response_only_option_defaults_off_and_is_configurable(monkeypatch):
+    class FakeStore:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    default = DiscordAssistant(SimpleNamespace(), "entry", {}, None)
+    enabled = DiscordAssistant(
+        SimpleNamespace(), "entry", {"typing_only_when_responding": True}, None
+    )
+    assert default.typing_only_when_responding is False
+    assert enabled.typing_only_when_responding is True
