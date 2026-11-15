@@ -2185,9 +2185,17 @@ class DiscordAssistant:
                 if kind == "query" and (group_action_is_addressed or group_friend_authorised) and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
+            group_confirmation_authorised = item["is_dm"] or (
+                group_friend_authorised
+                and len({str(entry.get("sender_id") or "") for entry in batch}) == 1
+                and bool(
+                    (previous_assistant := next((entry for entry in reversed(prior_history) if entry.get("role") == "assistant"), {})).get("recipient_ids")
+                    and str(batch[0].get("sender_id") or "") in {str(value) for value in previous_assistant.get("recipient_ids", [])}
+                )
+            )
             local_reminder_confirmation = (
                 resolve_reminder_confirmation(batch, prior_history, dt_util.now())
-                if (item["is_dm"] or group_friend_authorised) and not any(entry.get("forced_agent") for entry in batch)
+                if group_confirmation_authorised and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             local_reminder = (
@@ -2438,7 +2446,8 @@ class DiscordAssistant:
             now = datetime.now(UTC).isoformat()
             self._append_conversation_message(
                 item["key"],
-                {"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model},
+                {"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model,
+                 "recipient_ids": list(dict.fromkeys(str(entry.get("sender_id") or "") for entry in batch if entry.get("sender_id")))} ,
             )
             if item["is_dm"]:
                 history.append({"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model})
@@ -2446,7 +2455,8 @@ class DiscordAssistant:
             else:
                 self.groups[item["key"]] = (
                     self.groups[item["key"]]
-                    + [{"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model}]
+                    + [{"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model,
+                        "recipient_ids": list(dict.fromkeys(str(entry.get("sender_id") or "") for entry in batch if entry.get("sender_id")))}]
                 )[-self.limit:]
             self.last_activity, self.error, self._state = now, None, "ready"
             self.transcript.append({
@@ -2581,10 +2591,17 @@ class DiscordAssistant:
             one_current_speaker = bool(batch) and all(
                 same_sender(first_current, entry) for entry in batch[1:]
             )
-            # Shared group threads can be continued by any approved participant.
+            # Shared group threads can be continued by any participant, but a
+            # conflicting Discord ID for the same displayed name is never trusted.
+            first_current = batch[0] if batch else {}
+            prior_id = str((prior_user or {}).get("sender_id") or "").strip()
+            current_id = str(first_current.get("sender_id") or "").strip()
+            prior_name = re.sub(r"\\s+", " ", str((prior_user or {}).get("sender_name") or (prior_user or {}).get("sender") or "")).strip().casefold()
+            current_name = re.sub(r"\\s+", " ", str(first_current.get("sender_name") or first_current.get("sender") or "")).strip().casefold()
+            identity_conflict = bool(prior_id and current_id and prior_id != current_id and prior_name and prior_name == current_name)
             elapsed = _timestamp_delta_seconds(assistant_turn.get("timestamp"), batch[-1].get("timestamp"))
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
-            if followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
+            if not identity_conflict and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
                 return True, "GHOST continued the shared group conversation; another participant was recognised as a follow-up."
 
         if participation_mode == "mention":
