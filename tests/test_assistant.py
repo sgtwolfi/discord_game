@@ -1885,7 +1885,8 @@ def test_group_continuity_does_not_cross_speakers_or_expire():
         [{"sender_name": "Max", "sender_id": "456", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:45:10+00:00"}], history))
     expired = asyncio.run(assistant._should_respond_to_group(
         [{"sender_name": "Tokyo", "sender_id": "123", "content": "you fixed yourself?", "timestamp": "2026-11-14T11:50:00+00:00"}], history))
-    assert other[0] is False
+    assert other[0] is True
+    assert "shared group conversation" in other[1]
     assert expired[0] is False
 
 
