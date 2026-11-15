@@ -2751,6 +2751,62 @@ def test_mention_only_continuity_recognises_the_reported_messages():
         assert "follow-up" in result[1]
 
 
+def test_group_continuity_supports_legacy_history_without_sender_ids():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A legacy same-speaker follow-up must not need relevance inference")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "content": "Ghost, are you there?",
+         "timestamp": "2026-11-15T10:17:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "Unfortunately, yes.",
+         "timestamp": "2026-11-15T10:17:10+00:00"},
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123", "content": "oi you fixed yet?",
+          "timestamp": "2026-11-15T10:17:39+00:00", "directly_addressed": False}],
+        history,
+    ))
+    assert result[0] is True
+    assert "follow-up" in result[1]
+
+
+def test_group_continuity_never_uses_name_fallback_when_both_ids_disagree():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = "conversation.local_relevance"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("Mention-only mode must suppress a different Discord user")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "old-id",
+         "content": "Ghost, are you there?", "timestamp": "2026-11-15T10:17:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "Unfortunately, yes.",
+         "timestamp": "2026-11-15T10:17:10+00:00"},
+    ]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "new-id", "content": "oi you fixed yet?",
+          "timestamp": "2026-11-15T10:17:39+00:00", "directly_addressed": False}],
+        history,
+    ))
+    assert result[0] is False
+    assert "mention-only" in result[1]
+
+
 def test_continuation_authorises_read_only_query_but_not_device_action():
     item = {"is_dm": False}
     batch = [{"directly_addressed": False}]
