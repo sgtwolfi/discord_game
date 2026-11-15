@@ -262,6 +262,18 @@ def resolve_reminder_confirmation(batch, history, now):
 
 
 
+def group_reminder_confirmation_is_authorized(batch, history):
+    """Only the friend who received a reminder proposal may confirm it in a group."""
+    sender_ids = {str(entry.get("sender_id") or "") for entry in batch if entry.get("sender_id")}
+    if len(sender_ids) != 1:
+        return False
+    previous_assistant = next((entry for entry in reversed(history) if entry.get("role") == "assistant"), None)
+    if not previous_assistant:
+        return False
+    return next(iter(sender_ids)) in {str(value) for value in previous_assistant.get("recipient_ids", [])}
+
+
+
 def extract_durable_memory_facts(messages):
     """Extract only explicit, attributable facts; never summarise free-form chat with a model."""
     facts = []
@@ -2047,6 +2059,10 @@ class DiscordAssistant:
         item = batch[0]
         typing = None
         group_gate_passed = False
+        group_friend_authorised = False
+        group_status_answer = None
+        group_reminder_candidate = None
+        group_reminder_confirmation = None
         history = []
         prompt = ""
         request_text = " ".join(x["content"] for x in batch)
@@ -2148,11 +2164,24 @@ class DiscordAssistant:
                 # Never let an indirectly addressed group message about private
                 # device state or actions fall through to the chat model.
                 group_kind = request_kind(request_text)
-                if group_kind in {"action", "query"} and not any(
-                    entry.get("directly_addressed") for entry in batch
+                group_friend_authorised = bool(batch) and all(
+                    str(entry.get("sender_id") or "") in self.approved_users for entry in batch
+                )
+                group_senders = {str(entry.get("sender_id") or "") for entry in batch}
+                if group_friend_authorised and len(group_senders) == 1:
+                    group_reminder_candidate = parse_local_reminder(request_text, dt_util.now())
+                    if group_reminder_confirmation_is_authorized(batch, prior_history):
+                        group_reminder_confirmation = resolve_reminder_confirmation(batch, prior_history, dt_util.now())
+                if group_friend_authorised and group_kind == "query":
+                    group_status_answer = answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
+                group_private_request_allowed = bool(group_status_answer or group_reminder_candidate or group_reminder_confirmation)
+                group_directly_addressed = any(entry.get("directly_addressed") for entry in batch)
+                if group_kind in {"action", "query"} and (
+                    not group_friend_authorised
+                    or (not group_directly_addressed and not group_private_request_allowed)
                 ):
                     now = datetime.now(UTC).isoformat()
-                    reason = "Home Assistant requests in group chats must directly address GHOST."
+                    reason = "Group Home Assistant requests require an approved friend; owner status and reminders are available to approved friends."
                     self.last_group_decision = {
                         "conversation": item["key"],
                         "decision": "ignored",
@@ -2198,41 +2227,34 @@ class DiscordAssistant:
                 not item["is_dm"]
                 and "recognised as a follow-up" in str(reason).casefold()
             )
-            group_action_is_addressed = group_request_is_addressed(
-                item, batch, kind, continuation=group_continuation
-            )
             group_friend_authorised = bool(
                 not item["is_dm"] and batch
                 and all(str(entry.get("sender_id") or "") in self.approved_users for entry in batch)
             )
+            group_action_is_addressed = (
+                group_friend_authorised and group_request_is_addressed(
+                    item, batch, kind, continuation=group_continuation
+                )
+            ) if not item["is_dm"] else True
             local_status_answer = (
-                answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
-                if kind == "query" and (group_action_is_addressed or group_friend_authorised) and not any(entry.get("forced_agent") for entry in batch)
+                group_status_answer if not item["is_dm"] and group_friend_authorised
+                else answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
+                if kind == "query" and group_action_is_addressed and not any(entry.get("forced_agent") for entry in batch)
                 else None
             )
             group_confirmation_authorised = item["is_dm"] or (
-                group_friend_authorised
-                and len({str(entry.get("sender_id") or "") for entry in batch}) == 1
-                and bool(
-                    (previous_assistant := next((entry for entry in reversed(prior_history) if entry.get("role") == "assistant"), {})).get("recipient_ids")
-                    and str(batch[0].get("sender_id") or "") in {str(value) for value in previous_assistant.get("recipient_ids", [])}
-                )
+                group_friend_authorised and group_reminder_confirmation_is_authorized(batch, prior_history)
             )
             local_reminder_confirmation = (
-                resolve_reminder_confirmation(batch, prior_history, dt_util.now())
-                if group_confirmation_authorised and not any(entry.get("forced_agent") for entry in batch)
+                resolve_reminder_confirmation(batch, prior_history, dt_util.now()) if item["is_dm"]
+                else group_reminder_confirmation if group_confirmation_authorised
                 else None
-            )
+            ) if not any(entry.get("forced_agent") for entry in batch) else None
             local_reminder = (
                 local_reminder_confirmation
-                or (
-                    parse_local_reminder(request_text, dt_util.now())
-                    if (item["is_dm"] or group_friend_authorised)
-                    and len({str(entry.get("sender_id") or "") for entry in batch}) == 1
-                    and not any(entry.get("forced_agent") for entry in batch)
-                    else None
-                )
-            )
+                or (parse_local_reminder(request_text, dt_util.now()) if item["is_dm"] and len({str(entry.get("sender_id") or "") for entry in batch}) == 1 else None)
+                or (group_reminder_candidate if not item["is_dm"] and group_friend_authorised else None)
+            ) if not any(entry.get("forced_agent") for entry in batch) else None
             if (
                 kind in {"action", "query"}
                 and group_action_is_addressed
