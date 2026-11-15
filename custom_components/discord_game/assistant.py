@@ -55,7 +55,8 @@ ACTION=re.compile(
     re.IGNORECASE,
 )
 LIVE_STATE_QUERY = re.compile(
-    r"\b(what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
+    r"\b((?:do|did|can|could|would)\s+you\s+(?:know|tell me|check)\s+what .{0,60}\s+(?:doing|up to|status|state)|"
+    r"what(?:'s|s| is| are) .{0,60} (?:doing|up to|set to|currently|status|state|brightness)|"
     r"what(?:'s| is) the (?:current )?(?:status|state)|current status|"
     r"what time is it|current time|what's the time|whats the time|time right now|"
     r"what(?:'s| is) (?:the )?weather|weather right now|weather today|forecast|temperature outside|"
