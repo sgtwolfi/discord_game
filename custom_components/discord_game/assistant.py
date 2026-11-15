@@ -2628,7 +2628,7 @@ class DiscordAssistant:
         direct_question = re.search(
             r"\b(?:what do you think|what is your take|what do you reckon|"
             r"do you reckon|do you know|can you|could you|would you|have you|are you|"
-            r"your opinion|any thoughts)\\b",
+            r"your opinion|any thoughts)\b",
             text,
             re.IGNORECASE,
         )
