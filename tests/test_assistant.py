@@ -3172,18 +3172,18 @@ def test_same_queued_batch_checkin_followup_bypasses_relevance_model():
     assert "same queued batch" in result[1]
 
 
-def test_typing_response_only_option_defaults_off_and_is_configurable(monkeypatch):
+def test_typing_indicator_is_always_deferred_until_response_generation(monkeypatch):
     class FakeStore:
         def __init__(self, *args, **kwargs):
             pass
 
     monkeypatch.setattr(assistant_module, "Store", FakeStore)
     default = DiscordAssistant(SimpleNamespace(), "entry", {}, None)
-    enabled = DiscordAssistant(
-        SimpleNamespace(), "entry", {"typing_only_when_responding": True}, None
+    legacy_disabled = DiscordAssistant(
+        SimpleNamespace(), "entry", {"typing_only_when_responding": False}, None
     )
-    assert default.typing_only_when_responding is False
-    assert enabled.typing_only_when_responding is True
+    assert default.typing_only_when_responding is True
+    assert legacy_disabled.typing_only_when_responding is True
 
 
 

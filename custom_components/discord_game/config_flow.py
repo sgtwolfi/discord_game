@@ -201,7 +201,6 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "memory_batch_messages": 20,
                 "conversation_history_limit": 500,
                 "typing_enabled": True,
-                "typing_only_when_responding": self._get_current("typing_only_when_responding", False),
                 "assistant_group_channels": "",
                 "conversation_system_prompt": "",
                 "operations_system_prompt": "",
@@ -272,7 +271,6 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Required("group_continuity_seconds", default=self._get_current("group_continuity_seconds", 300)): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
                 vol.Required("typing_enabled", default=self._get_current("typing_enabled", True)): selector.BooleanSelector(),
-                vol.Required("typing_only_when_responding", default=self._get_current("typing_only_when_responding", False)): selector.BooleanSelector(),
                 vol.Optional("spam_local_agent", default=self._get_current("spam_local_agent", "")): selector.ConversationAgentSelector(),
                 vol.Required("spam_policy", default=self._get_current("spam_policy", "defer_local")): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=[{"label": "Defer to local model", "value": "defer_local"}, {"label": "Discord timeout", "value": "timeout"}, {"label": "Ignore during cooldown", "value": "ignore"}], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
