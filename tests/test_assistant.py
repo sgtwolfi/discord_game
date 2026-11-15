@@ -2779,6 +2779,30 @@ def test_group_followup_continuity_is_shared_across_different_speakers():
     assert "shared group conversation" in result[1]
 
 
+def test_approved_friend_group_reminder_bypasses_relevance_guessing():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.approved_users = {"123"}
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("An explicit approved-friend reminder is already a direct request")
+
+    assistant._call = unexpected
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123",
+          "content": "Remind me to take the bins out in 20 minutes",
+          "directly_addressed": False}], []
+    ))
+    assert result[0] is True
+    assert "reminder request" in result[1]
+
+
 def test_group_reminder_confirmation_is_bound_to_the_friend_who_received_offer():
     history = [{
         "role": "assistant", "sender": "GHOST",
