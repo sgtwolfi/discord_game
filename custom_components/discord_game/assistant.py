@@ -387,19 +387,19 @@ ACTION_TARGET_STOPWORDS = {
 def _action_domain_hint(request_text):
     """Return a domain only when the request names a recognisable device class."""
     value = str(request_text or "").casefold()
-    if re.search(r"\\b(?:lights?|bulbs?)\\b", value):
+    if re.search(r"\b(?:lights?|bulbs?)\b", value):
         return "light"
-    if re.search(r"\\bswitch(?:es)?\\b", value):
+    if re.search(r"\bswitch(?:es)?\b", value):
         return "switch"
-    if re.search(r"\\b(?:blinds?|shutters?|covers?|garage door)\\b", value):
+    if re.search(r"\b(?:blinds?|shutters?|covers?|garage door)\b", value):
         return "cover"
-    if re.search(r"\\block(?:s)?\\b", value):
+    if re.search(r"\block(?:s)?\b", value):
         return "lock"
-    if re.search(r"\\bfans?\\b", value):
+    if re.search(r"\bfans?\b", value):
         return "fan"
-    if re.search(r"\\b(?:thermostat|climate)\\b", value):
+    if re.search(r"\b(?:thermostat|climate)\b", value):
         return "climate"
-    if re.search(r"\\b(?:media player|speaker|speakers)\\b", value):
+    if re.search(r"\b(?:media player|speaker|speakers)\b", value):
         return "media_player"
     return None
 
@@ -416,32 +416,32 @@ def _requested_action_constraints(request_text):
     """Translate supported, unambiguous requested state changes into checks."""
     value = str(request_text or "").casefold()
     constraints = {}
-    if re.search(r"\\b(?:turn|switch)\\s+on\\b|\\b(?:activate|enable)\\b", value):
+    if re.search(r"\b(?:turn|switch)\s+on\b|\b(?:activate|enable)\b", value):
         constraints["state"] = "on"
-    elif re.search(r"\\b(?:turn|switch)\\s+off\\b|\\b(?:deactivate|disable)\\b", value):
+    elif re.search(r"\b(?:turn|switch)\s+off\b|\b(?:deactivate|disable)\b", value):
         constraints["state"] = "off"
-    elif re.search(r"\\bunlock\\b", value):
+    elif re.search(r"\bunlock\b", value):
         constraints["state"] = "unlocked"
-    elif re.search(r"\\block\\b", value):
+    elif re.search(r"\block\b", value):
         constraints["state"] = "locked"
-    elif re.search(r"\\bopen\\b", value):
+    elif re.search(r"\bopen\b", value):
         constraints["state"] = "open"
-    elif re.search(r"\\bclose\\b", value):
+    elif re.search(r"\bclose\b", value):
         constraints["state"] = "closed"
-    elif re.search(r"\\bplay\\b|\\bstart\\b", value):
+    elif re.search(r"\bplay\b|\bstart\b", value):
         constraints["state"] = "playing"
-    elif re.search(r"\\bpause\\b|\\bstop\\b", value):
+    elif re.search(r"\bpause\b|\bstop\b", value):
         constraints["state"] = "paused"
 
-    if "brightness" in value or re.search(r"\\b(?:brighter|dimmer)\\b", value):
-        if re.search(r"\\b(?:maximum|max|full)\\b", value):
+    if "brightness" in value or re.search(r"\b(?:brighter|dimmer)\b", value):
+        if re.search(r"\b(?:maximum|max|full)\b", value):
             constraints["brightness"] = 255
         else:
-            percent = re.search(r"\\b(\\d{1,3})\\s*%", value)
+            percent = re.search(r"\b(\d{1,3})\s*%", value)
             if percent and int(percent.group(1)) <= 100:
                 constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
     temperature = re.search(
-        r"\\b(?:temperature|thermostat|climate)\\b.{0,30}?\\b(?:to|at)\\s*(-?\\d+(?:\\.\\d+)?)",
+        r"\b(?:temperature|thermostat|climate)\b.{0,30}?\b(?:to|at)\s*(-?\d+(?:\.\d+)?)",
         value,
     )
     if temperature:
@@ -461,7 +461,7 @@ def verify_action_against_live_states(request_text, states):
         return None
     domain = _action_domain_hint(request_text)
     terms = _action_target_terms(request_text)
-    all_targets = not terms and bool(re.search(r"\\b(?:all|every)\\b", str(request_text), re.IGNORECASE))
+    all_targets = not terms and bool(re.search(r"\b(?:all|every)\b", str(request_text), re.IGNORECASE))
     if not terms and not all_targets:
         return None
 
@@ -2129,11 +2129,23 @@ class DiscordAssistant:
                             and isinstance(operation_result.get("response", operation_result), dict)
                             and operation_result.get("response", operation_result).get("response_type") == "action_done"
                         ):
+                            if self.active_request:
+                                self.active_request["stage"] = "Verifying the requested target against live Home Assistant state"
+                                self._refresh_sensor()
                             live_verification = await self._verify_action_live_state(request_text)
                             if live_verification is not None:
                                 operation_result = live_verification
                                 action_result = action_result_snapshot(operation_result)
                                 verification_error = action_result_error(operation_result)
+                            else:
+                                response_data = operation_result.get("response", operation_result)
+                                response_data = response_data.get("data") or {}
+                                if not (response_data.get("success") or response_data.get("failed")):
+                                    verification_error = (
+                                        "Home Assistant returned action_done without target-level results, "
+                                        "and I could not verify the requested target's live state. "
+                                        "I have not marked the action as successful."
+                                    )
                         if verification_error and action_result_retryable(operation_result):
                             retry_answer, merged_result = await self._retry_failed_action(
                                 agent, prompt, operation_result, models_attempted
