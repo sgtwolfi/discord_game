@@ -2812,6 +2812,11 @@ def test_group_relevance_has_conservative_fallback_when_local_judge_is_missing()
     ))
     assert asked[0] is True
     assert chatter[0] is False
+    check_in = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123", "content": "you working yet?", "directly_addressed": False}], []
+    ))
+    assert check_in[0] is True
+    assert "without the relevance model" in check_in[1]
 
     assistant.group_relevance_agent = "conversation.local_relevance"
 
@@ -2824,6 +2829,35 @@ def test_group_relevance_has_conservative_fallback_when_local_judge_is_missing()
     ))
     assert recovered[0] is True
     assert "fallback" in recovered[1].lower() or "unavailable" in recovered[1].lower()
+
+
+def test_mention_signal_persisted_in_history_anchors_followup_after_failed_reply():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A follow-up to a persisted direct mention must bypass relevance inference")
+
+    assistant._call = unexpected
+    history = [{
+        "role": "user", "sender": "Tokyo", "sender_id": "123",
+        "content": "Can you sort this out?",
+        "directly_addressed": True,
+        "timestamp": "2026-11-15T12:00:00+00:00",
+    }]
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123", "content": "you working yet?",
+          "timestamp": "2026-11-15T12:01:00+00:00", "directly_addressed": False}],
+        history,
+    ))
+    assert result[0] is True
+    assert "previous reply failed" in result[1]
 
 
 def test_group_followup_continuity_is_shared_across_different_speakers():

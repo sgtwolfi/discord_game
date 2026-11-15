@@ -1439,6 +1439,13 @@ class DiscordAssistant:
             and bot_user_id
         )
         directly_addressed = bool(is_dm or mentioned_bot or replied_to_bot or text_addressed)
+        # Persist the address signal with the user message. Later group messages
+        # are classified from conversation history; without this, a Discord
+        # @mention/reply disappears from context as soon as the event is queued.
+        if self.conversation_logs.get(key):
+            latest = self.conversation_logs[key][-1]
+            if str(latest.get("message_id") or "") == str(message.id):
+                latest["directly_addressed"] = directly_addressed
         self.queue.append({"key":key,"message_id":message_id,"is_dm":is_dm,"sender_id":sender_id,"sender_name":sender_name,
           "content":content,"timestamp":message.created_at.isoformat(),
           "sort":message.created_at.timestamp(),"channel_id":str(message.channel.id),"channel":message.channel,
@@ -2130,6 +2137,7 @@ class DiscordAssistant:
                         "content": msg["content"],
                         "sender_id": msg["sender_id"],
                         "timestamp": msg["timestamp"],
+                        "directly_addressed": bool(msg.get("directly_addressed")),
                     }
                     for msg in batch
                 ]
@@ -2647,11 +2655,20 @@ class DiscordAssistant:
         direct_question = re.search(
             r"\b(?:what do you think|what is your take|what do you reckon|"
             r"do you reckon|do you know|can you|could you|would you|have you|are you|"
-            r"your opinion|any thoughts)\b",
+            r"your opinion|any thoughts|"
+            r"(?:are|do|did|can|could|would|will|have) you\s+"
+            r"(?:working|there|back|ready|fixed|sorted|finished|done|listening|alive|available|"
+            r"responding|ignoring|still\s+there|still\s+working|still\s+alive))\b",
             text,
             re.IGNORECASE,
         )
-        if direct_question and "?" in text:
+        informal_you_question = re.search(
+            r"\byou\s+(?:working|there|back|ready|finished|done|"
+            r"listening|alive|available|responding|ignoring)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if (direct_question or informal_you_question) and ("?" in text or informal_you_question):
             detail = "A clear question directed at GHOST was recognised without the relevance model."
             if cause:
                 detail += " Relevance model unavailable: " + str(cause)[:160]
