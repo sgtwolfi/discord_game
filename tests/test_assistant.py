@@ -2784,6 +2784,32 @@ def test_group_followup_continuity_is_shared_across_different_speakers():
     assert "shared group conversation" in result[1]
 
 
+def test_approved_friend_group_status_question_bypasses_relevance_guessing():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.approved_users = {"123"}
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: SimpleNamespace(state="At the downstairs PC")))
+
+    async def unexpected(*args):
+        raise AssertionError("Approved-friend owner status is a deterministic authorised query")
+
+    assistant._call = unexpected
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Tokyo", "sender_id": "123",
+          "content": "what is Harvey doing?", "directly_addressed": False}], []
+    ))
+    assert result[0] is True
+    assert "owner live status" in result[1]
+
+
 def test_approved_friend_group_reminder_bypasses_relevance_guessing():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
