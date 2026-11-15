@@ -1797,7 +1797,7 @@ class DiscordAssistant:
                 ),
                 timeout=90,
             )
-        except asyncio.TimeoutError as err:
+        except TimeoutError as err:
             usage["errors"] += 1
             raise TimeoutError(
                 f"Conversation agent {agent} timed out after 90 seconds"
@@ -1857,7 +1857,7 @@ class DiscordAssistant:
         )
         try:
             candidate = await self._call(agent, prompt)
-        except Exception as err:  # noqa: BLE001
+        except Exception as err:
             _LOGGER.debug("Status reply rephrasing failed; using verified state text: %s", err)
             return factual
         if not candidate or factual not in candidate:
@@ -2490,7 +2490,7 @@ class DiscordAssistant:
                     models_attempted.append(model)
                     try:
                         answer = await self._call(model, prompt)
-                    except Exception as fallback_error:  # noqa: BLE001
+                    except Exception as fallback_error:
                         failures.append(
                             f"{type(fallback_error).__name__}: {fallback_error!r}"
                         )
