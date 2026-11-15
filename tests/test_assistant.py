@@ -2820,6 +2820,31 @@ def test_group_reminder_confirmation_is_bound_to_the_friend_who_received_offer()
     )
 
 
+def test_group_prompt_includes_durable_facts_but_never_dm_history_or_unapproved_owner_status():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.limit = 8
+    assistant.budget = 5000
+    assistant.approved_users = {"123"}
+    assistant.contact_names = {"123": "Tokyo"}
+    assistant.friends = {
+        "123": {"summary": "Enjoys strategy games.", "messages": [{"content": "PRIVATE DM CONTENT"}]}
+    }
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: SimpleNamespace(state="At the downstairs PC")))
+    history = [{"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "hello"}]
+    approved_batch = [{"sender_name": "Ryan", "sender_id": "123", "content": "What do you reckon?", "is_dm": False}]
+    prompt = assistant._prompt(approved_batch, history, "", "conversation")
+    assert "Tokyo: Enjoys strategy games." in prompt
+    assert "PRIVATE DM CONTENT" not in prompt
+    assert "At the downstairs PC" in prompt
+
+    unapproved_batch = [{"sender_name": "Guest", "sender_id": "999", "content": "What is Harvey doing?", "is_dm": False}]
+    private_prompt = assistant._prompt(unapproved_batch, [], "", "conversation")
+    assert "At the downstairs PC" not in private_prompt
+
+
 def test_group_persistent_memory_contains_only_approved_durable_summaries():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.approved_users = {"123", "456"}
