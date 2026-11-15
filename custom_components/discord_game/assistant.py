@@ -2002,7 +2002,7 @@ class DiscordAssistant:
             if len(build_prompt()) <= self.budget:
                 break
             section = optional_sections[index]
-                    heading, separator, content = section.partition("\n")
+            heading, separator, content = section.partition("\n")
             excess = len(build_prompt()) - self.budget
             minimum_content = min(32, len(content))
             keep = max(minimum_content, len(content) - excess)
