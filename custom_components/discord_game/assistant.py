@@ -2622,6 +2622,26 @@ class DiscordAssistant:
             self.hass.bus.async_fire("discord_game_assistant_updated", {"status": self.status})
             self._refresh_sensor()
 
+    def _fallback_group_relevance(self, batch, history, cause=""):
+        """Conservative no-model fallback for clear conversational questions to GHOST."""
+        text = " ".join(str(entry.get("content") or "") for entry in batch).strip()
+        direct_question = re.search(
+            r"\b(?:what do you think|what is your take|what do you reckon|"
+            r"do you reckon|do you know|can you|could you|would you|have you|are you|"
+            r"you fixed|you there|your opinion|any thoughts)\b",
+            text,
+            re.IGNORECASE,
+        )
+        if direct_question and ("?" in text or re.search(r"\b(?:you fixed|you there)\b", text, re.IGNORECASE)):
+            detail = "A clear question directed at GHOST was recognised without the relevance model."
+            if cause:
+                detail += " Relevance model unavailable: " + str(cause)[:160]
+            return True, detail
+        detail = "No clear conversational reason to interrupt was found; the safe fallback stayed quiet."
+        if cause:
+            detail += " Relevance model unavailable: " + str(cause)[:160]
+        return False, detail
+
     async def _should_respond_to_group(self, batch, history, context_note=""):
         """Use continuity and direct-address signals before local relevance inference."""
         addressed = any(entry.get("directly_addressed") for entry in batch)
@@ -2675,12 +2695,12 @@ class DiscordAssistant:
         if not agent and getattr(self, "mode", "local") != "api":
             agent = str(self.agents.get("conversation_agent") or "").strip()
         if not agent:
-            return False, "No separate local group-relevance agent is configured; GHOST stayed quiet safely."
+            return self._fallback_group_relevance(batch, history, "no separate local group-relevance agent is configured")
         if (
             getattr(self, "mode", "local") == "api"
             and agent == str(self.agents.get("conversation_agent") or "").strip()
         ):
-            return False, "The group-relevance agent must be a separate local agent, not the tool-enabled API agent."
+            return self._fallback_group_relevance(batch, history, "the configured relevance agent is the tool-enabled API agent")
 
         prompt = [
             "Decide whether GHOST should reply in this Discord group.",
@@ -2759,7 +2779,7 @@ class DiscordAssistant:
                     )
             else:
                 _LOGGER.warning("GHOST local group relevance check failed; suppressing reply: %s", primary_error)
-            return False, "Local relevance inference failed; GHOST stayed quiet safely."
+            return self._fallback_group_relevance(batch, history, str(primary_error))
 
     def _capture_contact_messages(self, batch):
         """Queue approved contacts' own messages for later private memory consolidation."""
