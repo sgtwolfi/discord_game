@@ -2751,6 +2751,52 @@ def test_mention_only_continuity_recognises_the_reported_messages():
         assert "follow-up" in result[1]
 
 
+def test_group_followup_continuity_is_shared_across_different_speakers():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.group_require_mention = True
+    assistant.group_continuity_seconds = 300
+    assistant.group_relevance_agent = ""
+    assistant.agents = {"conversation_agent": "conversation.api"}
+    assistant.limit = 8
+
+    async def unexpected(*args):
+        raise AssertionError("A shared-thread follow-up must not need relevance inference")
+
+    assistant._call = unexpected
+    history = [
+        {"role": "user", "sender": "Tokyo", "sender_id": "123",
+         "content": "Ghost, do you know what Harvey is doing?",
+         "timestamp": "2026-11-15T10:17:00+00:00"},
+        {"role": "assistant", "sender": "GHOST", "content": "I will check.",
+         "timestamp": "2026-11-15T10:17:10+00:00"},
+    ]
+    batch = [{"sender_name": "Ryan", "sender_id": "456", "content": "oi you fixed yet?",
+              "timestamp": "2026-11-15T10:17:39+00:00", "directly_addressed": False}]
+    result = asyncio.run(assistant._should_respond_to_group(batch, history))
+    assert result[0] is True
+    assert "shared group conversation" in result[1]
+
+
+def test_group_persistent_memory_contains_only_approved_durable_summaries():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.approved_users = {"123", "456"}
+    assistant.contact_names = {"123": "Tokyo", "456": "Ryan"}
+    assistant.friends = {
+        "123": {"summary": "Likes tactical games.", "messages": [{"content": "PRIVATE DM SECRET"}]},
+        "456": {"summary": "Works nights.", "messages": [{"content": "ANOTHER PRIVATE DM"}]},
+        "789": {"summary": "Unapproved fact."},
+    }
+    history = [{"role": "user", "sender": "Tokyo", "sender_id": "123", "content": "hello"}]
+    batch = [{"sender_name": "Ryan", "sender_id": "456", "content": "hi"}]
+    result = assistant._group_persistent_memory(batch, history)
+    assert "Tokyo: Likes tactical games." in result
+    assert "Ryan: Works nights." in result
+    assert "PRIVATE DM SECRET" not in result
+    assert "ANOTHER PRIVATE DM" not in result
+    assert "Unapproved fact." not in result
+
+
 def test_group_continuity_supports_legacy_history_without_sender_ids():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
     assistant.mode = "api"
