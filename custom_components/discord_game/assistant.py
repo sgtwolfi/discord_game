@@ -1254,6 +1254,7 @@ class DiscordAssistant:
           "groups": groups,
           "settings": {
               "assistant_mode": getattr(self, "mode", "local"),
+              "group_participation_mode": getattr(self, "group_participation_mode", "participant"),
               "local_reminder_script": getattr(self, "local_reminder_script", "script.set_timer_alarm_or_reminder"),
               "ghost_status_entity": getattr(self, "status_entity", "input_text.ghost_status"),
               "owner_name": getattr(self, "owner_name", "Harvey"),
