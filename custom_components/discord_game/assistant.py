@@ -1824,11 +1824,28 @@ class DiscordAssistant:
             "This value describes the Home Assistant owner, NOT GHOST. If asked what the owner is doing, answer from this exact current value; do not guess."
         )
 
+    def _group_persistent_memory(self, batch, history):
+        """Return durable approved-contact facts, never private DM transcripts."""
+        ids = []
+        for entry in list(history or []) + list(batch or []):
+            user_id = str(entry.get("sender_id") or "").strip()
+            if user_id and user_id in getattr(self, "approved_users", set()) and user_id not in ids:
+                ids.append(user_id)
+        facts = []
+        for user_id in ids[:8]:
+            record = getattr(self, "friends", {}).get(user_id) or {}
+            summary = str(record.get("summary") or "").strip()
+            if not summary:
+                continue
+            name = str(getattr(self, "contact_names", {}).get(user_id) or next((entry.get("sender_name") or entry.get("sender") for entry in batch if str(entry.get("sender_id") or "") == user_id), "") or self._display_name(user_id)).strip()
+            facts.append(f"{name}: {summary[:700]}")
+        return "\n".join(facts)
+
     def _prompt(self, batch, history, summary, role="conversation", context_note=""):
         """Build a bounded prompt while preserving the live request and core rules."""
-        may_read_owner_status = any(
-            entry.get("is_dm") or entry.get("directly_addressed") for entry in batch
-        )
+        approved_group_speakers = bool(batch) and all(str(entry.get("sender_id") or "") in getattr(self, "approved_users", set()) for entry in batch)
+        is_group_context = bool(batch) and not any(entry.get("is_dm") for entry in batch)
+        may_read_owner_status = any(entry.get("is_dm") or entry.get("directly_addressed") for entry in batch) or (is_group_context and approved_group_speakers)
         owner_status_context = (
             self._ghost_status_context()
             if may_read_owner_status
@@ -1849,6 +1866,10 @@ class DiscordAssistant:
             ]
             if summary:
                 sections.append("Saved facts about this approved DM contact; use only when relevant and never disclose to other contacts:\n" + str(summary)[:min(2500, max(0, self.budget // 5))])
+            if is_group_context:
+                shared_facts = self._group_persistent_memory(batch, history)
+                if shared_facts:
+                    sections.append("SHARED GROUP FACTS about approved friends (durable summaries only, never private DM history). Attribute each fact to its named person and use only when relevant:\n" + shared_facts[:min(3000, max(0, self.budget // 4))])
             if context_note:
                 sections.append("Temporary administrator context for this conversation:\n" + str(context_note)[:min(2000, max(0, self.budget // 8))])
             if previous:
@@ -1922,6 +1943,10 @@ class DiscordAssistant:
             optional_sections.append(
                 "Private memory for this approved DM contact:\n" + str(summary)[:min(2500, max(0, self.budget // 10))]
             )
+        if is_group_context:
+            shared_facts = self._group_persistent_memory(batch, history)
+            if shared_facts:
+                optional_sections.append("Shared durable facts about approved group members (not private DM histories). Attribute each fact to its named person:\n" + shared_facts[:min(3000, max(0, self.budget // 5))])
 
         previous = [
             f'{message.get("sender") or message.get("role", "user")}: {message.get("content", "")}'
@@ -2538,16 +2563,11 @@ class DiscordAssistant:
             one_current_speaker = bool(batch) and all(
                 same_sender(first_current, entry) for entry in batch[1:]
             )
-            same_speaker = (
-                one_current_speaker
-                and prior_user is not None
-                and same_sender(prior_user, first_current)
-                and all(same_sender(entry, first_current) for entry in trailing if entry.get("role") == "user")
-            )
+            # Shared group threads can be continued by any approved participant.
             elapsed = _timestamp_delta_seconds(assistant_turn.get("timestamp"), batch[-1].get("timestamp"))
             followup = any(is_contextual_followup(entry.get("content")) for entry in batch)
-            if same_speaker and followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
-                return True, "GHOST continued the recent conversation; the message was recognised as a follow-up."
+            if followup and elapsed is not None and 0 <= elapsed <= self.group_continuity_seconds:
+                return True, "GHOST continued the shared group conversation; another participant was recognised as a follow-up."
 
         if getattr(self, "group_require_mention", False):
             return False, "GHOST stayed quiet because mention-only mode is enabled."
