@@ -181,7 +181,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "api_fallback_agent": self._get_current("api_fallback_agent", ""),
                 "group_relevance_agent": self._get_current("group_relevance_agent", ""),
                 "group_require_mention": self._get_current("group_require_mention", False),
-                "group_participation_mode": self._get_current("group_participation_mode", "participant"),
+                "group_participation_mode": self._get_current("group_participation_mode", "mention" if self._get_current("group_require_mention", False) else "participant"),
                 "group_continuity_seconds": self._get_current("group_continuity_seconds", 300),
                 "spam_local_agent": self._get_current("spam_local_agent", ""),
                 "spam_policy": self._get_current("spam_policy", "defer_local"),
@@ -262,7 +262,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("api_fallback_agent", default=self._get_current("api_fallback_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("group_relevance_agent", default=self._get_current("group_relevance_agent", "")): selector.ConversationAgentSelector(),
-                vol.Required("group_participation_mode", default=self._get_current("group_participation_mode", "participant")): selector.SelectSelector(
+                vol.Required("group_participation_mode", default=self._get_current("group_participation_mode", "mention" if self._get_current("group_require_mention", False) else "participant")): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=[
                         {"label": "Participant (AI judges relevance like a group member)", "value": "participant"},
                         {"label": "Mention required", "value": "mention"},
