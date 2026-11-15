@@ -8,7 +8,8 @@ from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers import area_registry as ar, entity_registry as er
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
