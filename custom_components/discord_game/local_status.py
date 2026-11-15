@@ -121,15 +121,46 @@ def _lights(hass, query: str) -> str:
     return "; ".join(readings) + "." + extra
 
 
+def _normalise_name(value: str) -> str:
+    """Normalise spoken names so punctuation and possessives do not affect matching."""
+    value = str(value or "").casefold().replace("’", "'")
+    value = re.sub(r"['’]s\b", "", value)
+    return " ".join(re.findall(r"[a-z0-9]+", value))
+
+
 def _is_owner_activity_query(query: str, owner_name: str) -> bool:
-    """Match the configured owner's name, including possessive phrasing."""
-    name = re.escape(str(owner_name or "Harvey").strip() or "Harvey")
-    return bool(re.search(
-        rf"\bwhat(?:'s|s| is)\s+(?:{name}|the owner)(?:['’]s)?\s+"
-        r"(?:currently\s+)?(?:doing|up to|current status|status)\b",
-        query,
-        re.IGNORECASE,
-    ))
+    """Recognise owner-status wording before attempting any Discord friend lookup."""
+    text = _normalise_name(query)
+    configured = str(owner_name or "").strip()
+    # Harvey remains a compatibility alias for installations created before the
+    # owner-name setting existed. The configured name is always authoritative too.
+    aliases = {_normalise_name(configured), "harvey", "the owner", "me", "myself"}
+    aliases.discard("")
+    activity_words = {"doing", "upto", "status", "activity"}
+    tokens = text.split()
+    if not tokens:
+        return False
+    has_question_shape = tokens[0] in {"what", "whats", "tell"} or (
+        len(tokens) > 1 and tokens[0:2] == ["what", "is"]
+    )
+    if not has_question_shape:
+        return False
+    if not any(token in activity_words for token in tokens):
+        return False
+    for alias in aliases:
+        alias_tokens = alias.split()
+        if not alias_tokens:
+            continue
+        for index in range(len(tokens) - len(alias_tokens) + 1):
+            if tokens[index:index + len(alias_tokens)] == alias_tokens:
+                return True
+    # Also accept a clear, single-token typo in the configured owner name.
+    configured_tokens = _normalise_name(configured).split()
+    if len(configured_tokens) == 1:
+        for token in tokens:
+            if len(token) >= 4 and difflib.SequenceMatcher(None, token, configured_tokens[0]).ratio() >= 0.82:
+                return True
+    return False
 
 
 def _owner_status(hass, status_entity: str, owner_name: str) -> str:
@@ -152,6 +183,9 @@ def answer_local_status(
     """Answer simple live-state questions from HA state, without an LLM tool call."""
     value = str(query or "").strip()
     owner = str(owner_name or "Harvey").strip() or "Harvey"
+    # Resolve the owner before the generic Discord-person parser. This is
+    # deliberately independent of sensor names: Harvey is the HA owner, not
+    # a Discord contact, even if a Discord sensor with that display name exists.
     person = _PERSON_ACTIVITY.search(value)
     if _STATUS_QUERY.search(value) or _is_owner_activity_query(value, owner):
         return _owner_status(hass, status_entity, owner)
