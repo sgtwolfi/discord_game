@@ -1,4 +1,12 @@
-# Discord Game + GHOST Assistant (v9.2.1)
+# Discord Game + GHOST Assistant (v9.2.2)
+
+## 9.2.2 group conversation overhaul
+
+- Adds persistent shared group conversations with speaker attribution and cross-speaker continuity.
+- Adds participant, mention-only and always-respond group participation modes with a separate tool-free relevance check and conservative fallback.
+- Shares durable saved friend summaries in approved group contexts while keeping private DM transcripts isolated.
+- Allows approved friends to request owner status and reminders in configured group channels; group device actions remain restricted.
+
 
 This release adds API and Local assistant runtime modes, separate API fallback selection, natural-language GHOST addressing and configurable per-sender spam protection while retaining the existing Discord presence, game, Spotify, voice and reaction sensors and the original `discord_game_message_received` event payload.
 
