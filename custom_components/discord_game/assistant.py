@@ -377,7 +377,7 @@ ACTION_TARGET_STOPWORDS = {
     "increase", "decrease", "toggle", "activate", "deactivate", "enable",
     "disable", "make", "put", "lights", "light", "bulbs", "bulb",
     "switches", "devices", "device", "brightness", "bright",
-    "dimmer", "dimmest", "brighter", "brighten", "dim", "maximum", "max", "minimum", "min", "full",
+    "dimmer", "dimmest", "brighter", "maximum", "max", "minimum", "min", "full",
     "percent", "percentage", "colour", "color", "red", "green", "blue",
     "white", "warm", "cool", "temperature", "degrees", "degree",
     "open", "close", "lock", "unlock", "play", "pause", "stop", "start",
