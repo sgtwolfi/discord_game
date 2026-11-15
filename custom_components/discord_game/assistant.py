@@ -446,6 +446,10 @@ def _requested_action_constraints(request_text):
             percent = re.search(r"\b(\d{1,3})\s*%", value)
             if percent and int(percent.group(1)) <= 100:
                 constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
+    if re.search(r"\b(?:brighter|brighten)\b", value):
+        constraints["brightness_direction"] = "up"
+    elif re.search(r"\b(?:dimmer|dim)\b", value):
+        constraints["brightness_direction"] = "down"
     for colour in ("red", "green", "blue", "yellow", "orange", "purple", "pink", "cyan", "magenta", "white"):
         if re.search(rf"\b{colour}\b", value):
             constraints["colour"] = colour
@@ -482,7 +486,7 @@ def _live_rgb_matches(rgb, colour):
     return dominant.get(colour, False)
 
 
-def verify_action_against_live_states(request_text, states, area_names=None):
+def verify_action_against_live_states(request_text, states, area_names=None, before_states=None):
     """Build structured success evidence only when named HA entities match the request.
 
     This is a read-after-write verification fallback for conversation agents that
@@ -575,6 +579,25 @@ def verify_action_against_live_states(request_text, states, area_names=None):
                             matches = False
                     except (TypeError, ValueError):
                         matches = False
+        if matches and "brightness_direction" in constraints:
+            previous = {
+                str(getattr(before, "entity_id", "")): (
+                    (getattr(before, "attributes", {}) or {}).get("brightness")
+                )
+                for before in (before_states or [])
+            }.get(entity_id)
+            current_brightness = attributes.get("brightness")
+            direction = constraints["brightness_direction"]
+            matches = (
+                entity_domain == "light"
+                and isinstance(previous, (int, float))
+                and isinstance(current_brightness, (int, float))
+                and (
+                    current_brightness > previous + 3
+                    if direction == "up"
+                    else current_brightness < previous - 3
+                )
+            )
         if matches and "temperature" in constraints:
             actual = attributes.get("temperature")
             matches = (
@@ -645,7 +668,7 @@ def action_result_needs_live_verification(data):
         return False
     result_data = response.get("data")
     if not isinstance(result_data, dict):
-        return False
+        return True
     return not result_data.get("success") and not result_data.get("failed")
 
 
@@ -1484,7 +1507,7 @@ class DiscordAssistant:
             try: await channel.trigger_typing()
             except Exception: _LOGGER.debug("Typing indicator failed",exc_info=True)
             await asyncio.sleep(8)
-    async def _verify_action_live_state(self, request_text):
+    async def _verify_action_live_state(self, request_text, before_states=None):
         """Wait briefly for HA state updates and verify the exact requested target."""
         for delay in (0, 0.25, 0.5, 1.0):
             if delay:
@@ -1502,7 +1525,7 @@ class DiscordAssistant:
                             area_names[state.entity_id] = area.name
             except (AttributeError, KeyError, TypeError):
                 _LOGGER.debug("Area registry lookup unavailable during action verification", exc_info=True)
-            verified = verify_action_against_live_states(request_text, states, area_names)
+            verified = verify_action_against_live_states(request_text, states, area_names, before_states)
             if verified is not None:
                 return verified
         return None
@@ -1871,6 +1894,7 @@ class DiscordAssistant:
         answer = ""
         action_result = None
         is_action = False
+        pre_action_states = None
         models_attempted = []
         failures = []
         try:
@@ -2156,6 +2180,8 @@ class DiscordAssistant:
                 # Never repeat the same model call. A fallback is a different
                 # configured agent, not a second paid attempt at an unchanged prompt.
                 primary_error = None
+                if is_action:
+                    pre_action_states = self.hass.states.async_all()
                 try:
                     models_attempted.append(agent)
                     if self.active_request:
@@ -2217,7 +2243,7 @@ class DiscordAssistant:
                             if self.active_request:
                                 self.active_request["stage"] = "Verifying the requested target against live Home Assistant state"
                                 self._refresh_sensor()
-                            live_verification = await self._verify_action_live_state(request_text)
+                            live_verification = await self._verify_action_live_state(request_text, pre_action_states)
                             if live_verification is not None:
                                 operation_result = live_verification
                                 action_result = action_result_snapshot(operation_result)
