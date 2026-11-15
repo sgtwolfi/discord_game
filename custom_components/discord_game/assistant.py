@@ -1797,6 +1797,11 @@ class DiscordAssistant:
                 ),
                 timeout=90,
             )
+        except asyncio.TimeoutError as err:
+            usage["errors"] += 1
+            raise TimeoutError(
+                f"Conversation agent {agent} timed out after 90 seconds"
+            ) from err
         except Exception:
             usage["errors"] += 1
             raise
@@ -2452,8 +2457,11 @@ class DiscordAssistant:
                     answer = await self._call(agent, prompt)
                 except Exception as err:  # noqa: BLE001
                     primary_error = err
-                    failures.append(str(err))
-                    _LOGGER.warning("Primary assistant agent failed: %s", err)
+                    failures.append(f"{type(err).__name__}: {err!r}")
+                    _LOGGER.warning(
+                        "Primary assistant agent failed (%s): %r",
+                        type(err).__name__, err, exc_info=True,
+                    )
 
                 fallback_agent = self.agents.get("fallback_agent", "")
                 # Actions may only move to the fallback when the primary failed
@@ -2483,8 +2491,14 @@ class DiscordAssistant:
                     try:
                         answer = await self._call(model, prompt)
                     except Exception as fallback_error:  # noqa: BLE001
-                        failures.append(str(fallback_error))
-                        _LOGGER.warning("Fallback assistant agent failed: %s", fallback_error)
+                        failures.append(
+                            f"{type(fallback_error).__name__}: {fallback_error!r}"
+                        )
+                        _LOGGER.warning(
+                            "Fallback assistant agent failed (%s): %r",
+                            type(fallback_error).__name__, fallback_error,
+                            exc_info=True,
+                        )
 
                 if not answer and is_action:
                     reason = str(primary_error or "The primary agent returned no usable result.")
