@@ -2395,7 +2395,7 @@ def test_owner_status_parser_handles_normalised_question_variants():
     owner = SimpleNamespace(state="Working downstairs")
     hass = SimpleNamespace(states=SimpleNamespace(
         get=lambda entity_id: owner if entity_id == "input_text.ghost_status" else None,
-        async_all=lambda: [],
+        async_all=list,
     ))
     for question in (
         "whats harvey doing",
