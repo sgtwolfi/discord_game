@@ -2368,3 +2368,86 @@ def test_local_status_reader_accepts_first_person_owner_phrasings():
         assert answer_local_status(
             hass, question, datetime(2026, 11, 14, 9, 0, tzinfo=UTC)
         ) == "Harvey is currently: Running a maintenance check"
+
+
+
+def test_owner_status_alias_wins_even_when_owner_name_setting_is_customised():
+    owner = SimpleNamespace(state="Compiling a release")
+    discord_harvey = SimpleNamespace(
+        entity_id="sensor.discord_user_123",
+        state="online",
+        attributes={"friendly_name": "Harvey", "display_name": "Harvey", "game": "Factorio"},
+    )
+    hass = SimpleNamespace(
+        states=SimpleNamespace(
+            get=lambda entity_id: owner if entity_id == "input_text.ghost_status" else None,
+            async_all=lambda: [discord_harvey],
+        )
+    )
+    for question in ("whats harvey doing?", "What's Harvey doing?", "what's harvey's status?"):
+        assert answer_local_status(
+            hass, question, datetime(2026, 11, 15, 6, 40, tzinfo=UTC),
+            owner_name="Harvey Smith",
+        ) == "Harvey Smith is currently: Compiling a release"
+
+
+def test_owner_status_parser_handles_normalised_question_variants():
+    owner = SimpleNamespace(state="Working downstairs")
+    hass = SimpleNamespace(states=SimpleNamespace(
+        get=lambda entity_id: owner if entity_id == "input_text.ghost_status" else None,
+        async_all=list,
+    ))
+    for question in (
+        "whats harvey doing",
+        "what's Harvey doing?",
+        "what is Harvey currently doing?",
+        "what's Harvey's status?",
+        "tell me what Harvey is doing",
+    ):
+        answer = answer_local_status(
+            hass, question, datetime(2026, 11, 15, 6, 40, tzinfo=UTC)
+        )
+        assert answer == "Harvey is currently: Working downstairs"
+
+
+def test_local_status_rewriter_preserves_verified_payload_verbatim():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "local"
+    assistant.agents = {"conversation_agent": "conversation.local_chat"}
+
+    async def fake_call(agent, prompt):
+        assert agent == "conversation.local_chat"
+        assert "<FACT>Harvey is currently: Working downstairs</FACT>" in prompt
+        return "Right, Harvey is currently: Working downstairs. The man's actually busy."
+
+    assistant._call = fake_call
+    result = asyncio.run(assistant._rephrase_readonly_status(
+        "Harvey is currently: Working downstairs"
+    ))
+    assert result == "Right, Harvey is currently: Working downstairs. The man's actually busy."
+
+
+def test_local_status_rewriter_falls_back_if_model_changes_verified_payload():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "local"
+    assistant.agents = {"conversation_agent": "conversation.local_chat"}
+
+    async def fake_call(agent, prompt):
+        return "Harvey is probably playing games."
+
+    assistant._call = fake_call
+    factual = "Harvey is currently: Working downstairs"
+    assert asyncio.run(assistant._rephrase_readonly_status(factual)) == factual
+
+
+def test_api_mode_never_uses_tool_enabled_agent_for_status_rewording():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.mode = "api"
+    assistant.agents = {"conversation_agent": "conversation.api"}
+
+    async def unexpected_call(agent, prompt):
+        raise AssertionError("API tool-enabled agent must not be called for rewording")
+
+    assistant._call = unexpected_call
+    factual = "Harvey is currently: Working downstairs"
+    assert asyncio.run(assistant._rephrase_readonly_status(factual)) == factual

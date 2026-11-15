@@ -1358,6 +1358,43 @@ class DiscordAssistant:
                 "for eligible non-action requests."
             )
         return answer
+    async def _rephrase_readonly_status(self, factual_answer):
+        """Add natural conversational variety without changing a verified state reading.
+
+        The deterministic reader remains the source of truth. The model may only
+        add a short conversational wrapper and must preserve the factual payload
+        verbatim. If it fails or alters the payload, use the original answer.
+        """
+        factual = str(factual_answer or "").strip()
+        # API Mode's selected agent may have privileged HA tools. Never use a
+        # tool-enabled agent merely to decorate a read-only answer.
+        if getattr(self, "mode", "local") != "local":
+            return factual
+        agent = str(self.agents.get("conversation_agent") or "").strip()
+        if not factual or not agent:
+            return factual
+        prompt = (
+            "You are GHOST, replying in a Discord DM. Rephrase the factual answer below "
+            "in natural, concise British English with your dry northern personality. "
+            "Vary the wording naturally. Do not repeat a stock template. "
+            "CRITICAL: the factual payload between <FACT> tags is authoritative and must "
+            "appear verbatim, unchanged, in your reply. You may add a brief introduction "
+            "or reaction, but do not add, remove, infer, reinterpret, or contradict facts. "
+            "Do not call tools. Return only the reply.\n\n"
+            "<FACT>" + factual + "</FACT>"
+        )
+        try:
+            candidate = await self._call(agent, prompt)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Status reply rephrasing failed; using verified state text: %s", err)
+            return factual
+        if not candidate or factual not in candidate:
+            _LOGGER.warning(
+                "Status reply rewriter changed or omitted the factual payload; using deterministic answer."
+            )
+            return factual
+        return candidate
+
     def _history(self,item):
         if item["is_dm"]:
             rec=self.friends.setdefault(item["sender_id"],{"messages":[],"summary":""})
@@ -1747,7 +1784,7 @@ class DiscordAssistant:
                     "context_snapshot": prompt,
                 }
                 self._refresh_sensor()
-                answer = local_status_answer
+                answer = await self._rephrase_readonly_status(local_status_answer)
             elif local_reminder is not None and local_reminder.get("declined"):
                 role = "local_reminder_confirmation"
                 model = "GHOST confirmation handler"
