@@ -1,0 +1,42 @@
+name: Publish HACS release
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - "custom_components/discord_game/manifest.json"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create version tag and GitHub release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const manifest = JSON.parse(fs.readFileSync('custom_components/discord_game/manifest.json', 'utf8'));
+            const tag = 'v' + manifest.version;
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              core.info(`Release ${tag} already exists; nothing to do.`);
+              return;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tag,
+              target_commitish: context.sha,
+              name: tag,
+              body: 'GHOST / Discord Game ' + manifest.version + '. See the commit history for changes.',
+              draft: false,
+              prerelease: false
+            });
+            core.info(`Published ${tag} from ${context.sha}`);
