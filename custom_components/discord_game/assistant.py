@@ -2501,11 +2501,14 @@ class DiscordAssistant:
                         )
     
             await self._send(item["channel"], answer)
+            response_recipient_ids = list(dict.fromkeys(str(entry.get("sender_id") or "") for entry in batch if entry.get("sender_id")))
+            if not item["is_dm"] and len(response_recipient_ids) != 1:
+                response_recipient_ids = []
             now = datetime.now(UTC).isoformat()
             self._append_conversation_message(
                 item["key"],
                 {"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model,
-                 "recipient_ids": list(dict.fromkeys(str(entry.get("sender_id") or "") for entry in batch if entry.get("sender_id")))} ,
+                 "recipient_ids": response_recipient_ids} ,
             )
             if item["is_dm"]:
                 history.append({"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model})
@@ -2514,7 +2517,7 @@ class DiscordAssistant:
                 self.groups[item["key"]] = (
                     self.groups[item["key"]]
                     + [{"role": "assistant", "sender": "GHOST", "content": answer, "timestamp": now, "model": model,
-                        "recipient_ids": list(dict.fromkeys(str(entry.get("sender_id") or "") for entry in batch if entry.get("sender_id")))}]
+                        "recipient_ids": response_recipient_ids}]
                 )[-self.limit:]
             self.last_activity, self.error, self._state = now, None, "ready"
             self.transcript.append({
