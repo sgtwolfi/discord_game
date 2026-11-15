@@ -2629,6 +2629,10 @@ class DiscordAssistant:
             "GHOST was directly addressed: "
             + ("yes" if addressed else "no")
         )
+        if hasattr(self, "_group_persistent_memory"):
+            shared_facts = self._group_persistent_memory(batch, history)
+            if shared_facts:
+                prompt.append("Relevant durable facts about approved group members (never private DM history):\n" + shared_facts[:2000])
         prompt.append("Recent conversation, oldest first:\n" + "\n".join(previous + current))
         decision_prompt = "\n\n".join(prompt)
 
