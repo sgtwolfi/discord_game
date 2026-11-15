@@ -115,7 +115,7 @@ def is_contextual_followup(text):
     # People often reopen an active thread with a greeting ("oi", "yo",
     # "yoyoyo", "hey") before referring to GHOST's previous answer.
     value = re.sub(
-        r"^(?:(?:oi+|(?:yo){1,4}|hey|hiya|hello|alright|right|mate|bro)\\b[\\s,!.:-]*)+",
+        r"^(?:(?:oi+|(?:yo){1,4}|hey|hiya|hello|alright|right|mate|bro)\b[\s,!.:-]*)+",
         "",
         value,
         flags=re.IGNORECASE,
@@ -126,10 +126,10 @@ def is_contextual_followup(text):
         return True
     # Questions phrased as "do you know...", "have you...", etc. are common
     # follow-ups but were not covered by the old opener-only classifier.
-    if re.match(r"^(?:do|did|have|has|are|can|could|would|will)\\s+you\\b", value, re.IGNORECASE):
+    if re.match(r"^(?:do|did|have|has|are|can|could|would|will)\s+you\b", value, re.IGNORECASE):
         return True
     return bool(re.fullmatch(
-        r"(?:and\\s+)?(?:you|yourself|that|it|this|what|why|how|really|then|now)[\\s?!.,]*",
+        r"(?:and\s+)?(?:you|yourself|that|it|this|what|why|how|really|then|now)[\s?!.,]*",
         value, re.IGNORECASE,
     ))
 
