@@ -8,6 +8,8 @@ from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -367,6 +369,319 @@ def take_conversation_batch(queue):
     return sorted(batch, key=lambda entry: entry["sort"])
 
 
+ACTION_TARGET_STOPWORDS = {
+    "a", "an", "the", "my", "our", "your", "please", "could", "would",
+    "can", "you", "i", "want", "need", "to", "for", "in", "on", "at",
+    "of", "and", "then", "now", "currently", "just", "all", "every",
+    "turn", "switch", "set", "change", "adjust", "dim", "brighten",
+    "increase", "decrease", "toggle", "activate", "deactivate", "enable",
+    "disable", "make", "put", "lights", "light", "bulbs", "bulb",
+    "switches", "devices", "device", "brightness", "bright",
+    "dimmer", "dimmest", "brighter", "maximum", "max", "minimum", "min", "full",
+    "percent", "percentage", "colour", "color", "red", "green", "blue",
+    "white", "warm", "cool", "temperature", "degrees", "degree",
+    "open", "close", "lock", "unlock", "play", "pause", "stop", "start",
+    "fan", "fans", "cover", "covers", "blind", "blinds", "shutter",
+    "shutters", "door", "doors", "garage",
+}
+
+
+def _action_domain_hint(request_text):
+    """Return a domain only when the request names a recognisable device class."""
+    value = str(request_text or "").casefold()
+    if re.search(r"\b(?:lights?|bulbs?)\b", value):
+        return "light"
+    if re.search(r"\bswitch(?:es)?\b", value):
+        return "switch"
+    if re.search(r"\b(?:blinds?|shutters?|covers?|garage door)\b", value):
+        return "cover"
+    if re.search(r"\block(?:s)?\b", value):
+        return "lock"
+    if re.search(r"\bfans?\b", value):
+        return "fan"
+    if re.search(r"\b(?:thermostat|climate)\b", value):
+        return "climate"
+    if re.search(r"\b(?:media player|speaker|speakers)\b", value):
+        return "media_player"
+    return None
+
+
+def _action_target_terms(request_text):
+    """Extract only likely target-name words, excluding commands and properties."""
+    return {
+        token for token in re.findall(r"[a-z0-9]+", str(request_text or "").casefold())
+        if token not in ACTION_TARGET_STOPWORDS and not token.isdigit()
+    }
+
+
+def _requested_action_constraints(request_text):
+    """Translate supported, unambiguous requested state changes into checks."""
+    value = str(request_text or "").casefold()
+    constraints = {}
+    if re.search(r"\b(?:turn|switch)\s+on\b|\b(?:activate|enable)\b", value):
+        constraints["state"] = "on"
+    elif re.search(r"\b(?:turn|switch)\s+off\b|\b(?:deactivate|disable)\b", value):
+        constraints["state"] = "off"
+    elif re.search(r"\bunlock\b", value):
+        constraints["state"] = "unlocked"
+    elif re.search(r"\block\b", value):
+        constraints["state"] = "locked"
+    elif re.search(r"\bopen\b", value):
+        constraints["state"] = "open"
+    elif re.search(r"\bclose\b", value):
+        constraints["state"] = "closed"
+    elif re.search(r"\bplay\b|\bstart\b", value):
+        constraints["state"] = "playing"
+    elif re.search(r"\bpause\b|\bstop\b", value):
+        constraints["state"] = "paused"
+
+    if (
+        "brightness" in value
+        or re.search(r"\b(?:brighter|dimmer)\b", value)
+        or (_action_domain_hint(value) == "light" and re.search(r"\b\d{1,3}\s*%", value))
+    ):
+        if re.search(r"\b(?:maximum|max|full)\b", value):
+            constraints["brightness"] = 255
+        else:
+            percent = re.search(r"\b(\d{1,3})\s*(?:%|percent)(?![a-z])", value)
+            if percent and int(percent.group(1)) <= 100:
+                constraints["brightness"] = round(int(percent.group(1)) * 255 / 100)
+    if re.search(r"\b(?:brighter|brighten)\b", value):
+        constraints["brightness_direction"] = "up"
+    elif re.search(r"\b(?:dimmer|dim)\b", value):
+        constraints["brightness_direction"] = "down"
+    for colour in ("red", "green", "blue", "yellow", "orange", "purple", "pink", "cyan", "magenta", "white"):
+        if re.search(rf"\b{colour}\b", value):
+            constraints["colour"] = colour
+            break
+    temperature = re.search(
+        r"\b(?:temperature|thermostat|climate)\b.{0,30}?\b(?:to|at)\s*(-?\d+(?:\.\d+)?)",
+        value,
+    )
+    if temperature:
+        constraints["temperature"] = float(temperature.group(1))
+    return constraints
+
+
+def _live_rgb_matches(rgb, colour):
+    """Compare an HA RGB/HS colour state against a plain colour request."""
+    if not isinstance(rgb, (list, tuple)) or len(rgb) < 3:
+        return False
+    try:
+        red, green, blue = (int(value) for value in rgb[:3])
+    except (TypeError, ValueError):
+        return False
+    dominant = {
+        "red": (red >= 180 and green <= 100 and blue <= 100),
+        "green": (green >= 120 and red <= 100 and blue <= 100),
+        "blue": (blue >= 180 and red <= 100 and green <= 100),
+        "yellow": (red >= 180 and green >= 150 and blue <= 100),
+        "orange": (red >= 180 and 60 <= green <= 190 and blue <= 100),
+        "purple": (red >= 90 and blue >= 120 and green <= 120),
+        "pink": (red >= 180 and blue >= 100 and green <= 210),
+        "cyan": (green >= 150 and blue >= 150 and red <= 100),
+        "magenta": (red >= 150 and blue >= 150 and green <= 100),
+        "white": (min(red, green, blue) >= 170 and max(red, green, blue) - min(red, green, blue) <= 85),
+    }
+    return dominant.get(colour, False)
+
+
+def verify_action_against_live_states(request_text, states, area_names=None, before_states=None):
+    """Build structured success evidence only when named HA entities match the request.
+
+    This is a read-after-write verification fallback for conversation agents that
+    return action_done without target lists. It never infers success from model
+    speech, unrelated state changes, or an ambiguous target.
+    """
+    constraints = _requested_action_constraints(request_text)
+    if not constraints:
+        return None
+    domain = _action_domain_hint(request_text)
+    if domain is None and any(
+        key in constraints
+        for key in ("brightness", "brightness_direction", "colour")
+    ):
+        domain = "light"
+    if domain is None and "temperature" in constraints:
+        domain = "climate"
+    terms = _action_target_terms(request_text)
+    all_targets = not terms and bool(re.search(r"\b(?:all|every)\b", str(request_text), re.IGNORECASE))
+    if not terms and not all_targets:
+        return None
+
+    candidates = []
+    for state in states or []:
+        entity_id = str(getattr(state, "entity_id", "") or "")
+        entity_domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+        if domain and entity_domain != domain:
+            continue
+        attributes = getattr(state, "attributes", {}) or {}
+        name = str(attributes.get("friendly_name") or attributes.get("name") or "")
+        area_name = str((area_names or {}).get(entity_id, "") or "")
+        entity_tokens = set(re.findall(
+            r"[a-z0-9]+", (entity_id + " " + name + " " + area_name).casefold()
+        ))
+        if all_targets or terms.issubset(entity_tokens):
+            candidates.append(state)
+
+    if not candidates:
+        return None
+
+    successes = []
+    verified_states = []
+    for state in candidates:
+        entity_id = str(state.entity_id)
+        entity_domain = entity_id.split(".", 1)[0]
+        current = str(getattr(state, "state", "")).casefold()
+        attributes = getattr(state, "attributes", {}) or {}
+        matches = True
+        expected_state = constraints.get("state")
+        if expected_state == "on":
+            matches = current in {"on", "playing", "open", "unlocked", "home"}
+        elif expected_state == "off":
+            matches = current in {"off", "paused", "closed", "locked", "not_home"}
+        elif expected_state == "locked":
+            matches = current == "locked"
+        elif expected_state == "unlocked":
+            matches = current == "unlocked"
+        elif expected_state == "open":
+            matches = current == "open"
+        elif expected_state == "closed":
+            matches = current == "closed"
+        elif expected_state == "playing":
+            matches = current == "playing"
+        elif expected_state == "paused":
+            matches = current in {"paused", "idle", "off"}
+        if matches and "brightness" in constraints:
+            brightness = attributes.get("brightness")
+            matches = (
+                entity_domain == "light"
+                and isinstance(brightness, (int, float))
+                and abs(float(brightness) - constraints["brightness"]) <= 13
+            )
+        if matches and "colour" in constraints:
+            matches = (
+                entity_domain == "light"
+                and _live_rgb_matches(attributes.get("rgb_color"), constraints["colour"])
+            )
+            if not matches:
+                hs = attributes.get("hs_color")
+                if isinstance(hs, (list, tuple)) and hs:
+                    try:
+                        hue = float(hs[0]) % 360
+                        ranges = {
+                            "red": (0, 20, 340, 360), "orange": (20, 50),
+                            "yellow": (45, 75), "green": (75, 165),
+                            "cyan": (165, 205), "blue": (205, 255),
+                            "purple": (255, 295), "magenta": (295, 335),
+                            "pink": (325, 360),
+                        }
+                        limits = ranges.get(constraints["colour"])
+                        matches = bool(
+                            limits and (
+                                limits[0] <= hue <= limits[1]
+                                or (len(limits) == 4 and limits[2] <= hue <= limits[3])
+                            )
+                        )
+                        if constraints["colour"] == "white":
+                            matches = False
+                    except (TypeError, ValueError):
+                        matches = False
+        if matches and "brightness_direction" in constraints:
+            previous = {
+                str(getattr(before, "entity_id", "")): (
+                    (getattr(before, "attributes", {}) or {}).get("brightness")
+                )
+                for before in (before_states or [])
+            }.get(entity_id)
+            current_brightness = attributes.get("brightness")
+            direction = constraints["brightness_direction"]
+            matches = (
+                entity_domain == "light"
+                and isinstance(previous, (int, float))
+                and isinstance(current_brightness, (int, float))
+                and (
+                    current_brightness > previous + 3
+                    if direction == "up"
+                    else current_brightness < previous - 3
+                )
+            )
+        if matches and "temperature" in constraints:
+            actual = attributes.get("temperature")
+            matches = (
+                isinstance(actual, (int, float))
+                and abs(float(actual) - constraints["temperature"]) <= 0.5
+            )
+        if not matches:
+            return None
+        display_name = str(attributes.get("friendly_name") or entity_id)
+        successes.append({
+            "name": display_name,
+            "type": "entity",
+            "id": entity_id,
+        })
+        verified_states.append({
+            "name": display_name,
+            "id": entity_id,
+            "state": current,
+            "brightness": attributes.get("brightness"),
+            "temperature": attributes.get("temperature"),
+        })
+
+    return {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": successes, "failed": []},
+        },
+        "verification": "live_entity_state",
+        "verified_states": verified_states,
+    }
+
+
+def live_action_confirmation(request_text, result):
+    """Describe only the live states actually verified, not the model's claim."""
+    response = result.get("response", result) if isinstance(result, dict) else {}
+    result_data = response.get("data") if isinstance(response, dict) else {}
+    targets = result_data.get("success", []) if isinstance(result_data, dict) else []
+    names = [
+        str(item.get("name") or item.get("id"))
+        for item in targets if isinstance(item, dict)
+    ]
+    if not names:
+        return ""
+    constraints = _requested_action_constraints(request_text)
+    if "brightness" in constraints:
+        values = [
+            round(float(item["brightness"]) / 255 * 100)
+            for item in result.get("verified_states", [])
+            if isinstance(item.get("brightness"), (int, float))
+        ]
+        detail = (
+            f"at {values[0]} percent brightness"
+            if values and len(set(values)) == 1
+            else "at the requested brightness"
+        )
+    elif "brightness_direction" in constraints:
+        detail = "brighter" if constraints["brightness_direction"] == "up" else "dimmer"
+    elif "colour" in constraints:
+        detail = f"showing {constraints['colour']}"
+    elif "temperature" in constraints:
+        values = [
+            item.get("temperature") for item in result.get("verified_states", [])
+            if isinstance(item.get("temperature"), (int, float))
+        ]
+        detail = f"with a target temperature of {values[0]} degrees" if values else "at the requested temperature"
+    else:
+        state = constraints.get("state")
+        detail = {
+            "on": "on", "off": "off", "locked": "locked", "unlocked": "unlocked",
+            "open": "open", "closed": "closed", "playing": "playing", "paused": "paused",
+        }.get(state, "in the requested state")
+    if len(names) == 1:
+        return f"Home Assistant's live state confirms {names[0]} is {detail}."
+    return f"Home Assistant's live state confirms these matching entities are {detail}: {', '.join(names)}."
+
+
 def action_result_error(data):
     """Return why a requested HA action is not positively confirmed.
 
@@ -383,6 +698,15 @@ def action_result_error(data):
         return "Home Assistant returned no structured action result."
     failed = result_data.get("failed") or []
     succeeded = result_data.get("success") or []
+    if not isinstance(succeeded, list) or not isinstance(failed, list):
+        return "Home Assistant returned malformed target result lists."
+    def valid_target(item):
+        return (
+            isinstance(item, dict)
+            and any(str(item.get(key) or "").strip() for key in ("id", "entity_id", "name"))
+        )
+    if any(not valid_target(item) for item in succeeded + failed):
+        return "Home Assistant returned a target entry without a usable name or identifier."
     if failed:
         details = []
         for item in failed:
@@ -407,6 +731,17 @@ def action_result_error(data):
         )
     return None
 
+def action_result_needs_live_verification(data):
+    """Only use read-after-write checks when HA returned no target outcome at all."""
+    response = data.get("response", data) if isinstance(data, dict) else {}
+    if not isinstance(response, dict) or response.get("response_type") != "action_done":
+        return False
+    result_data = response.get("data")
+    if not isinstance(result_data, dict):
+        return True
+    return not result_data.get("success") and not result_data.get("failed")
+
+
 def action_result_retryable(data):
     """Allow one retry only for explicit, structured failures with known targets.
 
@@ -424,6 +759,14 @@ def action_result_retryable(data):
     failed = result_data.get("failed") or []
     if not isinstance(succeeded, list) or not isinstance(failed, list) or not failed:
         return False
+    for item in succeeded:
+        if not isinstance(item, dict):
+            return False
+        success_id = str(item.get("entity_id") or item.get("id") or "").strip()
+        if "." not in success_id:
+            # We cannot safely exclude an already-completed non-entity target
+            # from a retry, so ambiguous successes disable retries entirely.
+            return False
     for item in failed:
         if not isinstance(item, dict):
             return False
@@ -519,11 +862,21 @@ def action_result_snapshot(data):
             result.append(target)
         return result
 
-    return {
+    snapshot = {
         "response_type": response.get("response_type"),
         "success": targets(result_data.get("success")),
         "failed": targets(result_data.get("failed")),
     }
+    target_list = targets(result_data.get("targets"))
+    if target_list:
+        snapshot["targets"] = target_list
+    verification = data.get("verification") if isinstance(data, dict) else None
+    if verification:
+        snapshot["verification"] = verification
+    verified_states = data.get("verified_states") if isinstance(data, dict) else None
+    if verified_states:
+        snapshot["verified_states"] = verified_states[:25]
+    return snapshot
 
 
 class AssistantSensor(SensorEntity):
@@ -1235,6 +1588,29 @@ class DiscordAssistant:
             try: await channel.trigger_typing()
             except Exception: _LOGGER.debug("Typing indicator failed",exc_info=True)
             await asyncio.sleep(8)
+    async def _verify_action_live_state(self, request_text, before_states=None):
+        """Wait briefly for HA state updates and verify the exact requested target."""
+        for delay in (0, 0.25, 0.5, 1.0):
+            if delay:
+                await asyncio.sleep(delay)
+            states = self.hass.states.async_all()
+            area_names = {}
+            try:
+                entity_registry = er.async_get(self.hass)
+                area_registry = ar.async_get(self.hass)
+                for state in states:
+                    entry = entity_registry.async_get(state.entity_id)
+                    if entry and entry.area_id:
+                        area = area_registry.async_get(entry.area_id)
+                        if area:
+                            area_names[state.entity_id] = area.name
+            except (AttributeError, KeyError, TypeError):
+                _LOGGER.debug("Area registry lookup unavailable during action verification", exc_info=True)
+            verified = verify_action_against_live_states(request_text, states, area_names, before_states)
+            if verified is not None:
+                return verified
+        return None
+
     async def _retry_failed_action(self, agent, prompt, first_result, models_attempted):
         """Retry one explicit structured failure, targeting only failed entity IDs."""
         targets = action_retry_targets(first_result)
@@ -1599,6 +1975,7 @@ class DiscordAssistant:
         answer = ""
         action_result = None
         is_action = False
+        pre_action_states = None
         models_attempted = []
         failures = []
         try:
@@ -1884,6 +2261,8 @@ class DiscordAssistant:
                 # Never repeat the same model call. A fallback is a different
                 # configured agent, not a second paid attempt at an unchanged prompt.
                 primary_error = None
+                if is_action:
+                    pre_action_states = self.hass.states.async_all()
                 try:
                     models_attempted.append(agent)
                     if self.active_request:
@@ -1938,6 +2317,31 @@ class DiscordAssistant:
                     action_result = action_result_snapshot(operation_result) if is_action else None
                     if is_action:
                         verification_error = action_result_error(operation_result)
+                        if (
+                            verification_error
+                            and action_result_needs_live_verification(operation_result)
+                        ):
+                            if self.active_request:
+                                self.active_request["stage"] = "Verifying the requested target against live Home Assistant state"
+                                self._refresh_sensor()
+                            live_verification = await self._verify_action_live_state(request_text, pre_action_states)
+                            if live_verification is not None:
+                                operation_result = live_verification
+                                action_result = action_result_snapshot(operation_result)
+                                verification_error = action_result_error(operation_result)
+                                if not verification_error:
+                                    verified_answer = live_action_confirmation(request_text, operation_result)
+                                    if verified_answer:
+                                        answer = verified_answer
+                            else:
+                                response_data = operation_result.get("response", operation_result)
+                                response_data = response_data.get("data") or {}
+                                if not (response_data.get("success") or response_data.get("failed")):
+                                    verification_error = (
+                                        "Home Assistant returned action_done without target-level results, "
+                                        "and I could not verify the requested target's live state. "
+                                        "I have not marked the action as successful."
+                                    )
                         if verification_error and action_result_retryable(operation_result):
                             retry_answer, merged_result = await self._retry_failed_action(
                                 agent, prompt, operation_result, models_attempted

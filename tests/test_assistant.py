@@ -22,6 +22,10 @@ helpers = types.ModuleType("homeassistant.helpers")
 helpers.__path__ = []
 storage_module = types.ModuleType("homeassistant.helpers.storage")
 storage_module.Store = type("Store", (), {})
+area_registry_module = types.ModuleType("homeassistant.helpers.area_registry")
+area_registry_module.async_get = lambda hass: None
+entity_registry_module = types.ModuleType("homeassistant.helpers.entity_registry")
+entity_registry_module.async_get = lambda hass: None
 util_module = types.ModuleType("homeassistant.util")
 util_module.__path__ = []
 dt_module = types.ModuleType("homeassistant.util.dt")
@@ -33,6 +37,8 @@ sys.modules.update({
     "homeassistant.components.sensor": sensor_module,
     "homeassistant.helpers": helpers,
     "homeassistant.helpers.storage": storage_module,
+    "homeassistant.helpers.area_registry": area_registry_module,
+    "homeassistant.helpers.entity_registry": entity_registry_module,
     "homeassistant.util": util_module,
     "homeassistant.util.dt": dt_module,
 })
@@ -2469,3 +2475,237 @@ def test_api_mode_uses_only_the_tool_free_relevance_agent_for_status_rewording()
     assert asyncio.run(assistant._rephrase_readonly_status(
         "Harvey is currently: Working downstairs"
     )) == "Well, Harvey is currently: Working downstairs. There you go."
+
+
+
+def test_live_state_verification_confirms_named_light_targets_after_empty_action_result():
+    states = [
+        SimpleNamespace(
+            entity_id="light.harvey_s_bedroom",
+            state="on",
+            attributes={"friendly_name": "Harvey's Bedroom"},
+        ),
+        SimpleNamespace(
+            entity_id="light.bedroom_mural",
+            state="on",
+            attributes={"friendly_name": "Bedroom Mural"},
+        ),
+        SimpleNamespace(
+            entity_id="light.kitchen",
+            state="off",
+            attributes={"friendly_name": "Kitchen"},
+        ),
+    ]
+    result = assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", states
+    )
+    assert result["verification"] == "live_entity_state"
+    assert [item["id"] for item in result["response"]["data"]["success"]] == [
+        "light.harvey_s_bedroom",
+        "light.bedroom_mural",
+    ]
+    assert assistant_module.action_result_error(result) is None
+
+
+def test_live_state_verification_does_not_confirm_wrong_or_unmatched_targets():
+    wrong_state = SimpleNamespace(
+        entity_id="light.harvey_s_bedroom",
+        state="off",
+        attributes={"friendly_name": "Harvey's Bedroom"},
+    )
+    unrelated = SimpleNamespace(
+        entity_id="light.kitchen",
+        state="on",
+        attributes={"friendly_name": "Kitchen"},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", [wrong_state]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", [unrelated]
+    ) is None
+
+
+def test_live_state_verification_checks_requested_brightness_and_lock_state():
+    light = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 255},
+    )
+    lock = SimpleNamespace(
+        entity_id="lock.front_door",
+        state="locked",
+        attributes={"friendly_name": "Front Door"},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Set bedroom brightness to maximum", [light]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Lock the front door", [lock]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Set bedroom brightness to 50%", [light]
+    ) is None
+
+
+def test_live_state_verification_requires_clear_action_and_target():
+    state = SimpleNamespace(
+        entity_id="light.bedroom",
+        state="on",
+        attributes={"friendly_name": "Bedroom"},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "What's the bedroom light state?", [state]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on the lights", [state]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on all lights", [state]
+    ) is not None
+
+
+
+def test_live_state_verification_only_runs_when_ha_returns_no_target_outcome():
+    empty = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": []},
+        }
+    }
+    explicit_failure = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [], "failed": [{"id": "light.bedroom", "error": "Rejected"}]},
+        }
+    }
+    explicit_success = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [{"id": "light.bedroom"}], "failed": []},
+        }
+    }
+    assert assistant_module.action_result_needs_live_verification(empty)
+    assert not assistant_module.action_result_needs_live_verification(explicit_failure)
+    assert not assistant_module.action_result_needs_live_verification(explicit_success)
+    assert not assistant_module.action_result_needs_live_verification({
+        "response": {"response_type": "query_answer", "data": {}}
+    })
+
+
+
+def test_live_state_verification_checks_requested_colour_and_plain_light_percentage():
+    red_light = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "rgb_color": (255, 0, 0)},
+    )
+    blue_light = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "rgb_color": (0, 0, 255)},
+    )
+    half_brightness = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 128},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Change the bedroom lights to red", [red_light]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Change the bedroom lights to red", [blue_light]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Set the bedroom lights to 50%", [half_brightness]
+    ) is not None
+
+
+
+def test_live_state_verification_can_match_home_assistant_area_names():
+    ceiling = SimpleNamespace(
+        entity_id="light.ceiling",
+        state="on",
+        attributes={"friendly_name": "Ceiling"},
+    )
+    result = assistant_module.verify_action_against_live_states(
+        "Turn on the living room lights",
+        [ceiling],
+        {"light.ceiling": "Living Room"},
+    )
+    assert result is not None
+    assert result["response"]["data"]["success"][0]["id"] == "light.ceiling"
+
+
+
+def test_live_state_verification_checks_relative_brightness_against_pre_action_state():
+    before = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 80},
+    )
+    brighter = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 180},
+    )
+    dimmer = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 40},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Make the bedroom lights brighter", [brighter], before_states=[before]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Dim the bedroom lights", [dimmer], before_states=[before]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Make the bedroom lights brighter", [dimmer], before_states=[before]
+    ) is None
+
+
+
+def test_action_result_error_rejects_malformed_success_target_lists():
+    malformed_entry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": ["light.bedroom"], "failed": []},
+        }
+    }
+    malformed_list = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": {"id": "light.bedroom"}, "failed": []},
+        }
+    }
+    named_target_without_id_is_valid_per_ha_conversation_api = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [{"name": "Bedroom", "type": "area"}], "failed": []},
+        }
+    }
+    assert "target entry" in assistant_module.action_result_error(malformed_entry)
+    assert "malformed target result lists" in assistant_module.action_result_error(malformed_list)
+    assert assistant_module.action_result_error(
+        named_target_without_id_is_valid_per_ha_conversation_api
+    ) is None
+
+
+
+def test_live_action_confirmation_uses_verified_entities_not_model_speech():
+    bedroom = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 255},
+    )
+    result = assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", [bedroom]
+    )
+    answer = assistant_module.live_action_confirmation(
+        "Turn on the bedroom lights", result
+    )
+    assert answer == "Home Assistant's live state confirms Bedroom Strip is on."
+    snapshot = assistant_module.action_result_snapshot(result)
+    assert snapshot["verification"] == "live_entity_state"
+    assert snapshot["verified_states"][0]["id"] == "light.bedroom_strip"
