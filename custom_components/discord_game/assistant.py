@@ -1796,12 +1796,12 @@ class DiscordAssistant:
                     {"text": prompt, "agent_id": agent},
                     blocking=True, return_response=True,
                 ),
-                timeout=90,
+                timeout=180,
             )
         except TimeoutError as err:
             usage["errors"] += 1
             raise TimeoutError(
-                f"Conversation agent {agent} timed out after 90 seconds"
+                f"Conversation agent {agent} timed out after 180 seconds"
             ) from err
         except Exception:
             usage["errors"] += 1
