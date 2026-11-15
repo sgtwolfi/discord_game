@@ -2766,7 +2766,6 @@ def test_continuation_authorises_read_only_query_but_not_device_action():
 
 
 def test_indirect_owner_activity_question_uses_owner_status_not_discord_friend_lookup():
-    from datetime import datetime, timezone
     from custom_components.discord_game.local_status import answer_local_status
 
     state = SimpleNamespace(state="At the downstairs PC")
@@ -2774,6 +2773,6 @@ def test_indirect_owner_activity_question_uses_owner_status_not_discord_friend_l
     query = "yoyoyo, do you know what harveys doing yet?"
     assert assistant_module.request_kind(query) == "query"
     assert answer_local_status(
-        hass, query, datetime(2026, 11, 15, 10, 0, tzinfo=timezone.utc),
+        hass, query, datetime(2026, 11, 15, 10, 0, tzinfo=UTC),
         "input_text.ghost_status", "Harvey",
     ) == "Harvey is currently: At the downstairs PC"
