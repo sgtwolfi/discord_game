@@ -2567,32 +2567,13 @@ class DiscordAssistant:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
         if participation_mode == "always":
             return True, "Always-respond group mode is enabled."
-        # A clear follow-up from the same speaker shortly after GHOST replied
-        # belongs to the active thread, even when ordinary group messages are
-        # configured as mention-only. HA actions and live-state queries remain
-        # separately mention-gated by _process.
+        # Shared group continuity applies across members, not just the last speaker.
+        # A reused display name with a conflicting stable Discord ID is rejected.
         assistant_turn = next((entry for entry in reversed(history) if entry.get("role") == "assistant"), None)
         if assistant_turn and getattr(self, "group_continuity_seconds", 300):
             last_index = max((index for index, entry in enumerate(history) if entry is assistant_turn), default=-1)
             preceding = history[:last_index] if last_index >= 0 else []
             prior_user = next((entry for entry in reversed(preceding) if entry.get("role") == "user"), None)
-            trailing = history[last_index + 1:] if last_index >= 0 else []
-            def same_sender(first, second):
-                """Compare stable Discord IDs, falling back to exact names for legacy records."""
-                first_id = str(first.get("sender_id") or "").strip()
-                second_id = str(second.get("sender_id") or "").strip()
-                if first_id and second_id:
-                    return first_id == second_id
-                first_name = re.sub(r"\s+", " ", str(first.get("sender_name") or first.get("sender") or "")).strip().casefold()
-                second_name = re.sub(r"\s+", " ", str(second.get("sender_name") or second.get("sender") or "")).strip().casefold()
-                return bool(first_name and second_name and first_name == second_name)
-
-            first_current = batch[0] if batch else {}
-            one_current_speaker = bool(batch) and all(
-                same_sender(first_current, entry) for entry in batch[1:]
-            )
-            # Shared group threads can be continued by any participant, but a
-            # conflicting Discord ID for the same displayed name is never trusted.
             first_current = batch[0] if batch else {}
             prior_id = str((prior_user or {}).get("sender_id") or "").strip()
             current_id = str(first_current.get("sender_id") or "").strip()
