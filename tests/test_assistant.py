@@ -2469,3 +2469,91 @@ def test_api_mode_uses_only_the_tool_free_relevance_agent_for_status_rewording()
     assert asyncio.run(assistant._rephrase_readonly_status(
         "Harvey is currently: Working downstairs"
     )) == "Well, Harvey is currently: Working downstairs. There you go."
+
+
+
+def test_live_state_verification_confirms_named_light_targets_after_empty_action_result():
+    states = [
+        SimpleNamespace(
+            entity_id="light.harvey_s_bedroom",
+            state="on",
+            attributes={"friendly_name": "Harvey's Bedroom"},
+        ),
+        SimpleNamespace(
+            entity_id="light.bedroom_mural",
+            state="on",
+            attributes={"friendly_name": "Bedroom Mural"},
+        ),
+        SimpleNamespace(
+            entity_id="light.kitchen",
+            state="off",
+            attributes={"friendly_name": "Kitchen"},
+        ),
+    ]
+    result = assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", states
+    )
+    assert result["verification"] == "live_entity_state"
+    assert [item["id"] for item in result["response"]["data"]["success"]] == [
+        "light.harvey_s_bedroom",
+        "light.bedroom_mural",
+    ]
+    assert assistant_module.action_result_error(result) is None
+
+
+def test_live_state_verification_does_not_confirm_wrong_or_unmatched_targets():
+    wrong_state = SimpleNamespace(
+        entity_id="light.harvey_s_bedroom",
+        state="off",
+        attributes={"friendly_name": "Harvey's Bedroom"},
+    )
+    unrelated = SimpleNamespace(
+        entity_id="light.kitchen",
+        state="on",
+        attributes={"friendly_name": "Kitchen"},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", [wrong_state]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on the bedroom lights", [unrelated]
+    ) is None
+
+
+def test_live_state_verification_checks_requested_brightness_and_lock_state():
+    light = SimpleNamespace(
+        entity_id="light.bedroom_strip",
+        state="on",
+        attributes={"friendly_name": "Bedroom Strip", "brightness": 255},
+    )
+    lock = SimpleNamespace(
+        entity_id="lock.front_door",
+        state="locked",
+        attributes={"friendly_name": "Front Door"},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "Set bedroom brightness to maximum", [light]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Lock the front door", [lock]
+    ) is not None
+    assert assistant_module.verify_action_against_live_states(
+        "Set bedroom brightness to 50%", [light]
+    ) is None
+
+
+def test_live_state_verification_requires_clear_action_and_target():
+    state = SimpleNamespace(
+        entity_id="light.bedroom",
+        state="on",
+        attributes={"friendly_name": "Bedroom"},
+    )
+    assert assistant_module.verify_action_against_live_states(
+        "What's the bedroom light state?", [state]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on the lights", [state]
+    ) is None
+    assert assistant_module.verify_action_against_live_states(
+        "Turn on all lights", [state]
+    ) is not None
