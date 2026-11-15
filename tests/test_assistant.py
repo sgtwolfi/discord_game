@@ -2663,3 +2663,30 @@ def test_live_state_verification_checks_relative_brightness_against_pre_action_s
     assert assistant_module.verify_action_against_live_states(
         "Make the bedroom lights brighter", [dimmer], before_states=[before]
     ) is None
+
+
+
+def test_action_result_error_rejects_malformed_success_target_lists():
+    malformed_entry = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": ["light.bedroom"], "failed": []},
+        }
+    }
+    malformed_list = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": {"id": "light.bedroom"}, "failed": []},
+        }
+    }
+    named_target_without_id_is_valid_per_ha_conversation_api = {
+        "response": {
+            "response_type": "action_done",
+            "data": {"success": [{"name": "Bedroom", "type": "area"}], "failed": []},
+        }
+    }
+    assert "target entry" in assistant_module.action_result_error(malformed_entry)
+    assert "malformed target result lists" in assistant_module.action_result_error(malformed_list)
+    assert assistant_module.action_result_error(
+        named_target_without_id_is_valid_per_ha_conversation_api
+    ) is None
