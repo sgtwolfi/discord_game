@@ -2530,8 +2530,8 @@ class DiscordAssistant:
                 second_id = str(second.get("sender_id") or "").strip()
                 if first_id and second_id:
                     return first_id == second_id
-                first_name = re.sub(r"\\s+", " ", str(first.get("sender_name") or first.get("sender") or "")).strip().casefold()
-                second_name = re.sub(r"\\s+", " ", str(second.get("sender_name") or second.get("sender") or "")).strip().casefold()
+                first_name = re.sub(r"\s+, " ", str(first.get("sender_name") or first.get("sender") or "")).strip().casefold()
+                second_name = re.sub(r"\s+, " ", str(second.get("sender_name") or second.get("sender") or "")).strip().casefold()
                 return bool(first_name and second_name and first_name == second_name)
 
             first_current = batch[0] if batch else {}
