@@ -2813,9 +2813,10 @@ class DiscordAssistant:
         """Use continuity and direct-address signals before local relevance inference."""
         addressed = any(entry.get("directly_addressed") for entry in batch)
         participation_mode = str(getattr(self, "group_participation_mode", "mention" if getattr(self, "group_require_mention", False) else "participant"))
-        if is_food_eta_question(" ".join(str(entry.get("content") or "") for entry in batch)):
-            if answer_food_eta(self.hass, dt_util.now()) is not None:
-                return True, "A shared food delivery is on its way; its ETA is available to anyone in this group."
+        food_eta_question = is_food_eta_question(" ".join(str(entry.get("content") or "") for entry in batch))
+        if food_eta_question and answer_food_eta(self.hass, dt_util.now()) is not None:
+            return True, "A shared food delivery is on its way; its ETA is available to anyone in this group."
+        if food_eta_question:
             return False, "There is no active food delivery ETA to share; the delivery details were not passed to the AI."
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
