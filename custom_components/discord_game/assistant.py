@@ -214,6 +214,44 @@ def degraded_conversation_reply():
     )
 
 
+def is_food_eta_question(text):
+    """Recognise shared-group questions about an active food delivery ETA."""
+    return bool(re.search(
+        r"\b(?:how\s+long(?:er)?|how\s+much\s+longer|food\s+eta|takeaway\s+eta|delivery\s+eta|"
+        r"when(?:'s|\s+is)\s+(?:the\s+)?(?:food|takeaway|order)|"
+        r"when\s+will\s+(?:it|the\s+(?:food|order))\s+(?:arrive|get\s+here))\b",
+        str(text or ""), re.IGNORECASE,
+    ))
+
+
+def answer_food_eta(hass, now):
+    """Return a deterministic ETA only while the delivery is actively on its way."""
+    status = hass.states.get("sensor.harvey_allerton_uber_eats_order_status")
+    status_value = str(getattr(status, "state", "") or "").strip().casefold()
+    active_statuses = {"heading your way…", "heading your way...", "almost here!", "almost here"}
+    if status_value not in active_statuses:
+        return None
+
+    eta_state = hass.states.get("sensor.harvey_allerton_uber_eats_eta")
+    eta_text = str(getattr(eta_state, "state", "") or "").strip()
+    if not eta_text or eta_text.casefold() in {"unknown", "unavailable", "none"}:
+        return None
+    try:
+        eta = datetime.strptime(eta_text, "%d %B %Y at %H:%M")
+        current = now.replace(tzinfo=None) if getattr(now, "tzinfo", None) else now
+        minutes = max(0, int((eta - current).total_seconds() + 59) // 60)
+    except (TypeError, ValueError, OverflowError):
+        _LOGGER.warning("Food ETA sensor has an unsupported value: %r", eta_text)
+        return None
+
+    restaurant_state = hass.states.get("sensor.harvey_allerton_uber_eats_restaurant")
+    restaurant = str(getattr(restaurant_state, "state", "") or "").strip()
+    source = f" from {restaurant}" if restaurant and restaurant.casefold() not in {"unknown", "unavailable", "none"} else ""
+    if minutes <= 0 or status_value.startswith("almost here"):
+        return f"The food{source} is almost here."
+    return f"The food{source} should be here in about {minutes} minutes."
+
+
 def request_kind(text):
     """Classify requests without treating a colour/state noun as an action by itself."""
     value = str(text or "").strip()
@@ -2123,6 +2161,11 @@ class DiscordAssistant:
         group_status_answer = None
         group_reminder_candidate = None
         group_reminder_confirmation = None
+        group_food_eta_answer = None
+        local_food_eta_answer = None
+        # Initialise diagnostics for every processing route, including direct HA
+        # status/reminder handlers which never call a conversation agent.
+        agent_diagnostics = []
         history = []
         prompt = ""
         request_text = " ".join(x["content"] for x in batch)
@@ -2222,7 +2265,11 @@ class DiscordAssistant:
 
                 # Never let an indirectly addressed group message about private
                 # device state or actions fall through to the chat model.
-                group_kind = request_kind(request_text)
+                group_food_eta_answer = (
+                    answer_food_eta(self.hass, dt_util.now())
+                    if is_food_eta_question(request_text) else None
+                )
+                group_kind = "query" if is_food_eta_question(request_text) else request_kind(request_text)
                 group_friend_authorised = bool(batch) and all(
                     str(entry.get("sender_id") or "") in self.approved_users for entry in batch
                 )
@@ -2233,7 +2280,7 @@ class DiscordAssistant:
                         group_reminder_confirmation = resolve_reminder_confirmation(batch, prior_history, dt_util.now())
                 if group_friend_authorised and group_kind == "query":
                     group_status_answer = answer_local_status(self.hass, request_text, dt_util.now(), self.status_entity, self.owner_name)
-                group_private_request_allowed = bool(group_status_answer or group_reminder_candidate or group_reminder_confirmation)
+                group_private_request_allowed = bool(group_status_answer or group_reminder_candidate or group_reminder_confirmation or group_food_eta_answer)
                 group_directly_addressed = any(entry.get("directly_addressed") for entry in batch)
                 if group_kind in {"action", "query"} and (
                     not group_friend_authorised
@@ -2288,7 +2335,12 @@ class DiscordAssistant:
             # A same-speaker continuation inherits permission for read-only
             # live queries, but never for side effects. Device actions still
             # require a fresh explicit mention or reply.
-            kind = request_kind(request_text)
+            kind = "query" if is_food_eta_question(request_text) else request_kind(request_text)
+            local_food_eta_answer = (
+                group_food_eta_answer if not item["is_dm"]
+                else answer_food_eta(self.hass, dt_util.now()) if is_food_eta_question(request_text)
+                else None
+            )
             group_continuation = (
                 not item["is_dm"]
                 and "recognised as a follow-up" in str(reason).casefold()
@@ -2332,7 +2384,11 @@ class DiscordAssistant:
                     "The Home Assistant operations agent is not configured. "
                     "I cannot safely execute actions or report live device states."
                 )
-            if local_status_answer is not None:
+            if is_food_eta_question(request_text):
+                role = "food_eta"
+                model = "Home Assistant food delivery ETA"
+                answer = local_food_eta_answer or "There's no food delivery currently on its way, or its ETA isn't available."
+            elif local_status_answer is not None:
                 role = "local_status"
                 model = "Home Assistant state reader"
                 prompt = self._prompt(batch, prior_history, summary, "conversation", context_note)

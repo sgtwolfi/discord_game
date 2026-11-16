@@ -3221,3 +3221,35 @@ def test_casual_wellbeing_checkins_bypass_group_relevance_model(message):
     ))
     assert result[0] is True
     assert "direct conversational check-in" in result[1]
+
+
+@pytest.mark.parametrize("status", ["Heading your way…", "Heading your way...", "Almost here!"])
+def test_food_eta_is_available_only_while_delivery_is_on_the_way(status):
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: {
+        "sensor.harvey_allerton_uber_eats_order_status": SimpleNamespace(state=status),
+        "sensor.harvey_allerton_uber_eats_eta": SimpleNamespace(state="16 November 2026 at 11:15"),
+        "sensor.harvey_allerton_uber_eats_restaurant": SimpleNamespace(state="Pizza Place"),
+    }.get(entity_id)))
+    answer = assistant_module.answer_food_eta(hass, datetime(2026, 11, 16, 10, 50))
+    assert answer is not None
+    if status.startswith("Almost"):
+        assert answer == "The food from Pizza Place is almost here."
+    else:
+        assert answer == "The food from Pizza Place should be here in about 25 minutes."
+
+
+def test_food_eta_is_not_exposed_when_order_is_not_heading_to_user():
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: {
+        "sensor.harvey_allerton_uber_eats_order_status": SimpleNamespace(state="idle"),
+        "sensor.harvey_allerton_uber_eats_eta": SimpleNamespace(state="16 November 2026 at 11:15"),
+        "sensor.harvey_allerton_uber_eats_restaurant": SimpleNamespace(state="Pizza Place"),
+    }.get(entity_id)))
+    assert assistant_module.answer_food_eta(hass, datetime(2026, 11, 16, 10, 50)) is None
+
+
+@pytest.mark.parametrize("message", [
+    "how long until the food gets here?", "how much longer?", "food eta?",
+    "when is the takeaway arriving?", "when will it get here?",
+])
+def test_food_eta_question_detection(message):
+    assert assistant_module.is_food_eta_question(message)
