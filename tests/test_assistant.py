@@ -3253,3 +3253,42 @@ def test_food_eta_is_not_exposed_when_order_is_not_heading_to_user():
 ])
 def test_food_eta_question_detection(message):
     assert assistant_module.is_food_eta_question(message)
+
+
+
+def test_any_group_member_can_ask_for_active_food_eta_without_mention(monkeypatch):
+    states = {
+        "sensor.harvey_allerton_uber_eats_order_status": SimpleNamespace(state="Heading your way…"),
+        "sensor.harvey_allerton_uber_eats_eta": SimpleNamespace(state="16 November 2026 at 11:15"),
+        "sensor.harvey_allerton_uber_eats_restaurant": SimpleNamespace(state="Pizza Place"),
+    }
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: states.get(entity_id)))
+    assistant.approved_users = set()
+    assistant.group_participation_mode = "mention"
+    assistant.group_require_mention = True
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Guest", "sender_id": "not-approved", "content": "how long until the food gets here?", "directly_addressed": False}],
+        [],
+    ))
+    assert result[0] is True
+    assert "food delivery" in result[1]
+
+
+def test_inactive_food_eta_question_is_suppressed_before_ai(monkeypatch):
+    states = {
+        "sensor.harvey_allerton_uber_eats_order_status": SimpleNamespace(state="idle"),
+        "sensor.harvey_allerton_uber_eats_eta": SimpleNamespace(state="16 November 2026 at 11:15"),
+        "sensor.harvey_allerton_uber_eats_restaurant": SimpleNamespace(state="Pizza Place"),
+    }
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: states.get(entity_id)))
+    assistant.approved_users = set()
+    assistant.group_participation_mode = "participant"
+    assistant.group_require_mention = False
+    result = asyncio.run(assistant._should_respond_to_group(
+        [{"sender_name": "Guest", "sender_id": "not-approved", "content": "how long until the food gets here?", "directly_addressed": False}],
+        [],
+    ))
+    assert result[0] is False
+    assert "not passed to the AI" in result[1]

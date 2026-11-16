@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import math
 import re
 import time
 import traceback
@@ -239,7 +240,7 @@ def answer_food_eta(hass, now):
     try:
         eta = datetime.strptime(eta_text, "%d %B %Y at %H:%M")
         current = now.replace(tzinfo=None) if getattr(now, "tzinfo", None) else now
-        minutes = max(0, int((eta - current).total_seconds() + 59) // 60)
+        minutes = max(0, math.ceil((eta - current).total_seconds() / 60))
     except (TypeError, ValueError, OverflowError):
         _LOGGER.warning("Food ETA sensor has an unsupported value: %r", eta_text)
         return None
@@ -2815,6 +2816,7 @@ class DiscordAssistant:
         if is_food_eta_question(" ".join(str(entry.get("content") or "") for entry in batch)):
             if answer_food_eta(self.hass, dt_util.now()) is not None:
                 return True, "A shared food delivery is on its way; its ETA is available to anyone in this group."
+            return False, "There is no active food delivery ETA to share; the delivery details were not passed to the AI."
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
 
