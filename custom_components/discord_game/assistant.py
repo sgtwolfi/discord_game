@@ -2283,7 +2283,7 @@ class DiscordAssistant:
                 group_private_request_allowed = bool(group_status_answer or group_reminder_candidate or group_reminder_confirmation or group_food_eta_answer)
                 group_directly_addressed = any(entry.get("directly_addressed") for entry in batch)
                 if group_kind in {"action", "query"} and (
-                    not group_friend_authorised
+                    (not group_friend_authorised and not group_food_eta_answer)
                     or (group_kind == "action" and len(group_senders) != 1)
                     or (not group_directly_addressed and not group_private_request_allowed)
                 ):
@@ -2812,6 +2812,9 @@ class DiscordAssistant:
         """Use continuity and direct-address signals before local relevance inference."""
         addressed = any(entry.get("directly_addressed") for entry in batch)
         participation_mode = str(getattr(self, "group_participation_mode", "mention" if getattr(self, "group_require_mention", False) else "participant"))
+        if is_food_eta_question(" ".join(str(entry.get("content") or "") for entry in batch)):
+            if answer_food_eta(self.hass, dt_util.now()) is not None:
+                return True, "A shared food delivery is on its way; its ETA is available to anyone in this group."
         if addressed:
             return True, "GHOST was directly addressed; relevance inference was unnecessary."
 
