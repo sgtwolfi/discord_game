@@ -1,6 +1,7 @@
 """Focused tests for GHOST context and response handling without a live HA instance."""
 
 import asyncio
+import json
 import importlib
 import sys
 import types
