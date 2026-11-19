@@ -2181,8 +2181,9 @@ class DiscordAssistant:
             section = optional_sections[index]
             heading, separator, content = section.partition("\n")
             excess = len(build_prompt()) - self.budget
-            minimum_content = min(32, len(content))
-            keep = max(minimum_content, len(content) - excess)
+            # Preserve optional-section labels but let their bodies reach zero
+            # before truncating the live request or failing the whole turn.
+            keep = max(0, len(content) - excess)
             optional_sections[index] = heading + separator + content[:keep]
 
         if len(build_prompt()) > self.budget:
