@@ -1,3 +1,19 @@
+send_generative_message:
+  name: Generate and send message as GHOST
+  description: Reword a draft using the configured conversation agent and send it on the owner's behalf.
+  fields:
+    message:
+      required: true
+      selector:
+        text:
+          multiline: true
+    user_id:
+      selector:
+        text:
+    channel_id:
+      selector:
+        text:
+
 send_message:
   name: Send message as GHOST
   fields:

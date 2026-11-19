@@ -3452,3 +3452,83 @@ def test_configure_flow_is_model_only_and_connection_has_separate_reconfigure_fl
     assert "_validate_auth_and_fetch_data" in reconfigure
     assert "async_update_reload_and_abort" in reconfigure
     assert "data_updates=user_input" in reconfigure
+
+def test_food_eta_has_a_dedicated_configuration_panel_and_generative_entry_is_above_manual():
+    panel = (Path(__file__).resolve().parents[1] / "custom_components/discord_game/frontend/ghost-panel.js").read_text()
+    settings_start = panel.index("  _renderSettings(shell, d) {")
+    food_render = panel.index("  _renderFoodEtaSettings(shell, settings) {")
+    settings_body = panel[settings_start:]
+    assert "this._renderFoodEtaSettings(shell, settings);" in settings_body
+    assert food_render < settings_start
+    assert "Shared food delivery ETA" in panel
+    assert "Save food ETA settings" in panel
+    assert "Generative entry" in panel
+    assert "send_generative_message" in panel
+    assert panel.index('"Generative entry"') < panel.index('"Manual entry"')
+
+
+def test_generative_message_uses_configured_conversation_agent_and_sends_as_ghost():
+    assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.selected_model"}
+    assistant.owner_name = "Harvey"
+    assistant.model_usage_data = {}
+    calls = []
+    sent = {}
+
+    class FakeServices:
+        async def async_call(self, domain, service, data, **kwargs):
+            calls.append((domain, service, data, kwargs))
+            return {
+                "response": {
+                    "response_type": "query",
+                    "speech": {"plain": {"speech": "Harvey asked me to pass this on: the session starts at seven."}},
+                }
+            }
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+
+    async def fake_send_manual(**kwargs):
+        sent.update(kwargs)
+
+    assistant.send_manual = fake_send_manual
+    draft = "Tell them the session starts at seven."
+    asyncio.run(assistant.send_generative(message=draft, user_id="123456789012345678"))
+
+    assert calls[0][0:2] == ("conversation", "process")
+    assert calls[0][2]["agent_id"] == "conversation.selected_model"
+    assert "Rewrite the supplied draft" in calls[0][2]["text"]
+    assert "Do not call tools" in calls[0][2]["text"]
+    assert json.dumps(draft, ensure_ascii=False) in calls[0][2]["text"]
+    assert sent["message"] == "Harvey asked me to pass this on: the session starts at seven."
+    assert sent["user_id"] == "123456789012345678"
+    assert sent["model"] == "conversation.selected_model"
+    assert sent["role"] == "generative_entry"
+
+
+def test_generative_message_refuses_action_result_instead_of_sending_it():
+    assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.tool_enabled"}
+    assistant.owner_name = "Harvey"
+    assistant.model_usage_data = {}
+
+    class FakeServices:
+        async def async_call(self, domain, service, data, **kwargs):
+            return {
+                "response": {
+                    "response_type": "action_done",
+                    "speech": {"plain": {"speech": "I turned the lights on."}},
+                }
+            }
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    sent = False
+
+    async def fake_send_manual(**kwargs):
+        nonlocal sent
+        sent = True
+
+    assistant.send_manual = fake_send_manual
+    with pytest.raises(RuntimeError, match="action result"):
+        asyncio.run(assistant.send_generative(message="Tell Max I will be late.", user_id="123456789012345678"))
+    assert sent is False
+

@@ -198,8 +198,12 @@ class DiscordGameGhostPanel extends HTMLElement {
       .message .who{font-size:10px;color:var(--secondary-text-color);margin-bottom:5px;font-weight:650}
       .message .body{font-size:13px;white-space:pre-wrap;line-height:1.5}
       .message .time{font-size:10px;color:var(--secondary-text-color);margin-top:6px;text-align:right}
-      .composer{padding:13px 16px;border-top:1px solid var(--divider-color);display:flex;align-items:flex-end;gap:9px;background:var(--card-background-color);flex:0 0 auto}
-      .composer textarea{min-height:48px;max-height:180px;resize:vertical;flex:1}
+      .composer-stack{padding:12px 16px;border-top:1px solid var(--divider-color);display:flex;flex-direction:column;gap:12px;background:var(--card-background-color);flex:0 0 auto}
+      .composer-section{display:flex;flex-direction:column;gap:5px;min-width:0}
+      .composer-title{font-size:12px;font-weight:700}
+      .composer-help{font-size:11px;color:var(--secondary-text-color);line-height:1.4}
+      .composer{padding:0;display:flex;align-items:flex-end;gap:9px;background:transparent}
+      .composer textarea{min-height:44px;max-height:150px;resize:vertical;flex:1}
       .send{height:46px;min-width:84px}
       button{font:inherit}
       .btn{border:0;border-radius:9px;padding:10px 14px;background:var(--primary-color);color:var(--text-primary-color);font-size:12px;font-weight:650;cursor:pointer}
@@ -417,12 +421,54 @@ class DiscordGameGhostPanel extends HTMLElement {
       }
       main.append(messages);
 
+      const composerStack = this._el("section", null, "composer-stack");
+
+      const generativeSection = this._el("div", null, "composer-section");
+      generativeSection.append(this._el("div", "Generative entry", "composer-title"));
+      generativeSection.append(this._el("div", "Write what you want to say as yourself. GHOST will reword it using the configured conversation model and send it as your assistant, on your behalf.", "composer-help"));
+      const generativeForm = this._el("form", null, "composer");
+      const generativeInput = this._el("textarea");
+      generativeInput.placeholder = "Type your draft… (Enter to rewrite and send, Shift + Enter for a new line)";
+      generativeInput.rows = 2;
+      generativeInput.maxLength = 4000;
+      generativeInput.dataset.keep = "chat-generative";
+      const generativeSend = this._el("button", this._busy ? "Working…" : "Rewrite & send", "btn send");
+      generativeSend.type = "submit";
+      generativeSend.disabled = this._busy;
+      generativeForm.append(generativeInput, generativeSend);
+      const sendGenerative = async (event) => {
+        event.preventDefault();
+        const draft = generativeInput.value.trim();
+        if (!draft || this._busy) return;
+        const key = this._selectedConversation;
+        const userId = key.startsWith("dm:") ? key.slice(3) : "";
+        const channelId = key.startsWith("guild:") ? key.split(":").pop() : "";
+        const ok = await this._service("send_generative_message", { message: draft, ...(userId ? { user_id: userId } : { channel_id: channelId }) });
+        if (ok) {
+          const current = this.shadowRoot.querySelector('[data-keep="chat-generative"]');
+          if (current) current.value = "";
+          await this._selectConversation(key);
+        }
+      };
+      generativeForm.addEventListener("submit", sendGenerative);
+      generativeInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          generativeForm.requestSubmit();
+        }
+      });
+      generativeSection.append(generativeForm);
+      composerStack.append(generativeSection);
+
+      const manualSection = this._el("div", null, "composer-section");
+      manualSection.append(this._el("div", "Manual entry", "composer-title"));
+      manualSection.append(this._el("div", "Send the exact text you type, without AI rewriting.", "composer-help"));
       const composer = this._el("form", null, "composer");
       const input = this._el("textarea");
-      input.placeholder = "Message as GHOST… (Enter to send, Shift + Enter for a new line)";
+      input.placeholder = "Message exactly as written… (Enter to send, Shift + Enter for a new line)";
       input.rows = 2;
       input.dataset.keep = "chat-composer";
-      const send = this._el("button", this._busy ? "Sending…" : "Send", "btn send");
+      const send = this._el("button", this._busy ? "Sending…" : "Send manually", "btn send");
       send.type = "submit";
       send.disabled = this._busy;
       composer.append(input, send);
@@ -433,9 +479,12 @@ class DiscordGameGhostPanel extends HTMLElement {
         const key = this._selectedConversation;
         const userId = key.startsWith("dm:") ? key.slice(3) : "";
         const channelId = key.startsWith("guild:") ? key.split(":").pop() : "";
-        input.value = "";
         const ok = await this._service("send_message", { message: text, ...(userId ? { user_id: userId } : { channel_id: channelId }) });
-        if (ok) await this._selectConversation(key);
+        if (ok) {
+          const current = this.shadowRoot.querySelector('[data-keep="chat-composer"]');
+          if (current) current.value = "";
+          await this._selectConversation(key);
+        }
       };
       composer.addEventListener("submit", sendMessage);
       input.addEventListener("keydown", (event) => {
@@ -444,7 +493,9 @@ class DiscordGameGhostPanel extends HTMLElement {
           composer.requestSubmit();
         }
       });
-      main.append(composer);
+      manualSection.append(composer);
+      composerStack.append(manualSection);
+      main.append(composerStack);
     }
     workspace.append(side, main);
     shell.append(workspace);
@@ -483,6 +534,88 @@ class DiscordGameGhostPanel extends HTMLElement {
     }
   }
 
+  _renderFoodEtaSettings(shell, settings) {
+    const panel = this._el("section", null, "panel");
+    panel.append(this._el("h2", "Shared food delivery ETA"));
+    panel.append(this._el("p", "Configure the delivery sensors here. Anyone in an enabled Discord group can ask for the ETA while the order is on its way. GHOST calculates the remaining minutes locally; it does not ask the model to guess.", "muted"));
+
+    const form = this._el("form");
+    const enabledLabel = this._el("label", "Enable shared food ETA answers");
+    const enabled = this._el("input");
+    enabled.type = "checkbox";
+    enabled.name = "food_eta_enabled";
+    enabled.checked = settings.food_eta_enabled !== false;
+    enabled.dataset.keep = "food-food_eta_enabled";
+    enabledLabel.prepend(enabled);
+    form.append(enabledLabel);
+
+    const sensorEntities = (this._capabilities && Array.isArray(this._capabilities.entities) ? this._capabilities.entities : [])
+      .filter((entity) => entity && entity.domain === "sensor")
+      .sort((left, right) => String(left.name || left.entity_id).localeCompare(String(right.name || right.entity_id)));
+
+    const addSensor = (name, title, fallback, optional) => {
+      const wrap = this._el("div", null, "field");
+      wrap.append(this._el("label", title));
+      const select = this._el("select");
+      select.name = name;
+      select.dataset.keep = "food-" + name;
+      const addOption = (value, label) => {
+        const option = this._el("option", label);
+        option.value = value;
+        select.append(option);
+      };
+      if (optional) addOption("", "Not configured");
+      const current = String(settings[name] || fallback || "");
+      if (current && !sensorEntities.some((entity) => entity.entity_id === current)) {
+        addOption(current, current + " (saved entity; not currently in the entity list)");
+      }
+      for (const entity of sensorEntities) {
+        addOption(entity.entity_id, (entity.name || entity.entity_id) + " — " + entity.entity_id + " · " + String(entity.state ?? ""));
+      }
+      if (!optional && !current && !sensorEntities.length) addOption("", "No sensor entities available");
+      select.value = current;
+      wrap.append(select);
+      form.append(wrap);
+    };
+
+    addSensor("food_eta_status_entity", "Order-status sensor", "sensor.harvey_allerton_uber_eats_order_status", false);
+    addSensor("food_eta_entity", "Estimated arrival sensor", "sensor.harvey_allerton_uber_eats_eta", false);
+    addSensor("food_restaurant_entity", "Restaurant name sensor (optional)", "sensor.harvey_allerton_uber_eats_restaurant", true);
+
+    const statusGrid = this._el("div", null, "fieldgrid");
+    const addStatus = (name, title, fallback) => {
+      const wrap = this._el("div", null, "field");
+      wrap.append(this._el("label", title));
+      const input = this._el("input");
+      input.type = "text";
+      input.name = name;
+      input.value = settings[name] || fallback;
+      input.maxLength = 100;
+      input.dataset.keep = "food-" + name;
+      wrap.append(input);
+      statusGrid.append(wrap);
+    };
+    addStatus("food_eta_heading_state", "Status meaning the courier is on the way", "Heading your way…");
+    addStatus("food_eta_almost_state", "Status meaning the courier is almost here", "Almost here!");
+    form.append(statusGrid);
+    form.append(this._el("p", "The status values must match your order sensor exactly. The ETA sensor should report a date such as “19 November 2026 at 18:25”. Leave the restaurant sensor unconfigured when you do not have one.", "help"));
+    if (this._capabilitiesLoading) {
+      form.append(this._el("p", "Loading available Home Assistant sensors…", "help"));
+    } else if (!this._capabilities || !this._capabilities.available) {
+      form.append(this._el("p", "The sensor list is unavailable. Your saved entity IDs are still shown; use Refresh under Home Assistant capabilities to reload the list.", "help"));
+    }
+    form.append(this._button("Save food ETA settings", async (event) => {
+      if (event && event.preventDefault) event.preventDefault();
+      const data = {};
+      for (const field of form.querySelectorAll("[name]")) {
+        data[field.name] = field.type === "checkbox" ? field.checked : field.value;
+      }
+      await this._service("update_settings", data, true);
+    }));
+    panel.append(form);
+    shell.append(panel);
+  }
+
   _renderSettings(shell, d) {
     const settings = d.settings || {};
     const defaults = settings.default_prompts || {};
@@ -505,6 +638,7 @@ class DiscordGameGhostPanel extends HTMLElement {
       : "Local Mode splits work between the Conversation, Operations and optional Fallback agents. GHOST supplies short role-specific prompts and keeps memory deterministic, so no memory model is needed.", "help"));
     agentsPanel.append(this._el("p", "Entity exposure and script access are still managed by Home Assistant Assist. The capability manager below lets you expose the exact entities and scripts. Exposing a script makes it available as a tool; it does not automatically explain its arguments or purpose to a weak model, so give scripts clear names and descriptions.", "help"));
     shell.append(agentsPanel);
+    this._renderFoodEtaSettings(shell, settings);
 
     const panel = this._el("section", null, "panel");
     panel.append(this._el("h2", "Assistant behaviour"));
@@ -615,52 +749,6 @@ class DiscordGameGhostPanel extends HTMLElement {
     typing.dataset.keep = "cfg-typing_enabled"; typingLabel.prepend(typing);
     form.append(typingLabel);
     form.append(this._el("p", "Typing starts only after GHOST has decided to reply and passed the group safety checks. It stays active while the response is being generated.", "help"));
-
-    form.append(this._el("h3", "Shared food delivery ETA"));
-    form.append(this._el("p", "Anyone in an enabled Discord group can ask for the delivery ETA while the order is on its way. The order-status sensor controls when the answer is available; GHOST calculates the minutes from the ETA sensor locally.", "help"));
-    const foodEtaEnabledLabel = this._el("label", "Enable shared food ETA answers");
-    const foodEtaEnabled = this._el("input"); foodEtaEnabled.type = "checkbox"; foodEtaEnabled.name = "food_eta_enabled";
-    foodEtaEnabled.checked = settings.food_eta_enabled !== false; foodEtaEnabled.dataset.keep = "cfg-food_eta_enabled";
-    foodEtaEnabledLabel.prepend(foodEtaEnabled); form.append(foodEtaEnabledLabel);
-
-    const sensorEntities = (this._capabilities && Array.isArray(this._capabilities.entities) ? this._capabilities.entities : [])
-      .filter((entity) => entity && entity.domain === "sensor")
-      .sort((left, right) => String(left.name || left.entity_id).localeCompare(String(right.name || right.entity_id)));
-    const addFoodSensor = (name, label, currentValue, optional) => {
-      const wrap = this._el("div", null, "field");
-      wrap.append(this._el("label", label));
-      const select = this._el("select"); select.name = name; select.dataset.keep = "cfg-" + name;
-      const addOption = (value, title) => {
-        const option = this._el("option", title); option.value = value; select.append(option);
-      };
-      if (optional) addOption("", "Not configured");
-      const current = String(currentValue || "");
-      if (current && !sensorEntities.some((entity) => entity.entity_id === current)) {
-        addOption(current, current + " (not currently available)");
-      }
-      for (const entity of sensorEntities) {
-        addOption(entity.entity_id, (entity.name || entity.entity_id) + " — " + entity.entity_id + " · " + String(entity.state ?? ""));
-      }
-      if (!optional && !current && !sensorEntities.length) addOption("", "No sensor entities available");
-      select.value = current;
-      wrap.append(select); form.append(wrap);
-    };
-    addFoodSensor("food_eta_status_entity", "Order-status sensor", settings.food_eta_status_entity || "sensor.harvey_allerton_uber_eats_order_status", false);
-    addFoodSensor("food_eta_entity", "Estimated arrival sensor", settings.food_eta_entity || "sensor.harvey_allerton_uber_eats_eta", false);
-    addFoodSensor("food_restaurant_entity", "Restaurant name sensor (optional)", settings.food_restaurant_entity || "sensor.harvey_allerton_uber_eats_restaurant", true);
-
-    const statusGrid = this._el("div", null, "fieldgrid");
-    const statusInput = (name, label, value) => {
-      const wrap = this._el("div", null, "field");
-      wrap.append(this._el("label", label));
-      const input = this._el("input"); input.type = "text"; input.name = name; input.value = value;
-      input.maxLength = 100; input.dataset.keep = "cfg-" + name;
-      wrap.append(input); statusGrid.append(wrap);
-    };
-    statusInput("food_eta_heading_state", "Status meaning the courier is on the way", settings.food_eta_heading_state || "Heading your way…");
-    statusInput("food_eta_almost_state", "Status meaning the courier is almost here", settings.food_eta_almost_state || "Almost here!");
-    form.append(statusGrid);
-    form.append(this._el("p", "Set these status values to match your order sensor exactly. The ETA sensor should report a date like “19 November 2026 at 18:25”. The restaurant sensor may be left unconfigured.", "help"));
 
     if (apiMode) {
       form.append(this._el("h3", "System prompts and functions"));

@@ -101,6 +101,17 @@ async def async_setup_services(hass: HomeAssistant):
         if user is None or not user.is_admin:
             raise HomeAssistantError("Administrator access is required for GHOST controls")
 
+    async def send_generative(call: ServiceCall):
+        await ensure_admin(call)
+        items = assistants(hass)
+        if not items:
+            raise HomeAssistantError("Discord assistant is not loaded")
+        await items[0].send_generative(
+            message=call.data["message"],
+            user_id=call.data.get("user_id"),
+            channel_id=call.data.get("channel_id"),
+        )
+
     async def send(call: ServiceCall):
         await ensure_admin(call)
         items = assistants(hass)
@@ -233,6 +244,7 @@ async def async_setup_services(hass: HomeAssistant):
         )
 
     hass.services.async_register(DOMAIN, "send_message", send, schema=SEND)
+    hass.services.async_register(DOMAIN, "send_generative_message", send_generative, schema=SEND)
     hass.services.async_register(DOMAIN, "clear_friend_memory", clear, schema=CLEAR)
     hass.services.async_register(DOMAIN, "set_friend_memory", set_memory, schema=SET_MEMORY)
     hass.services.async_register(DOMAIN, "purge_friend_memory", purge_memory, schema=PURGE_MEMORY)
@@ -254,7 +266,7 @@ async def async_unload_services(hass: HomeAssistant):
     """Remove services after the final integration entry unloads."""
     if assistants(hass):
         return
-    for name in ("send_message", "clear_friend_memory", "set_friend_memory", "purge_friend_memory", "consolidate_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings", "reset_prompt", "update_contacts"):
+    for name in ("send_message", "send_generative_message", "clear_friend_memory", "set_friend_memory", "purge_friend_memory", "consolidate_friend_memory", "set_context_note", "pause", "resume", "clear_queue", "edit_queued_message", "cancel_queued_message", "replay_transcript", "update_settings", "reset_prompt", "update_contacts"):
         if hass.services.has_service(DOMAIN, name):
             hass.services.async_remove(DOMAIN, name)
     hass.data.get(DOMAIN, {}).pop("_assistant_services", None)
