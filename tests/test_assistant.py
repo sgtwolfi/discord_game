@@ -3425,3 +3425,30 @@ def test_runtime_settings_are_exposed_in_sidebar_not_integration_model_options()
         "fallback_after_failures", "context_budget_chars",
     ):
         assert f'"{key}": self._get_current(' in advanced, key
+
+
+
+def test_configure_flow_is_model_only_and_connection_has_separate_reconfigure_flow():
+    repo_root = Path(__file__).resolve().parents[1]
+    source = (repo_root / "custom_components/discord_game/config_flow.py").read_text()
+    options_start = source.index("        options_schema = vol.Schema(")
+    options_end = source.index("\n        return self.async_show_form(step_id=\"init\"", options_start)
+    options_schema = source[options_start:options_end]
+
+    assert 'vol.Required("assistant_mode"' in options_schema
+    assert 'vol.Optional("conversation_agent"' in options_schema
+    assert 'vol.Optional("operations_agent"' in options_schema
+    assert 'vol.Optional("fallback_agent"' in options_schema
+    for connection_key in (
+        "CONF_ACCESS_TOKEN", "CONF_IMAGE_FORMAT", "CONF_STEAM_API_KEY",
+        "CONF_ENTITIES_DISABLED_DEFAULT",
+    ):
+        assert connection_key not in options_schema
+
+    reconfigure_start = source.index("async def async_step_reconfigure")
+    reconfigure_end = source.index("async def async_step_user", reconfigure_start)
+    reconfigure = source[reconfigure_start:reconfigure_end]
+    assert "_get_reconfigure_entry()" in reconfigure
+    assert "_validate_auth_and_fetch_data" in reconfigure
+    assert "async_update_reload_and_abort" in reconfigure
+    assert "data_updates=user_input" in reconfigure

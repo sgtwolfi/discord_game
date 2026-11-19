@@ -1,7 +1,8 @@
 {
   "config": {
     "error": {
-      "auth": "Provided Discord Bot access token is not valid."
+      "auth": "Provided Discord Bot access token is not valid.",
+      "discord_api": "Discord could not validate the connection or load server information."
     },
     "step": {
       "user": {
@@ -22,6 +23,16 @@
         },
         "description": "Select Discord users and channels to track",
         "title": "Select Discord users and channels to track"
+      },
+      "reconfigure": {
+        "title": "Reconfigure Discord connection",
+        "description": "Update the Discord bot connection and integration-level preferences. GHOST model selection remains under Configure.",
+        "data": {
+          "access_token": "Discord bot token",
+          "image_format": "Image format",
+          "steam_api_key": "Steam API key",
+          "entities_disabled_default": "Create sub-entities as disabled"
+        }
       }
     }
   },
@@ -31,10 +42,6 @@
         "title": "Discord Game and GHOST Assistant Options",
         "description": "Choose the conversation, operations, Local fallback, API fallback and spam-deferral agents here. Spam protection can defer users to a local model, apply a Discord timeout, or ignore them during a cooldown. Fine-tuning, queue behaviour and editable system prompts are managed in the GHOST sidebar panel.",
         "data": {
-          "access_token": "Discord Bot access token",
-          "image_format": "Image format",
-          "steam_api_key": "Steam API Key (optional)",
-          "entities_disabled_default": "Create sub-entities as disabled",
           "conversation_agent": "Conversation model agent ID",
           "operations_agent": "Operations model agent ID",
           "fallback_agent": "Local fallback agent ID (Local Mode only)",

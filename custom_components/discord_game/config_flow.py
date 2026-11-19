@@ -104,11 +104,57 @@ class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(_config_entry):
         return DiscordGameOptionsFlow()
 
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+        """Update Discord connection details outside the model-only Options flow."""
+        entry = self._get_reconfigure_entry()
+        current = {**entry.data, **entry.options}
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
+            except ValueError:
+                errors["base"] = "auth"
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unable to validate reconfigured Discord connection")
+                errors["base"] = "discord_api"
+            else:
+                # Keep the same selected Discord user/channel IDs. Only update
+                # connection-level values; model and GHOST settings stay in Options.
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates=user_input,
+                    options={**entry.options, **user_input},
+                )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ACCESS_TOKEN, default=current.get(CONF_ACCESS_TOKEN, "")): cv.string,
+                vol.Required(CONF_IMAGE_FORMAT, default=current.get(CONF_IMAGE_FORMAT, "webp")): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["png", "webp", "jpeg", "jpg"],
+                        multiple=False,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    ),
+                ),
+                vol.Optional(CONF_STEAM_API_KEY, default=current.get(CONF_STEAM_API_KEY, "")): selector.TextSelector(
+                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+                ),
+                vol.Required(
+                    CONF_ENTITIES_DISABLED_DEFAULT,
+                    default=current.get(CONF_ENTITIES_DISABLED_DEFAULT, False),
+                ): selector.BooleanSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=schema,
+            errors=errors,
+        )
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
         if user_input is not None:
-            if user_input.get("assistant_enabled") and not str(user_input.get("conversation_agent", "")).strip():
-                errors["base"] = "assistant_agent_required"
             if not errors:
                 try:
                     self.members, self.user_names, self.channels, self.channel_names, \
@@ -176,15 +222,18 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         errors: dict[str, str] = {}
-        current_token = self._get_current(CONF_ACCESS_TOKEN)
         if user_input is not None:
-            self.options_data = dict(user_input)
+            self.options_data = {**self.config_entry.options, **dict(user_input)}
             # The old 60-message setting was a compression threshold. It is
             # now raw retention, so migrate its untouched default to 8.
             legacy_memory_settings = "memory_batch_messages" not in self.config_entry.options
             legacy_history_limit = self._get_current("history_limit", 8)
             # Keep advanced panel settings when saving the integration's model selectors.
             advanced_defaults = {
+                CONF_ACCESS_TOKEN: self._get_current(CONF_ACCESS_TOKEN, ""),
+                CONF_IMAGE_FORMAT: self._get_current(CONF_IMAGE_FORMAT, "webp"),
+                CONF_STEAM_API_KEY: self._get_current(CONF_STEAM_API_KEY, ""),
+                CONF_ENTITIES_DISABLED_DEFAULT: self._get_current(CONF_ENTITIES_DISABLED_DEFAULT, False),
                 "assistant_enabled": self._get_current("assistant_enabled", False),
                 "assistant_mode": self._get_current("assistant_mode", "local"),
                 "api_fallback_agent": self._get_current("api_fallback_agent", ""),
@@ -229,47 +278,20 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 self.options_data["history_limit"] = 8
             if self.options_data.get("assistant_enabled") and not str(self.options_data.get("conversation_agent", "")).strip():
                 errors["base"] = "assistant_agent_required"
-            # Saving assistant settings must not trigger a needless Discord API
-            # login/member scan. That scan can fail on privileged intents or
-            # transient Discord API errors and used to surface as HA "Unknown error".
-            if not errors and str(user_input.get(CONF_ACCESS_TOKEN, "")).strip() == str(current_token).strip():
-                self.options_data[CONF_MEMBERS] = list(self._get_current(CONF_MEMBERS, []))
-                self.options_data[CONF_CHANNELS] = list(self._get_current(CONF_CHANNELS, []))
-                self.options_data[CONF_VOICE_CHANNELS] = list(self._get_current(CONF_VOICE_CHANNELS, []))
+            if not errors:
+                # Keep original Discord selections when only model settings are changed.
+                for key in (CONF_MEMBERS, CONF_CHANNELS, CONF_VOICE_CHANNELS):
+                    self.options_data[key] = list(self._get_current(key, []))
                 return self.async_create_entry(title="", data=self.options_data)
 
-            if not errors:
-                try:
-                    self.members, self.user_names, self.channels, self.channel_names, \
-                        self.voice_channels, self.voice_channel_names = \
-                        await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
-                except Exception as err:
-                    _LOGGER.exception("Unable to validate updated Discord token or load server choices")
-                    errors["base"] = "auth" if isinstance(err, ValueError) else "discord_api"
-
-            if not errors:
-                self.options_data[CONF_MEMBERS] = []
-                self.options_data[CONF_CHANNELS] = []
-                self.options_data[CONF_VOICE_CHANNELS] = []
-                return await self.async_step_members()
-
-        current_image_format = self._get_current(CONF_IMAGE_FORMAT, "webp")
-        current_steam_key = self._get_current(CONF_STEAM_API_KEY)
-        current_entities_disabled = self._get_current(CONF_ENTITIES_DISABLED_DEFAULT, False)
         options_schema = vol.Schema(
             {
-                vol.Required(CONF_ACCESS_TOKEN, default=current_token): cv.string,
-                vol.Required(CONF_IMAGE_FORMAT, default=current_image_format): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=['png', 'webp', 'jpeg', 'jpg'],
-                                                  multiple=False,
-                                                  mode=selector.SelectSelectorMode.DROPDOWN),
-                ),
-                vol.Optional(CONF_STEAM_API_KEY, default=current_steam_key): selector.TextSelector(
-                    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
-                ),
-                vol.Required(CONF_ENTITIES_DISABLED_DEFAULT, default=current_entities_disabled): selector.BooleanSelector(),
                 vol.Required("assistant_mode", default=self._get_current("assistant_mode", "local")): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=["local", "api"], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
+                    selector.SelectSelectorConfig(
+                        options=["local", "api"],
+                        multiple=False,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    ),
                 ),
                 vol.Optional("conversation_agent", default=self._get_current("conversation_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("operations_agent", default=self._get_current("operations_agent", "")): selector.ConversationAgentSelector(),
