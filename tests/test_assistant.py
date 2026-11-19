@@ -3506,6 +3506,64 @@ def test_generative_message_uses_configured_conversation_agent_and_sends_as_ghos
     assert sent["role"] == "generative_entry"
 
 
+def test_generative_question_rewrite_falls_back_if_model_destroys_question():
+    assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.selected_model"}
+    assistant.owner_name = "Harvey"
+    assistant.model_usage_data = {}
+
+    class FakeServices:
+        async def async_call(self, domain, service, data, **kwargs):
+            return {
+                "response": {
+                    "response_type": "query_answer",
+                    "speech": {"plain": {"speech": "The owner asked me to pass that on."}},
+                }
+            }
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    sent = {}
+
+    async def fake_send_manual(**kwargs):
+        sent.update(kwargs)
+
+    assistant.send_manual = fake_send_manual
+    draft = "what time do you reckon youll be round later if thats still the plan?"
+    asyncio.run(assistant.send_generative(message=draft, user_id="123456789012345678"))
+    assert sent["message"] == f"Harvey asked me to ask: {draft}"
+
+
+def test_generative_prompt_requires_preserving_questions_as_questions():
+    assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.selected_model"}
+    assistant.owner_name = "Harvey"
+    assistant.model_usage_data = {}
+    captured = {}
+
+    class FakeServices:
+        async def async_call(self, domain, service, data, **kwargs):
+            captured.update(data)
+            return {
+                "response": {
+                    "response_type": "query_answer",
+                    "speech": {"plain": {"speech": "Harvey asked me to ask: what time are you coming?"}},
+                }
+            }
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    sent = {}
+
+    async def fake_send_manual(**kwargs):
+        sent.update(kwargs)
+
+    assistant.send_manual = fake_send_manual
+    asyncio.run(assistant.send_generative(
+        message="what time are you coming?", user_id="123456789012345678"
+    ))
+    assert "A question MUST remain a question" in captured["text"]
+    assert sent["message"].endswith("?")
+
+
 def test_generative_message_accepts_action_done_with_no_executed_actions():
     assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
     assistant.agents = {"conversation_agent": "conversation.selected_model"}
