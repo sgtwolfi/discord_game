@@ -3314,7 +3314,7 @@ class DiscordAssistant:
         owner = str(getattr(self, "owner_name", "Harvey")).strip() or "Harvey"
         is_question = bool(
             draft.rstrip().endswith("?")
-            or re.match(r"^(?:who|what|when|where|why|how|which|can|could|would|will|do|does|did|is|are|have|has)\\b", draft, re.IGNORECASE)
+            or re.match(r"^(?:who|what|when|where|why|how|which|can|could|would|will|do|does|did|is|are|have|has)\b", draft, re.IGNORECASE)
         )
         prompt = (
             "TASK: Rewrite the supplied draft as ONE ready-to-send Discord message from GHOST, "
