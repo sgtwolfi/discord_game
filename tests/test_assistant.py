@@ -3290,8 +3290,8 @@ def test_dm_prompt_explicitly_preserves_conversation_continuity(mode):
     prompt = assistant._prompt(batch, history, "", "conversation")
     assert "oi ghost, i chatting to you" in prompt
     assert "Just sorts things out. What's up?" in prompt
-    assert "Continuity is mandatory" in prompt
-    assert "Never output XML" in prompt
+    assert "Continue the supplied thread" in prompt
+    assert "Plain text only" in prompt
 
 
 def test_dm_failure_notice_is_written_to_the_same_history_used_by_the_next_prompt():
