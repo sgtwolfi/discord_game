@@ -1,19 +1,22 @@
 name: Publish HACS release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Validate integration"]
+    types: [completed]
     branches: ["master"]
-    paths:
-      - "custom_components/discord_game/manifest.json"
 
 permissions:
   contents: write
 
 jobs:
   publish:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Create version tag and GitHub release
         uses: actions/github-script@v7
         with:
@@ -21,6 +24,7 @@ jobs:
             const fs = require('fs');
             const manifest = JSON.parse(fs.readFileSync('custom_components/discord_game/manifest.json', 'utf8'));
             const tag = 'v' + manifest.version;
+            const commitSha = context.payload.workflow_run.head_sha;
             const { owner, repo } = context.repo;
             try {
               await github.rest.repos.getReleaseByTag({ owner, repo, tag });
@@ -33,10 +37,10 @@ jobs:
               owner,
               repo,
               tag_name: tag,
-              target_commitish: context.sha,
+              target_commitish: commitSha,
               name: tag,
-              body: 'GHOST / Discord Game ' + manifest.version + '. See the commit history for changes.',
+              body: 'GHOST / Discord Game ' + manifest.version + '. This release passed the integration validation workflow.',
               draft: false,
               prerelease: false
             });
-            core.info(`Published ${tag} from ${context.sha}`);
+            core.info(`Published ${tag} from validated commit ${commitSha}`);
