@@ -1406,7 +1406,6 @@ class DiscordAssistant:
                "food_restaurant_entity": getattr(self, "food_restaurant_entity", DEFAULT_FOOD_RESTAURANT_ENTITY),
                "food_eta_heading_state": getattr(self, "food_eta_heading_state", DEFAULT_FOOD_ETA_HEADING_STATE),
                "food_eta_almost_state": getattr(self, "food_eta_almost_state", DEFAULT_FOOD_ETA_ALMOST_STATE),
-               "typing_only_when_responding": True,
               "spam_local_agent": getattr(self, "spam_local_agent", ""),
               "spam_policy": getattr(self, "spam_policy", "defer_local"),
               "spam_message_limit": getattr(self, "spam_message_limit", 8),
