@@ -3336,8 +3336,9 @@ class DiscordAssistant:
         response = result.get("response", result) if isinstance(result, dict) else {}
         response_type = response.get("response_type") if isinstance(response, dict) else None
         if response_type and response_type != "query":
+            detail = "an action result" if response_type == "action_done" else f"response type {response_type!r}"
             raise RuntimeError(
-                f"The conversation agent returned {response_type!r} instead of a plain-text rewrite. "
+                f"The conversation agent returned {detail} instead of a plain-text rewrite. "
                 "The Discord message was not sent. Disable tool access on the selected conversation "
                 "agent for a text-only generative entry."
             )
