@@ -274,6 +274,18 @@ def answer_food_eta(
     current_status = normalise_status(status_value)
     if not heading or not almost or current_status not in {heading, almost}:
         return None
+    restaurant_state = states.get(str(restaurant_entity or "").strip()) if restaurant_entity else None
+    restaurant = str(getattr(restaurant_state, "state", "") or "").strip()
+    source = (
+        f" from {restaurant}"
+        if restaurant and restaurant.casefold() not in {"unknown", "unavailable", "none"}
+        else ""
+    )
+    # The order-status sensor is authoritative at this stage; ETA sensors may
+    # clear or change format as the courier reaches the final delivery stage.
+    if current_status == almost:
+        return f"The food{source} is almost here."
+
     eta_state = states.get(str(eta_entity or "").strip())
     eta_text = str(getattr(eta_state, "state", "") or "").strip()
     if not eta_text or eta_text.casefold() in {"unknown", "unavailable", "none"}:
@@ -285,14 +297,7 @@ def answer_food_eta(
     except (TypeError, ValueError, OverflowError):
         _LOGGER.warning("Food ETA sensor %s has an unsupported value: %r", eta_entity, eta_text)
         return None
-    restaurant_state = states.get(str(restaurant_entity or "").strip()) if restaurant_entity else None
-    restaurant = str(getattr(restaurant_state, "state", "") or "").strip()
-    source = (
-        f" from {restaurant}"
-        if restaurant and restaurant.casefold() not in {"unknown", "unavailable", "none"}
-        else ""
-    )
-    if minutes <= 0 or current_status == almost:
+    if minutes <= 0:
         return f"The food{source} is almost here."
     return f"The food{source} should be here in about {minutes} minutes."
 

@@ -3373,3 +3373,20 @@ def test_food_eta_configuration_defaults_are_preserved_by_assistant():
     assert assistant.food_restaurant_entity == "sensor.harvey_allerton_uber_eats_restaurant"
     assert assistant.food_eta_heading_state == "Heading your way…"
     assert assistant.food_eta_almost_state == "Almost here!"
+
+
+def test_food_eta_almost_here_does_not_require_a_valid_eta_sensor():
+    states = {
+        "sensor.delivery_state": SimpleNamespace(state="Almost here!"),
+        "sensor.delivery_arrival": SimpleNamespace(state="unavailable"),
+        "sensor.delivery_shop": SimpleNamespace(state="Local takeaway"),
+    }
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: states.get(entity_id)))
+    assert assistant_module.answer_food_eta(
+        hass, datetime(2026, 11, 16, 10, 50),
+        status_entity="sensor.delivery_state",
+        eta_entity="sensor.delivery_arrival",
+        restaurant_entity="sensor.delivery_shop",
+        heading_state="On the road",
+        almost_state="Almost here!",
+    ) == "The food from Local takeaway is almost here."
