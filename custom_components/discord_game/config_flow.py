@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
 
 import homeassistant.helpers.config_validation as cv
 import nextcord
@@ -9,7 +9,15 @@ from homeassistant.const import CONF_ACCESS_TOKEN
 from homeassistant.helpers import selector
 from nextcord import LoginFailure
 
-from .const import DOMAIN, CONF_MEMBERS, CONF_CHANNELS, CONF_VOICE_CHANNELS, CONF_IMAGE_FORMAT, CONF_STEAM_API_KEY, CONF_ENTITIES_DISABLED_DEFAULT
+from .const import (
+    CONF_CHANNELS,
+    CONF_ENTITIES_DISABLED_DEFAULT,
+    CONF_IMAGE_FORMAT,
+    CONF_MEMBERS,
+    CONF_STEAM_API_KEY,
+    CONF_VOICE_CHANNELS,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,7 +90,7 @@ async def _validate_auth_and_fetch_data(token: str):
 
 
 class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    data: Optional[Dict[str, Any]]
+    data: dict[str, Any] | None
 
     def __init__(self):
         self.members = {}
@@ -96,8 +104,8 @@ class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(_config_entry):
         return DiscordGameOptionsFlow()
 
-    async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None):
-        errors: Dict[str, str] = {}
+    async def async_step_user(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
         if user_input is not None:
             if user_input.get("assistant_enabled") and not str(user_input.get("conversation_agent", "")).strip():
                 errors["base"] = "assistant_agent_required"
@@ -120,7 +128,7 @@ class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=AUTH_SCHEMA, errors=errors
         )
 
-    async def async_step_members(self, user_input: Optional[Dict[str, Any]] = None):
+    async def async_step_members(self, user_input: dict[str, Any] | None = None):
         _MEMBERS_SCHEMA = vol.Schema(
             {
                 vol.Optional(CONF_MEMBERS): selector.SelectSelector(
@@ -141,7 +149,7 @@ class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
         if user_input is not None:
             for user in user_input.get(CONF_MEMBERS, []):
                 self.data[CONF_MEMBERS].append(self.members.get(user).id)
@@ -166,8 +174,8 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             key, self.config_entry.data.get(key, default if default is not None else "")
         )
 
-    async def async_step_init(self, user_input: Optional[Dict[str, Any]] = None):
-        errors: Dict[str, str] = {}
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
+        errors: dict[str, str] = {}
         current_token = self._get_current(CONF_ACCESS_TOKEN)
         if user_input is not None:
             self.options_data = dict(user_input)
@@ -234,7 +242,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                     self.members, self.user_names, self.channels, self.channel_names, \
                         self.voice_channels, self.voice_channel_names = \
                         await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
-                except Exception as err:  # noqa: BLE001 - surface Discord/API failures in the form
+                except Exception as err:
                     _LOGGER.exception("Unable to validate updated Discord token or load server choices")
                     errors["base"] = "auth" if isinstance(err, ValueError) else "discord_api"
 
@@ -301,7 +309,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
         )
         return self.async_show_form(step_id="init", data_schema=options_schema, errors=errors)
 
-    async def async_step_members(self, user_input: Optional[Dict[str, Any]] = None):
+    async def async_step_members(self, user_input: dict[str, Any] | None = None):
         # Build a reverse lookup: ID -> name for pre-selecting current members/channels
         current_member_ids = set(self._get_current(CONF_MEMBERS, []))
         current_channel_ids = set(self._get_current(CONF_CHANNELS, []))
@@ -340,7 +348,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             }
         )
 
-        errors: Dict[str, str] = {}
+        errors: dict[str, str] = {}
         if user_input is not None:
             for user in user_input.get(CONF_MEMBERS, []):
                 member = self.members.get(user)
