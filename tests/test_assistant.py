@@ -3506,7 +3506,35 @@ def test_generative_message_uses_configured_conversation_agent_and_sends_as_ghos
     assert sent["role"] == "generative_entry"
 
 
-def test_generative_message_refuses_action_result_instead_of_sending_it():
+def test_generative_message_accepts_action_done_with_no_executed_actions():
+    assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
+    assistant.agents = {"conversation_agent": "conversation.selected_model"}
+    assistant.owner_name = "Harvey"
+    assistant.model_usage_data = {}
+
+    class FakeServices:
+        async def async_call(self, domain, service, data, **kwargs):
+            return {
+                "response": {
+                    "response_type": "action_done",
+                    "data": {"targets": [], "success": [], "failed": []},
+                    "speech": {"plain": {"speech": "Harvey asked me to pass this on: see you at seven."}},
+                }
+            }
+
+    assistant.hass = SimpleNamespace(services=FakeServices())
+    sent = {}
+
+    async def fake_send_manual(**kwargs):
+        sent.update(kwargs)
+
+    assistant.send_manual = fake_send_manual
+    asyncio.run(assistant.send_generative(message="Tell Max I will see him at seven.", user_id="123456789012345678"))
+    assert sent["message"] == "Harvey asked me to pass this on: see you at seven."
+    assert sent["role"] == "generative_entry"
+
+
+def test_generative_message_refuses_action_result_with_actual_targets():
     assistant = assistant_module.DiscordAssistant.__new__(assistant_module.DiscordAssistant)
     assistant.agents = {"conversation_agent": "conversation.tool_enabled"}
     assistant.owner_name = "Harvey"
@@ -3517,6 +3545,11 @@ def test_generative_message_refuses_action_result_instead_of_sending_it():
             return {
                 "response": {
                     "response_type": "action_done",
+                    "data": {
+                        "targets": [{"type": "entity", "id": "light.lounge"}],
+                        "success": [{"type": "entity", "id": "light.lounge"}],
+                        "failed": [],
+                    },
                     "speech": {"plain": {"speech": "I turned the lights on."}},
                 }
             }
@@ -3529,7 +3562,7 @@ def test_generative_message_refuses_action_result_instead_of_sending_it():
         sent = True
 
     assistant.send_manual = fake_send_manual
-    with pytest.raises(RuntimeError, match="action result"):
+    with pytest.raises(RuntimeError, match="action results"):
         asyncio.run(assistant.send_generative(message="Tell Max I will be late.", user_id="123456789012345678"))
     assert sent is False
 

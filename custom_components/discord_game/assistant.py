@@ -3335,12 +3335,27 @@ class DiscordAssistant:
         result = getattr(self, "_last_call_result", None) or {}
         response = result.get("response", result) if isinstance(result, dict) else {}
         response_type = response.get("response_type") if isinstance(response, dict) else None
-        if response_type and response_type != "query":
-            detail = "an action result" if response_type == "action_done" else f"response type {response_type!r}"
+        response_data = response.get("data") if isinstance(response, dict) else None
+        if response_type == "error":
+            raise RuntimeError("The conversation agent reported an error; the Discord message was not sent.")
+        if response_type == "action_done" and isinstance(response_data, dict):
+            # HA agents can use action_done as their ordinary response type even
+            # when no intent/action ran. Only reject when HA reports actual
+            # targets, successes, or failures.
+            action_fields = ("targets", "success", "failed")
+            executed_actions = any(
+                isinstance(response_data.get(field), list) and bool(response_data[field])
+                for field in action_fields
+            )
+            if executed_actions:
+                raise RuntimeError(
+                    "The conversation agent reported Home Assistant action results. "
+                    "The Discord message was not sent; generative entry only accepts text rewrites."
+                )
+        elif response_type not in (None, "query_answer", "query"):
             raise RuntimeError(
-                f"The conversation agent returned {detail} instead of a plain-text rewrite. "
-                "The Discord message was not sent. Disable tool access on the selected conversation "
-                "agent for a text-only generative entry."
+                f"The conversation agent returned unsupported response type {response_type!r}. "
+                "The Discord message was not sent."
             )
         rewritten = clean_user_facing_text(rewritten)
         if not rewritten:
