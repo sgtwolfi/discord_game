@@ -425,7 +425,7 @@ class DiscordGameGhostPanel extends HTMLElement {
 
       const generativeSection = this._el("div", null, "composer-section");
       generativeSection.append(this._el("div", "Generative entry", "composer-title"));
-      generativeSection.append(this._el("div", "Write what you want to say as yourself. GHOST will reword it using the configured conversation model and send it as your assistant, on your behalf.", "composer-help"));
+      generativeSection.append(this._el("div", "Write what you want to say as yourself. GHOST will reword it using the configured conversation model and send it as your assistant, on your behalf. Keep Home Assistant tool access disabled on that model for text-only rewriting.", "composer-help"));
       const generativeForm = this._el("form", null, "composer");
       const generativeInput = this._el("textarea");
       generativeInput.placeholder = "Type your draft… (Enter to rewrite and send, Shift + Enter for a new line)";
