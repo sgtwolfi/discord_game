@@ -48,7 +48,13 @@
           "spam_defer_minutes": "Local deferral duration (minutes)",
           "spam_timeout_minutes": "Discord timeout duration (minutes)",
           "typing_enabled": "Show Discord typing indicator",
-          "typing_only_when_responding": "Only show typing when GHOST has decided to reply"
+          "typing_only_when_responding": "Only show typing when GHOST has decided to reply",
+          "food_eta_enabled": "Enable shared food delivery ETA",
+          "food_eta_status_entity": "Food delivery order-status sensor",
+          "food_eta_entity": "Food delivery ETA sensor",
+          "food_restaurant_entity": "Food delivery restaurant sensor",
+          "food_eta_heading_state": "Order status meaning the delivery is on its way",
+          "food_eta_almost_state": "Order status meaning the delivery is almost here"
         }
       },
       "members": {

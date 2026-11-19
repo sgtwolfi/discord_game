@@ -2422,66 +2422,23 @@ def test_owner_status_parser_handles_normalised_question_variants():
         assert answer == "Harvey is currently: Working downstairs"
 
 
-def test_local_status_rewriter_preserves_verified_payload_verbatim():
+def test_local_status_rewriter_returns_verified_payload_without_a_model_call():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.mode = "local"
-    assistant.agents = {"conversation_agent": "conversation.local_chat"}
 
-    async def fake_call(agent, prompt):
-        assert agent == "conversation.local_chat"
-        assert "<FACT>Harvey is currently: Working downstairs</FACT>" in prompt
-        return "Right, Harvey is currently: Working downstairs. The man's actually busy."
-
-    assistant._call = fake_call
-    result = asyncio.run(assistant._rephrase_readonly_status(
-        "Harvey is currently: Working downstairs"
-    ))
-    assert result == "Right, Harvey is currently: Working downstairs. The man's actually busy."
-
-
-def test_local_status_rewriter_falls_back_if_model_changes_verified_payload():
-    assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.mode = "local"
-    assistant.agents = {"conversation_agent": "conversation.local_chat"}
-
-    async def fake_call(agent, prompt):
-        return "Harvey is probably playing games."
-
-    assistant._call = fake_call
-    factual = "Harvey is currently: Working downstairs"
-    assert asyncio.run(assistant._rephrase_readonly_status(factual)) == factual
-
-
-def test_api_mode_never_uses_tool_enabled_agent_for_status_rewording():
-    assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.mode = "api"
-    assistant.agents = {"conversation_agent": "conversation.api"}
-
-    async def unexpected_call(agent, prompt):
-        raise AssertionError("API tool-enabled agent must not be called for rewording")
+    async def unexpected_call(*args, **kwargs):
+        raise AssertionError("Verified status must not be embellished by a generative model")
 
     assistant._call = unexpected_call
     factual = "Harvey is currently: Working downstairs"
     assert asyncio.run(assistant._rephrase_readonly_status(factual)) == factual
 
 
-
-def test_api_mode_uses_only_the_tool_free_relevance_agent_for_status_rewording():
+def test_local_status_rewriter_removes_accidental_control_tags():
     assistant = DiscordAssistant.__new__(DiscordAssistant)
-    assistant.mode = "api"
-    assistant.agents = {"conversation_agent": "conversation.api"}
-    assistant.group_relevance_agent = "conversation.local_relevance"
-
-    async def fake_call(agent, prompt):
-        assert agent == "conversation.local_relevance"
-        assert "<FACT>Harvey is currently: Working downstairs</FACT>" in prompt
-        return "Well, Harvey is currently: Working downstairs. There you go."
-
-    assistant._call = fake_call
-    assert asyncio.run(assistant._rephrase_readonly_status(
+    factual = "<FACT>Harvey is currently: Working downstairs</FACT>"
+    assert asyncio.run(assistant._rephrase_readonly_status(factual)) == (
         "Harvey is currently: Working downstairs"
-    )) == "Well, Harvey is currently: Working downstairs. There you go."
-
+    )
 
 
 def test_live_state_verification_confirms_named_light_targets_after_empty_action_result():
@@ -3292,3 +3249,126 @@ def test_inactive_food_eta_question_is_suppressed_before_ai(monkeypatch):
     ))
     assert result[0] is False
     assert "not passed to the AI" in result[1]
+
+
+
+def test_control_tags_are_removed_from_model_speech_and_discord_replies():
+    raw = "<task>check the answer</task> <FACT>Harvey is downstairs</FACT> <final>All sorted.</final>"
+    assert speech({"text": raw}) == "check the answer Harvey is downstairs All sorted."
+    assert assistant_module.clean_user_facing_text(raw) == (
+        "check the answer Harvey is downstairs All sorted."
+    )
+
+
+@pytest.mark.parametrize("mode", ["local", "api"])
+def test_dm_prompt_explicitly_preserves_conversation_continuity(mode):
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.diagnostics_revision = 0
+    assistant.mode = mode
+    assistant.limit = 10
+    assistant.budget = 10000
+    assistant.config = {}
+    assistant.agents = {"conversation_agent": "conversation.local"}
+    assistant.approved_users = {"123"}
+    assistant.friends = {}
+    assistant.contact_names = {"123": "Tokyo"}
+    assistant.status_entity = "input_text.ghost_status"
+    assistant.owner_name = "Harvey"
+    assistant.hass = SimpleNamespace(states=SimpleNamespace(
+        get=lambda entity_id: SimpleNamespace(state="At the PC")
+    ))
+    history = [
+        {"role": "user", "sender": "Tokyo", "content": "oi ghost, i chatting to you"},
+        {"role": "assistant", "sender": "GHOST", "content": "Just sorts things out. What's up?"},
+    ]
+    batch = [{
+        "sender_name": "Tokyo",
+        "sender_id": "123",
+        "content": "why is continuity not working?",
+        "is_dm": True,
+    }]
+    prompt = assistant._prompt(batch, history, "", "conversation")
+    assert "oi ghost, i chatting to you" in prompt
+    assert "Just sorts things out. What's up?" in prompt
+    assert "Continuity is mandatory" in prompt
+    assert "Never output XML" in prompt
+
+
+def test_dm_failure_notice_is_written_to_the_same_history_used_by_the_next_prompt():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.friends = {"123": {"messages": [], "summary": ""}}
+    assistant.limit = 10
+    assistant.history_limit = 8
+    item = {"is_dm": True, "sender_id": "123"}
+    failure = {
+        "role": "assistant", "sender": "GHOST",
+        "content": "I couldn't complete that request: model unavailable",
+        "timestamp": "2026-11-19T11:00:00+00:00", "error": True,
+    }
+    assistant._append_dm_history_message(item, failure)
+    history, _ = assistant._history({"is_dm": True, "sender_id": "123"})
+    assert history[-1]["content"] == failure["content"]
+    assert history[-1]["error"] is True
+
+
+def test_typing_is_only_enabled_for_requests_that_pass_reply_gates():
+    assistant = DiscordAssistant.__new__(DiscordAssistant)
+    assistant.typing = True
+    assert assistant._should_show_typing(is_dm=False, group_gate_passed=False) is False
+    assert assistant._should_show_typing(is_dm=False, group_gate_passed=True) is True
+    assert assistant._should_show_typing(is_dm=True, group_gate_passed=False) is True
+    assistant.typing = False
+    assert assistant._should_show_typing(is_dm=True, group_gate_passed=False) is False
+
+
+def test_food_eta_can_be_disabled_and_uses_configured_entities_and_status_values():
+    states = {
+        "sensor.delivery_state": SimpleNamespace(state="On the road"),
+        "sensor.delivery_arrival": SimpleNamespace(state="16 November 2026 at 11:15"),
+        "sensor.delivery_shop": SimpleNamespace(state="Local takeaway"),
+    }
+    hass = SimpleNamespace(states=SimpleNamespace(get=lambda entity_id: states.get(entity_id)))
+    now = datetime(2026, 11, 16, 10, 50)
+    assert assistant_module.answer_food_eta(
+        hass, now, enabled=False,
+        status_entity="sensor.delivery_state",
+        eta_entity="sensor.delivery_arrival",
+        restaurant_entity="sensor.delivery_shop",
+        heading_state="On the road",
+        almost_state="At the door",
+    ) is None
+    assert assistant_module.answer_food_eta(
+        hass, now, status_entity="sensor.delivery_state",
+        eta_entity="sensor.delivery_arrival",
+        restaurant_entity="sensor.delivery_shop",
+        heading_state="On the road",
+        almost_state="At the door",
+    ) == "The food from Local takeaway should be here in about 25 minutes."
+    states["sensor.delivery_state"] = SimpleNamespace(state="At the door")
+    assert assistant_module.answer_food_eta(
+        hass, now, status_entity="sensor.delivery_state",
+        eta_entity="sensor.delivery_arrival",
+        restaurant_entity="sensor.delivery_shop",
+        heading_state="On the road",
+        almost_state="At the door",
+    ) == "The food from Local takeaway is almost here."
+
+
+def test_food_eta_configuration_defaults_are_preserved_by_assistant():
+    class FakeStore:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    original_store = assistant_module.Store
+    assistant_module.Store = FakeStore
+    try:
+        assistant = DiscordAssistant(SimpleNamespace(), "entry", {}, None)
+    finally:
+        assistant_module.Store = original_store
+
+    assert assistant.food_eta_enabled is True
+    assert assistant.food_eta_status_entity == "sensor.harvey_allerton_uber_eats_order_status"
+    assert assistant.food_eta_entity == "sensor.harvey_allerton_uber_eats_eta"
+    assert assistant.food_restaurant_entity == "sensor.harvey_allerton_uber_eats_restaurant"
+    assert assistant.food_eta_heading_state == "Heading your way…"
+    assert assistant.food_eta_almost_state == "Almost here!"

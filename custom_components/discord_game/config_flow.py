@@ -183,6 +183,12 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "group_require_mention": self._get_current("group_require_mention", False),
                 "group_participation_mode": self._get_current("group_participation_mode", "mention" if self._get_current("group_require_mention", False) else "participant"),
                 "group_continuity_seconds": self._get_current("group_continuity_seconds", 300),
+                "food_eta_enabled": self._get_current("food_eta_enabled", True),
+                "food_eta_status_entity": self._get_current("food_eta_status_entity", "sensor.harvey_allerton_uber_eats_order_status"),
+                "food_eta_entity": self._get_current("food_eta_entity", "sensor.harvey_allerton_uber_eats_eta"),
+                "food_restaurant_entity": self._get_current("food_restaurant_entity", "sensor.harvey_allerton_uber_eats_restaurant"),
+                "food_eta_heading_state": self._get_current("food_eta_heading_state", "Heading your way…"),
+                "food_eta_almost_state": self._get_current("food_eta_almost_state", "Almost here!"),
                 "spam_local_agent": self._get_current("spam_local_agent", ""),
                 "spam_policy": self._get_current("spam_policy", "defer_local"),
                 "spam_message_limit": self._get_current("spam_message_limit", 8),
@@ -271,6 +277,18 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Required("group_continuity_seconds", default=self._get_current("group_continuity_seconds", 300)): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
                 vol.Required("typing_enabled", default=self._get_current("typing_enabled", True)): selector.BooleanSelector(),
+                vol.Required("food_eta_enabled", default=self._get_current("food_eta_enabled", True)): selector.BooleanSelector(),
+                vol.Required("food_eta_status_entity", default=self._get_current("food_eta_status_entity", "sensor.harvey_allerton_uber_eats_order_status")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor"),
+                ),
+                vol.Required("food_eta_entity", default=self._get_current("food_eta_entity", "sensor.harvey_allerton_uber_eats_eta")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor"),
+                ),
+                vol.Required("food_restaurant_entity", default=self._get_current("food_restaurant_entity", "sensor.harvey_allerton_uber_eats_restaurant")): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor"),
+                ),
+                vol.Required("food_eta_heading_state", default=self._get_current("food_eta_heading_state", "Heading your way…")): cv.string,
+                vol.Required("food_eta_almost_state", default=self._get_current("food_eta_almost_state", "Almost here!")): cv.string,
                 vol.Optional("spam_local_agent", default=self._get_current("spam_local_agent", "")): selector.ConversationAgentSelector(),
                 vol.Required("spam_policy", default=self._get_current("spam_policy", "defer_local")): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=[{"label": "Defer to local model", "value": "defer_local"}, {"label": "Discord timeout", "value": "timeout"}, {"label": "Ignore during cooldown", "value": "ignore"}], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
