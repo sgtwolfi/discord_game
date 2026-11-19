@@ -115,7 +115,7 @@ class DiscordGameConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await _validate_auth_and_fetch_data(user_input[CONF_ACCESS_TOKEN])
             except ValueError:
                 errors["base"] = "auth"
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.exception("Unable to validate reconfigured Discord connection")
                 errors["base"] = "discord_api"
             else:
