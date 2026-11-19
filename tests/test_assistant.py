@@ -3390,3 +3390,38 @@ def test_food_eta_almost_here_does_not_require_a_valid_eta_sensor():
         heading_state="On the road",
         almost_state="Almost here!",
     ) == "The food from Local takeaway is almost here."
+
+
+
+def test_runtime_settings_are_exposed_in_sidebar_not_integration_model_options():
+    repo_root = Path(__file__).resolve().parents[1]
+    config_flow = (repo_root / "custom_components/discord_game/config_flow.py").read_text()
+    panel = (repo_root / "custom_components/discord_game/frontend/ghost-panel.js").read_text()
+    services = (repo_root / "custom_components/discord_game/services.py").read_text()
+    schema_start = config_flow.index("        options_schema = vol.Schema(")
+    schema_end = config_flow.index("\n        return self.async_show_form(step_id=\"init\"", schema_start)
+    options_schema = config_flow[schema_start:schema_end]
+    runtime_settings = (
+        "assistant_enabled", "group_participation_mode", "group_continuity_seconds",
+        "typing_enabled", "food_eta_enabled", "food_eta_status_entity",
+        "food_eta_entity", "food_restaurant_entity", "food_eta_heading_state",
+        "food_eta_almost_state", "spam_policy", "spam_message_limit",
+        "spam_window_seconds", "spam_defer_minutes", "spam_timeout_minutes",
+    )
+    for key in runtime_settings:
+        assert f'vol.Required("{key}"' not in options_schema, key
+        assert key in panel, key
+    assert 'vol.Optional("conversation_agent"' in options_schema
+    assert 'vol.Optional("operations_agent"' in options_schema
+    assert 'vol.Optional("fallback_agent"' in options_schema
+    assert 'vol.Optional("food_eta_enabled"): cv.boolean' in services
+    assert 'vol.Optional("assistant_enabled"): cv.boolean' in services
+    advanced_start = config_flow.index("            advanced_defaults = {")
+    advanced_end = config_flow.index("            }", advanced_start)
+    advanced = config_flow[advanced_start:advanced_end]
+    for key in (
+        "assistant_enabled", "typing_enabled", "food_eta_enabled", "spam_policy",
+        "assistant_group_channels", "conversation_system_prompt",
+        "fallback_after_failures", "context_budget_chars",
+    ):
+        assert f'"{key}": self._get_current(' in advanced, key

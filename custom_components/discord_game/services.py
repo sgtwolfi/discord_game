@@ -43,29 +43,38 @@ RESET_PROMPT = vol.Schema({
 })
 
 SETTINGS = vol.Schema({
-    vol.Required("assistant_mode", default="local"): vol.In({"api", "local"}),
-    vol.Required("group_relevance_agent", default=""): cv.string,
-    vol.Required("group_require_mention", default=False): cv.boolean,
-    vol.Required("group_continuity_seconds", default=300): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
-    vol.Required("local_reminder_script", default="script.set_timer_alarm_or_reminder"): vol.All(
-        cv.string, vol.Match(r"^script[.][a-z0-9_]+$")
-    ),
-    vol.Required("ghost_status_entity", default="input_text.ghost_status"): vol.All(
-        cv.string, vol.Match(r"^[a-z0-9_]+[.][a-z0-9_]+$")
-    ),
-    vol.Required("fallback_after_failures"): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
-    vol.Required("queue_debounce_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
-    vol.Required("max_context_messages"): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
-    vol.Required("context_budget_chars"): vol.All(vol.Coerce(int), vol.Range(min=2000, max=50000)),
-    vol.Required("history_limit"): vol.All(vol.Coerce(int), vol.Range(min=0, max=200)),
-    vol.Required("memory_idle_seconds"): vol.All(vol.Coerce(int), vol.Range(min=30, max=3600)),
-    vol.Required("memory_batch_messages"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
-    vol.Required("conversation_history_limit"): vol.All(vol.Coerce(int), vol.Range(min=50, max=2000)),
-    vol.Required("typing_enabled"): cv.boolean,
-    vol.Required("assistant_group_channels"): cv.string,
-    vol.Required("conversation_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
-    vol.Required("operations_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
-    vol.Required("advanced_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    # The sidebar sends partial updates; omitted fields retain their current values.
+    vol.Optional("assistant_enabled"): cv.boolean,
+    vol.Optional("group_participation_mode"): vol.In({"participant", "mention", "always"}),
+    vol.Optional("group_require_mention"): cv.boolean,
+    vol.Optional("group_continuity_seconds"): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
+    vol.Optional("local_reminder_script"): vol.All(cv.string, vol.Match(r"^script[.][a-z0-9_]+$")),
+    vol.Optional("ghost_status_entity"): vol.All(cv.string, vol.Match(r"^[a-z0-9_]+[.][a-z0-9_]+$")),
+    vol.Optional("owner_name"): vol.All(cv.string, vol.Length(min=1, max=80)),
+    vol.Optional("fallback_after_failures"): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
+    vol.Optional("queue_debounce_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.5, max=15)),
+    vol.Optional("max_context_messages"): vol.All(vol.Coerce(int), vol.Range(min=4, max=80)),
+    vol.Optional("context_budget_chars"): vol.All(vol.Coerce(int), vol.Range(min=2000, max=50000)),
+    vol.Optional("history_limit"): vol.All(vol.Coerce(int), vol.Range(min=0, max=200)),
+    vol.Optional("memory_idle_seconds"): vol.All(vol.Coerce(int), vol.Range(min=30, max=3600)),
+    vol.Optional("memory_batch_messages"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+    vol.Optional("conversation_history_limit"): vol.All(vol.Coerce(int), vol.Range(min=50, max=2000)),
+    vol.Optional("typing_enabled"): cv.boolean,
+    vol.Optional("assistant_group_channels"): cv.string,
+    vol.Optional("conversation_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    vol.Optional("operations_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    vol.Optional("advanced_system_prompt"): vol.All(cv.string, vol.Length(max=6000)),
+    vol.Optional("food_eta_enabled"): cv.boolean,
+    vol.Optional("food_eta_status_entity"): vol.All(cv.string, vol.Match(r"^sensor[.][a-z0-9_]+$")),
+    vol.Optional("food_eta_entity"): vol.All(cv.string, vol.Match(r"^sensor[.][a-z0-9_]+$")),
+    vol.Optional("food_restaurant_entity"): vol.Any("", vol.All(cv.string, vol.Match(r"^sensor[.][a-z0-9_]+$"))),
+    vol.Optional("food_eta_heading_state"): vol.All(cv.string, vol.Length(min=1, max=100)),
+    vol.Optional("food_eta_almost_state"): vol.All(cv.string, vol.Length(min=1, max=100)),
+    vol.Optional("spam_policy"): vol.In({"defer_local", "timeout", "ignore"}),
+    vol.Optional("spam_message_limit"): vol.All(vol.Coerce(int), vol.Range(min=3, max=30)),
+    vol.Optional("spam_window_seconds"): vol.All(vol.Coerce(int), vol.Range(min=5, max=300)),
+    vol.Optional("spam_defer_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=1440)),
+    vol.Optional("spam_timeout_minutes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
 })
 
 

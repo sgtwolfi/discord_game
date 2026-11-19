@@ -35,25 +35,11 @@
           "image_format": "Image format",
           "steam_api_key": "Steam API Key (optional)",
           "entities_disabled_default": "Create sub-entities as disabled",
-          "assistant_enabled": "Enable Discord AI assistant",
           "conversation_agent": "Conversation model agent ID",
           "operations_agent": "Operations model agent ID",
           "fallback_agent": "Local fallback agent ID (Local Mode only)",
           "api_fallback_agent": "API fallback model agent ID (API Mode only)",
-          "spam_local_agent": "Local agent for spam deferral (must be a local HA conversation agent)",
-          "spam_policy": "Spam protection action",
-          "spam_message_limit": "Messages before spam action",
-          "spam_window_seconds": "Spam detection window in seconds",
-          "spam_defer_minutes": "Local deferral duration in minutes",
-          "spam_timeout_minutes": "Discord timeout duration in minutes",
-          "typing_enabled": "Show Discord typing indicator",
-          "typing_only_when_responding": "Only show typing when GHOST has decided to reply",
-          "food_eta_enabled": "Enable shared food delivery ETA",
-          "food_eta_status_entity": "Food delivery order-status sensor",
-          "food_eta_entity": "Food delivery ETA sensor",
-          "food_restaurant_entity": "Food delivery restaurant sensor",
-          "food_eta_heading_state": "Order status meaning the delivery is on its way",
-          "food_eta_almost_state": "Order status meaning the delivery is almost here"
+          "spam_local_agent": "Local agent for spam deferral (must be a local HA conversation agent)"
         }
       },
       "members": {

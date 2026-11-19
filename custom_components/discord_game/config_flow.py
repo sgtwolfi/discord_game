@@ -185,6 +185,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
             legacy_history_limit = self._get_current("history_limit", 8)
             # Keep advanced panel settings when saving the integration's model selectors.
             advanced_defaults = {
+                "assistant_enabled": self._get_current("assistant_enabled", False),
                 "assistant_mode": self._get_current("assistant_mode", "local"),
                 "api_fallback_agent": self._get_current("api_fallback_agent", ""),
                 "group_relevance_agent": self._get_current("group_relevance_agent", ""),
@@ -206,19 +207,19 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 "local_reminder_script": self._get_current("local_reminder_script", "script.set_timer_alarm_or_reminder"),
                 "ghost_status_entity": self._get_current("ghost_status_entity", "input_text.ghost_status"),
                 "owner_name": self._get_current("owner_name", "Harvey"),
-                "fallback_after_failures": 1,
-                "queue_debounce_seconds": 2.5,
-                "max_context_messages": 12,
-                "context_budget_chars": 10000,
-                "history_limit": 8,
-                "memory_idle_seconds": 300,
-                "memory_batch_messages": 20,
-                "conversation_history_limit": 500,
-                "typing_enabled": True,
-                "assistant_group_channels": "",
-                "conversation_system_prompt": "",
-                "operations_system_prompt": "",
-                "advanced_system_prompt": "",
+                "fallback_after_failures": self._get_current("fallback_after_failures", 2),
+                "queue_debounce_seconds": self._get_current("queue_debounce_seconds", 2.5),
+                "max_context_messages": self._get_current("max_context_messages", 12),
+                "context_budget_chars": self._get_current("context_budget_chars", 10000),
+                "history_limit": self._get_current("history_limit", 8),
+                "memory_idle_seconds": self._get_current("memory_idle_seconds", 300),
+                "memory_batch_messages": self._get_current("memory_batch_messages", 20),
+                "conversation_history_limit": self._get_current("conversation_history_limit", 500),
+                "typing_enabled": self._get_current("typing_enabled", True),
+                "assistant_group_channels": self._get_current("assistant_group_channels", ""),
+                "conversation_system_prompt": self._get_current("conversation_system_prompt", ""),
+                "operations_system_prompt": self._get_current("operations_system_prompt", ""),
+                "advanced_system_prompt": self._get_current("advanced_system_prompt", ""),
                 "assistant_approved_users": self._get_current("assistant_approved_users", self._get_current(CONF_MEMBERS, [])),
                 "assistant_contact_names": self._get_current("assistant_contact_names", {}),
             }
@@ -267,7 +268,6 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                     selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
                 ),
                 vol.Required(CONF_ENTITIES_DISABLED_DEFAULT, default=current_entities_disabled): selector.BooleanSelector(),
-                vol.Required("assistant_enabled", default=self._get_current("assistant_enabled", False)): selector.BooleanSelector(),
                 vol.Required("assistant_mode", default=self._get_current("assistant_mode", "local")): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=["local", "api"], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
                 ),
@@ -276,35 +276,7 @@ class DiscordGameOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional("fallback_agent", default=self._get_current("fallback_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("api_fallback_agent", default=self._get_current("api_fallback_agent", "")): selector.ConversationAgentSelector(),
                 vol.Optional("group_relevance_agent", default=self._get_current("group_relevance_agent", "")): selector.ConversationAgentSelector(),
-                vol.Required("group_participation_mode", default=self._get_current("group_participation_mode", "mention" if self._get_current("group_require_mention", False) else "participant")): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=[
-                        {"label": "Participant (AI judges relevance like a group member)", "value": "participant"},
-                        {"label": "Mention required", "value": "mention"},
-                        {"label": "Always respond", "value": "always"},
-                    ], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
-                ),
-                vol.Required("group_continuity_seconds", default=self._get_current("group_continuity_seconds", 300)): vol.All(vol.Coerce(int), vol.Range(min=0, max=1800)),
-                vol.Required("typing_enabled", default=self._get_current("typing_enabled", True)): selector.BooleanSelector(),
-                vol.Required("food_eta_enabled", default=self._get_current("food_eta_enabled", True)): selector.BooleanSelector(),
-                vol.Required("food_eta_status_entity", default=self._get_current("food_eta_status_entity", "sensor.harvey_allerton_uber_eats_order_status")): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor"),
-                ),
-                vol.Required("food_eta_entity", default=self._get_current("food_eta_entity", "sensor.harvey_allerton_uber_eats_eta")): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor"),
-                ),
-                vol.Required("food_restaurant_entity", default=self._get_current("food_restaurant_entity", "sensor.harvey_allerton_uber_eats_restaurant")): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor"),
-                ),
-                vol.Required("food_eta_heading_state", default=self._get_current("food_eta_heading_state", "Heading your way…")): cv.string,
-                vol.Required("food_eta_almost_state", default=self._get_current("food_eta_almost_state", "Almost here!")): cv.string,
                 vol.Optional("spam_local_agent", default=self._get_current("spam_local_agent", "")): selector.ConversationAgentSelector(),
-                vol.Required("spam_policy", default=self._get_current("spam_policy", "defer_local")): selector.SelectSelector(
-                    selector.SelectSelectorConfig(options=[{"label": "Defer to local model", "value": "defer_local"}, {"label": "Discord timeout", "value": "timeout"}, {"label": "Ignore during cooldown", "value": "ignore"}], multiple=False, mode=selector.SelectSelectorMode.DROPDOWN),
-                ),
-                vol.Required("spam_message_limit", default=self._get_current("spam_message_limit", 8)): vol.All(vol.Coerce(int), vol.Range(min=3, max=30)),
-                vol.Required("spam_window_seconds", default=self._get_current("spam_window_seconds", 30)): vol.All(vol.Coerce(int), vol.Range(min=5, max=300)),
-                vol.Required("spam_defer_minutes", default=self._get_current("spam_defer_minutes", 10)): vol.All(vol.Coerce(int), vol.Range(min=1, max=1440)),
-                vol.Required("spam_timeout_minutes", default=self._get_current("spam_timeout_minutes", 5)): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
             }
         )
         return self.async_show_form(step_id="init", data_schema=options_schema, errors=errors)

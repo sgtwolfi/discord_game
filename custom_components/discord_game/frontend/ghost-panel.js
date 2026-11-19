@@ -15,7 +15,6 @@ class DiscordGameGhostPanel extends HTMLElement {
     this._capabilitiesLoading = false;
     this._capabilitiesFilter = "";
     this._capabilityDomain = "all";
-    this._modeOverride = null;
   }
 
   set hass(hass) {
@@ -511,32 +510,13 @@ class DiscordGameGhostPanel extends HTMLElement {
     panel.append(this._el("h2", "Assistant behaviour"));
     panel.append(this._el("p", "Choose how GHOST uses Home Assistant conversation agents. Memory, contact isolation and action verification remain owned by GHOST in both modes.", "muted"));
     const form = this._el("form");
-    const modeWrap = this._el("div", null, "field");
-    modeWrap.append(this._el("label", "Assistant mode"));
-    const modeSelect = this._el("select");
-    for (const [value, label] of [["local", "Local Mode — multi-agent, small-model workflow"], ["api", "API Mode — one native Home Assistant agent"]]) {
-      const option = this._el("option", label); option.value = value; modeSelect.append(option);
-    }
-    modeSelect.name = "assistant_mode"; modeSelect.value = this._modeOverride || settings.assistant_mode || d.mode || "local";
-    modeSelect.dataset.keep = "cfg-assistant_mode";
-    modeWrap.append(modeSelect);
-    modeWrap.append(this._el("p", modeSelect.value === "api"
-      ? "Configure the provider, model, system prompt and available tools in the selected Home Assistant conversation agent. GHOST adds private memory and keeps its own conversation records."
-      : "Assign separate Conversation, Operations and optional Fallback agents in Discord Game → Configure. Use small local models for narrow tasks; keep tool access restricted.", "help"));
-    modeSelect.addEventListener("change", () => {
-      this._modeOverride = modeSelect.value;
-      this._render();
-    });
-    form.append(modeWrap);
+    const apiMode = (settings.assistant_mode || d.mode || "local") === "api";
+    form.append(this._el("p", "Model mode and agent assignments are managed in Discord Game → Configure. Runtime behaviour, conversation handling and food-delivery settings are managed here in the sidebar.", "help"));
+    const enabledLabel = this._el("label", "Enable GHOST assistant");
+    const enabled = this._el("input"); enabled.type = "checkbox"; enabled.name = "assistant_enabled"; enabled.checked = d.enabled !== false;
+    enabled.dataset.keep = "cfg-assistant_enabled"; enabledLabel.prepend(enabled);
+    form.append(enabledLabel);
     const groupWrap = this._el("div", null, "field");
-    groupWrap.append(this._el("label", "Group-chat relevance model"));
-    const relevanceAgent = this._el("input");
-    relevanceAgent.name = "group_relevance_agent";
-    relevanceAgent.value = settings.group_relevance_agent || (modeSelect.value === "local" ? d.conversation_agent || "" : "");
-    relevanceAgent.placeholder = "conversation.ollama_local";
-    relevanceAgent.dataset.keep = "cfg-group_relevance_agent";
-    groupWrap.append(relevanceAgent);
-    groupWrap.append(this._el("p", "Select a local Home Assistant conversation agent with no HA control tools. It decides whether GHOST should join group conversations. In API Mode this prevents group text being sent to the tool-enabled API agent just for relevance.", "help"));
     groupWrap.append(this._el("label", "How GHOST participates in group chats"));
     const groupParticipation = this._el("select");
     const currentParticipation = settings.group_participation_mode
@@ -563,9 +543,9 @@ class DiscordGameGhostPanel extends HTMLElement {
     reminderScript.name = "local_reminder_script";
     reminderScript.value = settings.local_reminder_script || "script.set_timer_alarm_or_reminder";
     reminderScript.dataset.keep = "cfg-local_reminder_script";
-    if (modeSelect.value === "api") reminderScript.type = "hidden";
+    if (apiMode) reminderScript.type = "hidden";
     reminderWrap.append(reminderScript);
-    if (modeSelect.value !== "api") {
+    if (!apiMode) {
       reminderWrap.append(this._el("p", "Local Mode calls this script directly for clear private-DM reminders, so a tiny model does not have to discover or invoke a tool. It should accept name plus either duration_seconds or alarm_time (and optional date), and return success: true. GHOST does not send announce_message or text fields unless a future explicit option is added.", "help"));
     }
     form.append(reminderWrap);
@@ -609,6 +589,20 @@ class DiscordGameGhostPanel extends HTMLElement {
     number("history_limit", "Raw messages retained after consolidation", settings.history_limit ?? 8, 1, 200, 1, "Keeps this many recent raw messages available alongside the durable summary.");
     number("conversation_history_limit", "Messages kept in the visible chat history", settings.conversation_history_limit ?? 500, 50, 2000, 10, "Applies to friend DMs and server-group transcripts in the panel.");
     number("context_budget_chars", "Maximum prompt size (characters)", settings.context_budget_chars ?? 10000, 2000, 50000, 500, "Hard limit for the complete prompt sent to an agent.");
+    const spamPolicyWrap = this._el("div", null, "field");
+    spamPolicyWrap.append(this._el("label", "Spam protection policy"));
+    const spamPolicy = this._el("select");
+    for (const [value, label] of [["defer_local", "Defer to local model"], ["timeout", "Discord timeout"], ["ignore", "Ignore during cooldown"]]) {
+      const option = this._el("option", label); option.value = value; spamPolicy.append(option);
+    }
+    spamPolicy.name = "spam_policy"; spamPolicy.value = settings.spam_policy || "defer_local"; spamPolicy.dataset.keep = "cfg-spam_policy";
+    spamPolicyWrap.append(spamPolicy);
+    spamPolicyWrap.append(this._el("p", "Choose what happens when one person sends messages too quickly. The spam deferral model itself is selected alongside the other models in Configure.", "help"));
+    grid.append(spamPolicyWrap);
+    number("spam_message_limit", "Messages before spam protection activates", settings.spam_message_limit ?? 8, 3, 30, 1, "Number of messages allowed in the rolling spam window.");
+    number("spam_window_seconds", "Spam detection window (seconds)", settings.spam_window_seconds ?? 30, 5, 300, 5, "Rolling window used for spam detection.");
+    number("spam_defer_minutes", "Local deferral duration (minutes)", settings.spam_defer_minutes ?? 10, 1, 1440, 1, "How long to defer to the configured local spam model.");
+    number("spam_timeout_minutes", "Discord timeout duration (minutes)", settings.spam_timeout_minutes ?? 5, 1, 60, 1, "Used only when the spam policy is Discord timeout.");
     form.append(grid);
     const groupChannelsHidden = this._el("input");
     groupChannelsHidden.type = "hidden";
@@ -622,7 +616,52 @@ class DiscordGameGhostPanel extends HTMLElement {
     form.append(typingLabel);
     form.append(this._el("p", "Typing starts only after GHOST has decided to reply and passed the group safety checks. It stays active while the response is being generated.", "help"));
 
-    const apiMode = modeSelect.value === "api";
+    form.append(this._el("h3", "Shared food delivery ETA"));
+    form.append(this._el("p", "Anyone in an enabled Discord group can ask for the delivery ETA while the order is on its way. The order-status sensor controls when the answer is available; GHOST calculates the minutes from the ETA sensor locally.", "help"));
+    const foodEtaEnabledLabel = this._el("label", "Enable shared food ETA answers");
+    const foodEtaEnabled = this._el("input"); foodEtaEnabled.type = "checkbox"; foodEtaEnabled.name = "food_eta_enabled";
+    foodEtaEnabled.checked = settings.food_eta_enabled !== false; foodEtaEnabled.dataset.keep = "cfg-food_eta_enabled";
+    foodEtaEnabledLabel.prepend(foodEtaEnabled); form.append(foodEtaEnabledLabel);
+
+    const sensorEntities = (this._capabilities && Array.isArray(this._capabilities.entities) ? this._capabilities.entities : [])
+      .filter((entity) => entity && entity.domain === "sensor")
+      .sort((left, right) => String(left.name || left.entity_id).localeCompare(String(right.name || right.entity_id)));
+    const addFoodSensor = (name, label, currentValue, optional) => {
+      const wrap = this._el("div", null, "field");
+      wrap.append(this._el("label", label));
+      const select = this._el("select"); select.name = name; select.dataset.keep = "cfg-" + name;
+      const addOption = (value, title) => {
+        const option = this._el("option", title); option.value = value; select.append(option);
+      };
+      if (optional) addOption("", "Not configured");
+      const current = String(currentValue || "");
+      if (current && !sensorEntities.some((entity) => entity.entity_id === current)) {
+        addOption(current, current + " (not currently available)");
+      }
+      for (const entity of sensorEntities) {
+        addOption(entity.entity_id, (entity.name || entity.entity_id) + " — " + entity.entity_id + " · " + String(entity.state ?? ""));
+      }
+      if (!optional && !current && !sensorEntities.length) addOption("", "No sensor entities available");
+      select.value = current;
+      wrap.append(select); form.append(wrap);
+    };
+    addFoodSensor("food_eta_status_entity", "Order-status sensor", settings.food_eta_status_entity || "sensor.harvey_allerton_uber_eats_order_status", false);
+    addFoodSensor("food_eta_entity", "Estimated arrival sensor", settings.food_eta_entity || "sensor.harvey_allerton_uber_eats_eta", false);
+    addFoodSensor("food_restaurant_entity", "Restaurant name sensor (optional)", settings.food_restaurant_entity || "sensor.harvey_allerton_uber_eats_restaurant", true);
+
+    const statusGrid = this._el("div", null, "fieldgrid");
+    const statusInput = (name, label, value) => {
+      const wrap = this._el("div", null, "field");
+      wrap.append(this._el("label", label));
+      const input = this._el("input"); input.type = "text"; input.name = name; input.value = value;
+      input.maxLength = 100; input.dataset.keep = "cfg-" + name;
+      wrap.append(input); statusGrid.append(wrap);
+    };
+    statusInput("food_eta_heading_state", "Status meaning the courier is on the way", settings.food_eta_heading_state || "Heading your way…");
+    statusInput("food_eta_almost_state", "Status meaning the courier is almost here", settings.food_eta_almost_state || "Almost here!");
+    form.append(statusGrid);
+    form.append(this._el("p", "Set these status values to match your order sensor exactly. The ETA sensor should report a date like “19 November 2026 at 18:25”. The restaurant sensor may be left unconfigured.", "help"));
+
     if (apiMode) {
       form.append(this._el("h3", "System prompts and functions"));
       form.append(this._el("p", "API Mode deliberately does not override your Home Assistant agent's system prompt or function/tool configuration. Edit those in the selected conversation agent's settings. The saved GHOST prompt overrides below are retained but inactive until you switch back to Local Mode.", "help"));
@@ -785,27 +824,7 @@ class DiscordGameGhostPanel extends HTMLElement {
         this._notice = "Each channel ID must be a numeric Discord ID, separated by commas.";
         this._render(); return;
       }
-      const data = {};
-      data.assistant_mode = modeSelect.value;
-      data.local_reminder_script = reminderScript.value || "script.set_timer_alarm_or_reminder";
-      data.group_relevance_agent = relevanceAgent.value.trim();
-      data.group_participation_mode = groupParticipation.value;
-      data.group_require_mention = groupParticipation.value === "mention";
-      data.fallback_after_failures = Number(settings.fallback_after_failures ?? 2);
-      data.queue_debounce_seconds = Number(settings.queue_debounce_seconds ?? 2.5);
-      data.max_context_messages = Number(settings.max_context_messages ?? 12);
-      data.history_limit = Number(settings.history_limit ?? 8);
-      data.memory_idle_seconds = Number(settings.memory_idle_seconds ?? 300);
-      data.memory_batch_messages = Number(settings.memory_batch_messages ?? 20);
-      data.group_continuity_seconds = Number(settings.group_continuity_seconds ?? 300);
-      data.conversation_history_limit = Number(settings.conversation_history_limit ?? 500);
-      data.context_budget_chars = Number(settings.context_budget_chars ?? 10000);
-      data.typing_enabled = settings.typing_enabled !== false;
-      data.assistant_group_channels = ids.join(",");
-      data.conversation_system_prompt = settings.conversation_system_prompt || "";
-      data.operations_system_prompt = settings.operations_system_prompt || "";
-      data.advanced_system_prompt = settings.advanced_system_prompt || "";
-      await this._service("update_settings", data, true);
+      await this._service("update_settings", { assistant_group_channels: ids.join(",") }, true);
     }, true));
     shell.append(groupsPanel);
   }
